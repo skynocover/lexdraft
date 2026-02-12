@@ -1,0 +1,29 @@
+import { create } from 'zustand'
+
+type AnalysisTab = 'disputes' | 'damages' | 'timeline' | 'evidence' | 'parties'
+
+interface UIState {
+  bottomPanelOpen: boolean
+  bottomPanelHeight: number
+  bottomPanelTab: AnalysisTab
+  rightFilesOpen: boolean
+  rightLawRefsOpen: boolean
+  toggleBottomPanel: () => void
+  setBottomPanelHeight: (height: number) => void
+  setBottomPanelTab: (tab: AnalysisTab) => void
+  toggleRightFiles: () => void
+  toggleRightLawRefs: () => void
+}
+
+export const useUIStore = create<UIState>((set) => ({
+  bottomPanelOpen: false,
+  bottomPanelHeight: 200,
+  bottomPanelTab: 'disputes',
+  rightFilesOpen: true,
+  rightLawRefsOpen: true,
+  toggleBottomPanel: () => set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
+  setBottomPanelHeight: (height) => set({ bottomPanelHeight: Math.min(500, Math.max(100, height)) }),
+  setBottomPanelTab: (tab) => set({ bottomPanelTab: tab }),
+  toggleRightFiles: () => set((s) => ({ rightFilesOpen: !s.rightFilesOpen })),
+  toggleRightLawRefs: () => set((s) => ({ rightLawRefsOpen: !s.rightLawRefsOpen })),
+}))

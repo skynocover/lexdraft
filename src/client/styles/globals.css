@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/*
+ * LexDraft Dark Theme — TASKS.md §9
+ */
+@theme inline {
+  /* Background layers */
+  --color-bg-0: #0c0d12;
+  --color-bg-1: #12131a;
+  --color-bg-2: #1a1b24;
+  --color-bg-3: #22232e;
+  --color-bg-4: #2a2c3a;
+  --color-bg-h: #2f3145;
+
+  /* Borders */
+  --color-bd: #262838;
+  --color-bd-l: #353750;
+
+  /* Text */
+  --color-t1: #eaebf0;
+  --color-t2: #a0a3b5;
+  --color-t3: #6c6f85;
+
+  /* Accent colors */
+  --color-ac: #7c9aff;
+  --color-gr: #5ce0a0;
+  --color-yl: #f0c850;
+  --color-rd: #f07068;
+  --color-or: #f0983c;
+  --color-pu: #b09cff;
+  --color-cy: #5cc8e0;
+}
+
+/* Base styles */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-bg-0);
+  color: var(--color-t1);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-4);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-bd-l);
+}

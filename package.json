@@ -7,7 +7,9 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply lexdraft-db --local"
   },
   "repository": {
     "type": "git",
@@ -22,11 +24,27 @@
   },
   "homepage": "https://github.com/skynocover/lexdraft#readme",
   "dependencies": {
-    "hono": "^4.11.9"
+    "@tiptap/pm": "^3.19.0",
+    "@tiptap/react": "^3.19.0",
+    "@tiptap/starter-kit": "^3.19.0",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.11.9",
+    "nanoid": "^5.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router": "^7.13.0",
+    "unpdf": "^1.4.0",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.24.0",
     "@cloudflare/workers-types": "^4.20260210.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "drizzle-kit": "^0.31.9",
+    "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "wrangler": "^4.64.0"

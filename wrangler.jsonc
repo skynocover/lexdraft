@@ -8,5 +8,63 @@
     "not_found_handling": "single-page-application",
     // CRITICAL: 避免 SPA fallback 攔截 API 路由，導致回傳 index.html 而非 JSON
     "run_worker_first": ["/api/*"]
+  },
+
+  // D1 資料庫
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lexdraft-db",
+      "database_id": "placeholder-replace-after-creation",
+      "migrations_dir": "./drizzle"
+    }
+  ],
+
+  // R2 存儲（案件卷宗 PDF）
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "lexdraft-files"
+    }
+  ],
+
+  // Queue（非同步檔案處理）
+  "queues": {
+    "producers": [
+      {
+        "binding": "FILE_QUEUE",
+        "queue": "lexdraft-file-processing"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "lexdraft-file-processing",
+        "max_batch_size": 1,
+        "max_retries": 3
+      }
+    ]
+  },
+
+  // Durable Objects（Agent Loop）
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "AGENT_DO",
+        "class_name": "AgentDO"
+      }
+    ]
+  },
+
+  // DO Migrations
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AgentDO"]
+    }
+  ],
+
+  // 環境變數（dev 用，production 另外設定）
+  "vars": {
+    "AUTH_TOKEN": "dev-token-change-me"
   }
 }

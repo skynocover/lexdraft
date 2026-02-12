@@ -10,17 +10,17 @@
 > 目標：建立可運行的前後端框架，所有後續開發的地基。
 > 認證先用環境變數 token 簡化處理，MVP 為單人工具，完整 email/password 認證移至 Backlog。
 
-- [ ] 安裝前端依賴（React、React DOM、React Router）
-- [ ] 安裝 Tailwind CSS v4 + shadcn/ui，配置深色主題色彩系統（參考 TASKS.md §9）
-- [ ] 安裝 Zustand，建立四個 domain store 骨架（useCase / useBrief / useChat / useUI）
-- [ ] 安裝 Drizzle ORM + drizzle-kit，定義完整 D1 schema（users / cases / files / briefs / disputes / law_refs / messages）
-- [ ] 執行 migration 產生 SQL，確認 D1 表建立成功
-- [ ] 配置 wrangler.jsonc 綁定（D1 / R2 / Queue / Durable Objects）
-- [ ] Hono 後端建立路由分層結構（server/routes/cases.ts, files.ts, chat.ts, briefs.ts）
-- [ ] 前端 entry point 改為 React（App.tsx），Vite 配置 client/server 分離
-- [ ] 簡易認證：環境變數 token（`AUTH_TOKEN`），auth middleware 驗證 Bearer token
-- [ ] 前端：簡單 token 輸入頁，localStorage 存 token，未驗證導向輸入頁
-- [ ] 驗收：輸入正確 token → 看到空白 React App → API 未帶 token 回 401
+- [x] 安裝前端依賴（React、React DOM、React Router）
+- [x] 安裝 Tailwind CSS v4 + shadcn/ui，配置深色主題色彩系統（參考 TASKS.md §9）
+- [x] 安裝 Zustand，建立四個 domain store 骨架（useCase / useBrief / useChat / useUI）
+- [x] 安裝 Drizzle ORM + drizzle-kit，定義完整 D1 schema（users / cases / files / briefs / disputes / law_refs / messages）
+- [x] 執行 migration 產生 SQL，確認 D1 表建立成功
+- [x] 配置 wrangler.jsonc 綁定（D1 / R2 / Queue / Durable Objects）
+- [x] Hono 後端建立路由分層結構（server/routes/cases.ts, files.ts, chat.ts, briefs.ts）
+- [x] 前端 entry point 改為 React（App.tsx），Vite 配置 client/server 分離
+- [x] 簡易認證：環境變數 token（`AUTH_TOKEN`），auth middleware 驗證 Bearer token
+- [x] 前端：簡單 token 輸入頁，localStorage 存 token，未驗證導向輸入頁
+- [x] 驗收：輸入正確 token → 看到空白 React App → API 未帶 token 回 401
 
 ---
 
@@ -29,21 +29,21 @@
 > 目標：完成 UI 骨架，可建立/瀏覽案件，編輯器用 mock 資料先跑起來。
 > Tiptap 編輯器骨架提前建立，降低 Sprint 4 的風險（Sprint 4 專注 Agent + Citations 整合）。
 
-- [ ] 實作三欄佈局組件（Chat 320px / Editor flex:1 / Sidebar 240px）
-- [ ] 實作 Header（48px）：Logo、案件名稱、書狀類型下拉選單、下載按鈕（placeholder）
-- [ ] 實作 Status Bar（26px）：Model 名稱、Token 用量、費用顯示（placeholder）
-- [ ] 套用完整深色主題 CSS variables（--bg-0 ~ --bg-h, --bd, --t1~t3, 功能色）
-- [ ] 後端 API：`POST /api/cases`、`GET /api/cases/:id`、`PUT /api/cases/:id`
-- [ ] 前端：案件建立表單（title, case_number, court, case_type, plaintiff, defendant）
-- [ ] 前端：案件列表頁 / 案件詳情頁（React Router）
-- [ ] useCaseStore 整合 API，管理案件狀態
-- [ ] 安裝 Tiptap 相關套件
-- [ ] 編輯器可抽換架構：`components/editor/index.ts` re-export、`types.ts` 合約、`tiptap/` 實作
-- [ ] Tiptap 基礎渲染：用 mock content_structured 資料渲染格式化書狀（serif 字體、段落結構）
-- [ ] 書狀 header：案號、原告、被告（mock 資料）
-- [ ] 段落用 `data-p` 和 `data-dispute` attribute 標識
-- [ ] useBriefStore 骨架：管理書狀內容狀態
-- [ ] 驗收：可建立案件 → 進入案件頁面看到三欄佈局 → 中欄編輯器用 mock 資料渲染書狀 → 深色主題正確套用
+- [x] 實作三欄佈局組件（Chat 320px / Editor flex:1 / Sidebar 240px）
+- [x] 實作 Header（48px）：Logo、案件名稱、書狀類型下拉選單、下載按鈕（placeholder）
+- [x] 實作 Status Bar（26px）：Model 名稱、Token 用量、費用顯示（placeholder）
+- [x] 套用完整深色主題 CSS variables（--bg-0 ~ --bg-h, --bd, --t1~t3, 功能色）
+- [x] 後端 API：`POST /api/cases`、`GET /api/cases/:id`、`PUT /api/cases/:id`
+- [x] 前端：案件建立表單（title, case_number, court, case_type, plaintiff, defendant）
+- [x] 前端：案件列表頁 / 案件詳情頁（React Router）
+- [x] useCaseStore 整合 API，管理案件狀態
+- [x] 安裝 Tiptap 相關套件
+- [x] 編輯器可抽換架構：`components/editor/index.ts` re-export、`types.ts` 合約、`tiptap/` 實作
+- [x] Tiptap 基礎渲染：用 mock content_structured 資料渲染格式化書狀（serif 字體、段落結構）
+- [x] 書狀 header：案號、原告、被告（mock 資料）
+- [x] 段落用 `data-p` 和 `data-dispute` attribute 標識
+- [x] useBriefStore 骨架：管理書狀內容狀態
+- [x] 驗收：可建立案件 → 進入案件頁面看到三欄佈局 → 中欄編輯器用 mock 資料渲染書狀 → 深色主題正確套用
 
 ---
 
@@ -52,27 +52,27 @@
 > 目標：律師可上傳 PDF，系統自動提取文字、AI 分類、生成摘要，右側面板顯示完整分類結果。
 > 合併檔案上傳與 AI 處理，一次交付「上傳 → 分類 → 摘要」完整流程。
 
-- [ ] 安裝 unpdf（或 pdf-parse + nodejs_compat_v2）
-- [ ] 後端 API：`POST /api/cases/:id/files`（multipart upload → R2 存儲 + D1 寫 pending → Queue message）
-- [ ] 後端 API：`GET /api/cases/:id/files`（列出檔案）
-- [ ] 後端 API：`GET /api/cases/:id/files/status`（polling 用，回傳各檔處理進度）
-- [ ] 後端 API：`PUT /api/files/:id`（手動修改分類）
-- [ ] 後端 API：`DELETE /api/files/:id`（刪除檔案）
-- [ ] 後端 API：`GET /api/files/:id/content`（取得全文）
-- [ ] 實作 Queue Consumer：接收 file message → PDF 文字提取 → 存 full_text 到 D1
-- [ ] 整合 Cloudflare AI Gateway：呼叫 Haiku 做文件分類 + 摘要生成
-- [ ] 分類邏輯：根據檔名 + 內容判斷 category（ours/theirs/court/evidence）和 doc_type
-- [ ] 摘要格式：結構化 JSON（type, party, summary, key_claims, key_dates, key_amounts, contradictions）
-- [ ] 前端：檔案上傳驗證（PDF only, 20MB limit, max 30 files per case）
-- [ ] 前端：檔案處理進度顯示（「3/12 已處理」進度條）
-- [ ] 右側面板 — 案件卷宗區塊（可收合）
-  - [ ] 四個分類群組：我方書狀(藍) / 對方書狀(橙) / 法院文件(青) / 證據資料(綠)
-  - [ ] 每個群組可獨立收合
-  - [ ] 檔案項目：PDF icon + 檔名 + 日期 + 處理狀態（pending/ready/error）
-  - [ ] 檔案展開顯示 AI 摘要，對方文件標註為「AI 重點」
-  - [ ] 底部上傳入口（虛線區域，「+ 上傳（自動分類）」）
-- [ ] useCaseStore 整合檔案列表管理
-- [ ] 驗收：上傳多個 PDF → 自動分類到正確群組 → 展開可看摘要 → 律師可手動調整分類
+- [x] 安裝 unpdf（或 pdf-parse + nodejs_compat_v2）
+- [x] 後端 API：`POST /api/cases/:id/files`（multipart upload → R2 存儲 + D1 寫 pending → Queue message）
+- [x] 後端 API：`GET /api/cases/:id/files`（列出檔案）
+- [x] 後端 API：`GET /api/cases/:id/files/status`（polling 用，回傳各檔處理進度）
+- [x] 後端 API：`PUT /api/files/:id`（手動修改分類）
+- [x] 後端 API：`DELETE /api/files/:id`（刪除檔案）
+- [x] 後端 API：`GET /api/files/:id/content`（取得全文）
+- [x] 實作 Queue Consumer：接收 file message → PDF 文字提取 → 存 full_text 到 D1
+- [x] 整合 Cloudflare AI Gateway：呼叫 Haiku 做文件分類 + 摘要生成
+- [x] 分類邏輯：根據檔名 + 內容判斷 category（ours/theirs/court/evidence）和 doc_type
+- [x] 摘要格式：結構化 JSON（type, party, summary, key_claims, key_dates, key_amounts, contradictions）
+- [x] 前端：檔案上傳驗證（PDF only, 20MB limit, max 30 files per case）
+- [x] 前端：檔案處理進度顯示（「3/12 已處理」進度條）
+- [x] 右側面板 — 案件卷宗區塊（可收合）
+  - [x] 四個分類群組：我方書狀(藍) / 對方書狀(橙) / 法院文件(青) / 證據資料(綠)
+  - [x] 每個群組可獨立收合
+  - [x] 檔案項目：PDF icon + 檔名 + 日期 + 處理狀態（pending/ready/error）
+  - [x] 檔案展開顯示 AI 摘要，對方文件標註為「AI 重點」
+  - [x] 底部上傳入口（虛線區域，「+ 上傳（自動分類）」）
+- [x] useCaseStore 整合檔案列表管理
+- [x] 驗收：上傳多個 PDF → 自動分類到正確群組 → 展開可看摘要 → 律師可手動調整分類
 
 ---
 
