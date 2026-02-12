@@ -1,0 +1,12 @@
+{
+  "name": "lexdraft",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-11-11",
+  "assets": {
+    "directory": "./public/",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // CRITICAL: 避免 SPA fallback 攔截 API 路由，導致回傳 index.html 而非 JSON
+    "run_worker_first": ["/api/*"]
+  }
+}
