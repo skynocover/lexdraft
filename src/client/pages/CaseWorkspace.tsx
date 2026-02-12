@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useParams } from 'react-router'
 import { useCaseStore, type Case, type CaseFile } from '../stores/useCaseStore'
 import { useBriefStore } from '../stores/useBriefStore'
+import { useChatStore } from '../stores/useChatStore'
 import { api } from '../lib/api'
 import { Header } from '../components/layout/Header'
 import { StatusBar } from '../components/layout/StatusBar'
@@ -58,7 +59,7 @@ export function CaseWorkspace() {
   const files = useCaseStore((s) => s.files)
   const currentBrief = useBriefStore((s) => s.currentBrief)
   const setCurrentBrief = useBriefStore((s) => s.setCurrentBrief)
-  const pollingRef = useRef<ReturnType<typeof setInterval>>()
+  const pollingRef = useRef<ReturnType<typeof setInterval>>(undefined)
 
   useEffect(() => {
     if (!caseId) return
@@ -68,6 +69,9 @@ export function CaseWorkspace() {
 
     // 載入檔案列表
     api.get<CaseFile[]>(`/cases/${caseId}/files`).then(setFiles).catch(console.error)
+
+    // 載入聊天歷史
+    useChatStore.getState().loadHistory(caseId)
 
     // 載入 mock brief
     setCurrentBrief({
@@ -85,6 +89,7 @@ export function CaseWorkspace() {
       setCurrentCase(null)
       setCurrentBrief(null)
       setFiles([])
+      useChatStore.getState().clearMessages()
       if (pollingRef.current) clearInterval(pollingRef.current)
     }
   }, [caseId])

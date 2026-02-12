@@ -80,23 +80,25 @@
 
 > 目標：律師可透過聊天與 AI 對話，AI 能執行基礎工具（讀取文件列表、讀取文件內容）。
 
-- [ ] 實作 Durable Objects：AgentDO（管理 Agent loop 生命週期）
-- [ ] 實作 Agent loop 核心：接收指令 → Claude API tool use → 執行 tool → 回傳結果 → 迴圈
-- [ ] 實作 Agent tools：`list_files`、`read_file`
-- [ ] 後端 API：`POST /api/cases/:id/chat`（SSE streaming）
-- [ ] 後端 API：`POST /api/cases/:id/chat/cancel`（取消進行中的 loop）
-- [ ] 後端 API：`GET /api/cases/:id/messages`（歷史記錄）
-- [ ] Agent 成本控制：最大 15 輪、token 用量回傳
-- [ ] 前端 — 聊天面板 UI
-  - [ ] 用戶訊息 / AI 訊息 渲染
-  - [ ] Tool Call 卡片（可展開收合，顯示 tool name + 結果摘要 + 勾勾）
-  - [ ] 進度條（嵌入對話流）
-  - [ ] SSE 接收 + streaming 文字顯示
-  - [ ] 底部輸入框 + 送出按鈕
-- [ ] useChatStore：管理訊息列表、streaming 狀態
-- [ ] messages 表持久化：關閉瀏覽器後重開能看到歷史對話
-- [ ] Status Bar 即時更新：token 用量 + 估算成本（NT$）
-- [ ] 驗收：輸入「分析案件卷宗」→ AI 呼叫 list_files → 讀取相關文件 → 回應分析結果 → Tool Call 卡片正確顯示
+- [x] 實作 Durable Objects：AgentDO（管理 Agent loop 生命週期）
+- [x] 實作 Agent loop 核心：接收指令 → Gemini 2.5 Flash tool use → 執行 tool → 回傳結果 → 迴圈
+- [x] 實作 Agent tools：`list_files`、`read_file`
+- [x] 後端 API：`POST /api/cases/:id/chat`（SSE streaming）
+- [x] 後端 API：`POST /api/cases/:id/chat/cancel`（取消進行中的 loop）
+- [x] 後端 API：`GET /api/cases/:id/messages`（歷史記錄）
+- [x] 後端 API：`DELETE /api/cases/:id/messages`（清除對話）
+- [x] Agent 成本控制：最大 15 輪、token 用量回傳
+- [x] 前端 — 聊天面板 UI
+  - [x] 用戶訊息 / AI 訊息 渲染（Markdown 渲染）
+  - [x] Tool Call 卡片（可展開收合，顯示 tool name + 結構化結果 + 勾勾）
+  - [x] 進度條（嵌入對話流）
+  - [x] SSE 接收 + streaming 文字顯示
+  - [x] 底部輸入框 + 送出按鈕 + 停止按鈕
+  - [x] 清除對話按鈕
+- [x] useChatStore：管理訊息列表、streaming 狀態
+- [x] messages 表持久化：關閉瀏覽器後重開能看到歷史對話
+- [x] Status Bar 即時更新：Model 名稱 + token 用量 + 估算成本（NT$）+ streaming 狀態
+- [x] 驗收：輸入「分析案件卷宗」→ AI 呼叫 list_files → 讀取相關文件 → 回應分析結果 → Tool Call 卡片正確顯示
 
 ---
 
