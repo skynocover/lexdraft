@@ -1,7 +1,34 @@
 import { eq } from 'drizzle-orm'
-import { extractText } from 'unpdf'
+import { getDocumentProxy, extractText } from 'unpdf'
 import { getDB } from '../db'
 import { files } from '../db/schema'
+
+const CMAP_BASE_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/'
+
+/**
+ * Workers 環境用的 CMap reader。
+ * 預設的 NodeCMapReaderFactory 會用 fs.readFile 讀 URL 路徑，在 Workers 中必定失敗。
+ * 這個類別改用 fetch() 從 CDN 下載 CMap 二進位檔。
+ */
+class WorkersCMapReaderFactory {
+  baseUrl: string
+  isCompressed: boolean
+
+  constructor({ baseUrl = CMAP_BASE_URL, isCompressed = true } = {}) {
+    this.baseUrl = baseUrl
+    this.isCompressed = isCompressed
+  }
+
+  async fetch({ name }: { name: string }) {
+    const url = this.baseUrl + name + (this.isCompressed ? '.bcmap' : '')
+    const response = await globalThis.fetch(url)
+    if (!response.ok) {
+      throw new Error(`Unable to load CMap at: ${url} (${response.status})`)
+    }
+    const cMapData = new Uint8Array(await response.arrayBuffer())
+    return { cMapData, isCompressed: this.isCompressed }
+  }
+}
 
 interface FileMessage {
   fileId: string
@@ -43,66 +70,68 @@ const CLASSIFY_PROMPT = `你是法律文件分類助手。根據以下檔案名�
 如果是對方書狀，特別注意提取所有抗辯要點和前後矛盾之處。
 如果是法院筆錄，特別注意提取法官詢問的問題和關注的重點。
 
+所有欄位內容一律使用繁體中文撰寫（party 欄位除外）。
 回傳純 JSON，不要包含 markdown 標記。格式：
 {
   "category": "...",
   "doc_type": "...",
   "doc_date": "..." or null,
   "summary": {
-    "type": "...",
+    "type": "文件類型（繁體中文，如「民事起訴狀」「答辯狀」「言詞辯論筆錄」）",
     "party": "plaintiff" | "defendant" | null,
-    "summary": "...",
-    "key_claims": [...],
-    "key_dates": [...],
-    "key_amounts": [...],
-    "contradictions": [...],
-    "judge_focus": null or "..."
+    "summary": "繁體中文摘要",
+    "key_claims": ["繁體中文主張1", ...],
+    "key_dates": ["繁體中文日期描述1", ...],
+    "key_amounts": [數字金額, ...],
+    "contradictions": ["繁體中文矛盾點1", ...],
+    "judge_focus": null or "繁體中文法官關注重點"
   }
 }`
 
 async function classifyWithAI(
   filename: string,
   text: string,
-  apiKey: string,
+  env: { CF_ACCOUNT_ID: string; CF_GATEWAY_ID: string; CF_AIG_TOKEN: string },
 ): Promise<ClassificationResult> {
-  // 截取前 8000 字元送給 Haiku（避免 token 爆量）
+  // 截取前 8000 字元（避免 token 爆量）
   const truncated = text.slice(0, 8000)
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  // Cloudflare AI Gateway Unified API（OpenAI 相容），使用 Unified Billing 不需要 provider API key
+  const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`
+
+  const response = await fetch(gatewayUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      model: 'google-ai-studio/gemini-2.0-flash-lite',
       messages: [
-        {
-          role: 'user',
-          content: `檔案名稱：${filename}\n\n文件內容（前 8000 字）：\n${truncated}`,
-        },
+        { role: 'system', content: CLASSIFY_PROMPT },
+        { role: 'user', content: `檔案名稱：${filename}\n\n文件內容（前 8000 字）：\n${truncated}` },
       ],
-      system: CLASSIFY_PROMPT,
+      max_tokens: 1024,
+      response_format: { type: 'json_object' },
     }),
   })
 
   if (!response.ok) {
-    throw new Error(`AI API error: ${response.status}`)
+    const errText = await response.text()
+    throw new Error(`AI Gateway error: ${response.status} - ${errText}`)
   }
 
   const data = (await response.json()) as {
-    content: Array<{ type: string; text: string }>
+    choices: Array<{ message: { role: string; content: string } }>
   }
-  const text_content = data.content.find((c) => c.type === 'text')?.text || '{}'
+  const text_content = data.choices?.[0]?.message?.content || '{}'
 
   return JSON.parse(text_content) as ClassificationResult
 }
 
 export async function processFileMessage(
   message: FileMessage,
-  env: { DB: D1Database; BUCKET: R2Bucket; ANTHROPIC_API_KEY: string },
+  env: { DB: D1Database; BUCKET: R2Bucket; CF_ACCOUNT_ID: string; CF_GATEWAY_ID: string; CF_AIG_TOKEN: string },
 ) {
   const db = getDB(env.DB)
 
@@ -120,19 +149,29 @@ export async function processFileMessage(
     }
     const pdfBuffer = await object.arrayBuffer()
 
-    // 2. 提取文字
-    const { text: fullText } = await extractText(pdfBuffer)
+    // 2. 提取文字（需提供 CMap 支援中文 PDF 字型解碼）
+    //    Workers 環境下 pdfjs 誤判為 Node.js，會用 fs.readFile 讀 CMap 而失敗，
+    //    因此傳入自訂 CMapReaderFactory 改用 fetch() 下載。
+    const pdf = await getDocumentProxy(new Uint8Array(pdfBuffer), {
+      CMapReaderFactory: WorkersCMapReaderFactory as any,
+      cMapUrl: CMAP_BASE_URL,
+      cMapPacked: true,
+    })
+    const result = await extractText(pdf)
+    const fullText = Array.isArray(result.text)
+      ? result.text.join('\n')
+      : String(result.text || '')
 
-    if (!fullText || fullText.trim().length === 0) {
+    if (!fullText.trim()) {
       throw new Error('PDF 文字提取失敗，可能為純圖片掃描檔')
     }
 
-    // 3. AI 分類 + 摘要
+    // 3. AI 分類 + 摘要（透過 Cloudflare AI Gateway 呼叫 Gemini Flash Lite）
     let classification: ClassificationResult
-    if (env.ANTHROPIC_API_KEY) {
-      classification = await classifyWithAI(message.filename, fullText, env.ANTHROPIC_API_KEY)
+    if (env.CF_ACCOUNT_ID && env.CF_GATEWAY_ID && env.CF_AIG_TOKEN) {
+      classification = await classifyWithAI(message.filename, fullText, env)
     } else {
-      // 無 API key 時用 fallback 分類
+      // 無 AI Gateway 設定時用 fallback 分類
       classification = fallbackClassify(message.filename)
     }
 
