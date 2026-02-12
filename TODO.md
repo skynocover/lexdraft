@@ -1,0 +1,232 @@
+# LexDraft — Scrum 開發計畫
+
+> 每個 Sprint 交付一個可測試的增量。前一個 Sprint 完成後才進入下一個。
+> 每個 Sprint 結束時進行驗收，確認功能正常再繼續。
+
+---
+
+## Sprint 0 — 專案基礎建設
+
+> 目標：建立可運行的前後端框架，所有後續開發的地基。
+> 認證先用環境變數 token 簡化處理，MVP 為單人工具，完整 email/password 認證移至 Backlog。
+
+- [ ] 安裝前端依賴（React、React DOM、React Router）
+- [ ] 安裝 Tailwind CSS v4 + shadcn/ui，配置深色主題色彩系統（參考 TASKS.md §9）
+- [ ] 安裝 Zustand，建立四個 domain store 骨架（useCase / useBrief / useChat / useUI）
+- [ ] 安裝 Drizzle ORM + drizzle-kit，定義完整 D1 schema（users / cases / files / briefs / disputes / law_refs / messages）
+- [ ] 執行 migration 產生 SQL，確認 D1 表建立成功
+- [ ] 配置 wrangler.jsonc 綁定（D1 / R2 / Queue / Durable Objects）
+- [ ] Hono 後端建立路由分層結構（server/routes/cases.ts, files.ts, chat.ts, briefs.ts）
+- [ ] 前端 entry point 改為 React（App.tsx），Vite 配置 client/server 分離
+- [ ] 簡易認證：環境變數 token（`AUTH_TOKEN`），auth middleware 驗證 Bearer token
+- [ ] 前端：簡單 token 輸入頁，localStorage 存 token，未驗證導向輸入頁
+- [ ] 驗收：輸入正確 token → 看到空白 React App → API 未帶 token 回 401
+
+---
+
+## Sprint 1 — 三欄佈局 + 案件管理 + 編輯器骨架
+
+> 目標：完成 UI 骨架，可建立/瀏覽案件，編輯器用 mock 資料先跑起來。
+> Tiptap 編輯器骨架提前建立，降低 Sprint 4 的風險（Sprint 4 專注 Agent + Citations 整合）。
+
+- [ ] 實作三欄佈局組件（Chat 320px / Editor flex:1 / Sidebar 240px）
+- [ ] 實作 Header（48px）：Logo、案件名稱、書狀類型下拉選單、下載按鈕（placeholder）
+- [ ] 實作 Status Bar（26px）：Model 名稱、Token 用量、費用顯示（placeholder）
+- [ ] 套用完整深色主題 CSS variables（--bg-0 ~ --bg-h, --bd, --t1~t3, 功能色）
+- [ ] 後端 API：`POST /api/cases`、`GET /api/cases/:id`、`PUT /api/cases/:id`
+- [ ] 前端：案件建立表單（title, case_number, court, case_type, plaintiff, defendant）
+- [ ] 前端：案件列表頁 / 案件詳情頁（React Router）
+- [ ] useCaseStore 整合 API，管理案件狀態
+- [ ] 安裝 Tiptap 相關套件
+- [ ] 編輯器可抽換架構：`components/editor/index.ts` re-export、`types.ts` 合約、`tiptap/` 實作
+- [ ] Tiptap 基礎渲染：用 mock content_structured 資料渲染格式化書狀（serif 字體、段落結構）
+- [ ] 書狀 header：案號、原告、被告（mock 資料）
+- [ ] 段落用 `data-p` 和 `data-dispute` attribute 標識
+- [ ] useBriefStore 骨架：管理書狀內容狀態
+- [ ] 驗收：可建立案件 → 進入案件頁面看到三欄佈局 → 中欄編輯器用 mock 資料渲染書狀 → 深色主題正確套用
+
+---
+
+## Sprint 2 — 檔案上傳 + AI 分類 + 右側卷宗面板
+
+> 目標：律師可上傳 PDF，系統自動提取文字、AI 分類、生成摘要，右側面板顯示完整分類結果。
+> 合併檔案上傳與 AI 處理，一次交付「上傳 → 分類 → 摘要」完整流程。
+
+- [ ] 安裝 unpdf（或 pdf-parse + nodejs_compat_v2）
+- [ ] 後端 API：`POST /api/cases/:id/files`（multipart upload → R2 存儲 + D1 寫 pending → Queue message）
+- [ ] 後端 API：`GET /api/cases/:id/files`（列出檔案）
+- [ ] 後端 API：`GET /api/cases/:id/files/status`（polling 用，回傳各檔處理進度）
+- [ ] 後端 API：`PUT /api/files/:id`（手動修改分類）
+- [ ] 後端 API：`DELETE /api/files/:id`（刪除檔案）
+- [ ] 後端 API：`GET /api/files/:id/content`（取得全文）
+- [ ] 實作 Queue Consumer：接收 file message → PDF 文字提取 → 存 full_text 到 D1
+- [ ] 整合 Cloudflare AI Gateway：呼叫 Haiku 做文件分類 + 摘要生成
+- [ ] 分類邏輯：根據檔名 + 內容判斷 category（ours/theirs/court/evidence）和 doc_type
+- [ ] 摘要格式：結構化 JSON（type, party, summary, key_claims, key_dates, key_amounts, contradictions）
+- [ ] 前端：檔案上傳驗證（PDF only, 20MB limit, max 30 files per case）
+- [ ] 前端：檔案處理進度顯示（「3/12 已處理」進度條）
+- [ ] 右側面板 — 案件卷宗區塊（可收合）
+  - [ ] 四個分類群組：我方書狀(藍) / 對方書狀(橙) / 法院文件(青) / 證據資料(綠)
+  - [ ] 每個群組可獨立收合
+  - [ ] 檔案項目：PDF icon + 檔名 + 日期 + 處理狀態（pending/ready/error）
+  - [ ] 檔案展開顯示 AI 摘要，對方文件標註為「AI 重點」
+  - [ ] 底部上傳入口（虛線區域，「+ 上傳（自動分類）」）
+- [ ] useCaseStore 整合檔案列表管理
+- [ ] 驗收：上傳多個 PDF → 自動分類到正確群組 → 展開可看摘要 → 律師可手動調整分類
+
+---
+
+## Sprint 3 — 聊天面板 + Agent 核心
+
+> 目標：律師可透過聊天與 AI 對話，AI 能執行基礎工具（讀取文件列表、讀取文件內容）。
+
+- [ ] 實作 Durable Objects：AgentDO（管理 Agent loop 生命週期）
+- [ ] 實作 Agent loop 核心：接收指令 → Claude API tool use → 執行 tool → 回傳結果 → 迴圈
+- [ ] 實作 Agent tools：`list_files`、`read_file`
+- [ ] 後端 API：`POST /api/cases/:id/chat`（SSE streaming）
+- [ ] 後端 API：`POST /api/cases/:id/chat/cancel`（取消進行中的 loop）
+- [ ] 後端 API：`GET /api/cases/:id/messages`（歷史記錄）
+- [ ] Agent 成本控制：最大 15 輪、token 用量回傳
+- [ ] 前端 — 聊天面板 UI
+  - [ ] 用戶訊息 / AI 訊息 渲染
+  - [ ] Tool Call 卡片（可展開收合，顯示 tool name + 結果摘要 + 勾勾）
+  - [ ] 進度條（嵌入對話流）
+  - [ ] SSE 接收 + streaming 文字顯示
+  - [ ] 底部輸入框 + 送出按鈕
+- [ ] useChatStore：管理訊息列表、streaming 狀態
+- [ ] messages 表持久化：關閉瀏覽器後重開能看到歷史對話
+- [ ] Status Bar 即時更新：token 用量 + 估算成本（NT$）
+- [ ] 驗收：輸入「分析案件卷宗」→ AI 呼叫 list_files → 讀取相關文件 → 回應分析結果 → Tool Call 卡片正確顯示
+
+---
+
+## Sprint 4 — 書狀撰寫 + 引用系統
+
+> 目標：核心價值交付。AI 可撰寫書狀草稿，引用標籤可互動，書狀即時顯示在編輯器。
+> Tiptap 骨架已在 Sprint 1 建立，此處專注 Agent tools + Citations API 整合。
+
+- [ ] Tiptap custom extensions：citation node、paragraph-block node
+- [ ] 實作 Agent tool：`write_brief_section`（撰寫/重寫段落）
+- [ ] 實作 Agent tool：`analyze_disputes`（分析爭點）
+- [ ] Claude Citations API 整合：document content blocks + citations.enabled
+- [ ] 後端 API：`GET /api/cases/:id/briefs`、`GET /api/briefs/:id`、`PUT /api/briefs/:id`
+- [ ] 後端 API：`GET /api/cases/:id/disputes`
+- [ ] briefs 表：content_structured 為唯一 source of truth
+- [ ] 引用標籤渲染：證據引用（藍底 badge）、法條引用（紫底 badge）、待確認引用（黃色虛線）
+- [ ] 引用 hover 浮動卡片（來源文件 + 被引用原文）
+- [ ] 工具列：預覽/編輯 toggle（編輯模式暫 disabled）、引用統計（「6 確認 · 3 待確認 →」）
+- [ ] SSE brief_update event：AI 寫完段落即時推送到編輯器
+- [ ] useBriefStore 完整整合：引用狀態、爭點資料
+- [ ] 右側面板：反駁目標文件黃色字體 + 星號標記（撰寫時才知道目標）
+- [ ] 驗收：輸入「撰寫民事準備二狀」→ AI 分析卷宗 → 生成帶引用的書狀 → 編輯器即時顯示 → 引用可 hover 查看原文
+
+---
+
+## Sprint 5 — Word 匯出
+
+> 目標：律師可將書狀下載為 Word 檔，直接送法院。
+
+- [ ] 安裝 docx（docx-js）
+- [ ] 後端 API：`POST /api/briefs/:id/export/docx`
+- [ ] Word 格式：A4、邊距 2.54/3.17cm、標楷體/新細明體、12pt 內文、1.8 倍行距
+- [ ] 引用轉換：inline badge → 括號引用文字（如「（原證一，事故分析研判表）」）
+- [ ] content_structured → docx 段落映射（section/subsection 對應 heading 層級）
+- [ ] 前端：Header「下載 Word」按鈕功能實作
+- [ ] 驗收：點擊下載 → 取得格式正確的 .docx → Word 開啟排版正常 → 引用轉為括號文字
+
+---
+
+## Sprint 6 — 編輯器增強
+
+> 目標：律師可精細編輯書狀，逐段請 AI 重寫，並審查所有引用。
+> Tiptap 架構已在 Sprint 4 建立，此處只需解鎖編輯模式並加入互動功能。
+
+- [ ] 啟用 Tiptap 編輯模式（所見即所得）
+- [ ] 預覽/編輯模式切換
+- [ ] 段落浮動工具列（hover 時右上角顯示）
+  - [ ] AI 重寫 → 填入聊天指令
+  - [ ] 加強論述 → 填入聊天指令
+  - [ ] 插入引用 → 填入聊天指令
+  - [ ] 刪除段落 → 標記刪除線 + 確認
+- [ ] 引用審查模式
+  - [ ] 工具列「待確認」按鈕 → 打開 modal overlay
+  - [ ] 審查卡片：來源原文 vs 書狀引用
+  - [ ] 按鈕：確認正確 / 移除引用 / 跳過
+  - [ ] 書狀中對應引用閃爍高亮
+  - [ ] 自動跳到下一個待確認引用
+- [ ] 驗收：可切換編輯模式 → hover 段落出現工具列 → 點「AI 重寫」指令進入聊天 → 引用審查流程完整可用
+
+---
+
+## Sprint 7 — 底部案件分析面板（核心 Tabs）
+
+> 目標：提供最重要的案件分析視圖，輔助律師撰寫策略。
+> 先交付爭點和金額兩個高價值 Tab，其餘 Tab 移至 Sprint 8。
+
+- [ ] 底部面板通用機制：toggle bar 收合/展開、Tab 切換、可拖拉高度（resize handle, 100px ~ 500px）
+- [ ] 實作 Agent tool：`calculate_damages`
+- [ ] 後端 API：`GET /api/cases/:id/damages`
+- [ ] Tab 1 — 爭點分析
+  - [ ] 可展開收合的爭點卡片（編號 + 標題）
+  - [ ] 展開：我方主張、對方主張、證據、法條
+  - [ ] 「跳到段落」連結按鈕
+- [ ] Tab 2 — 金額計算
+  - [ ] 按類別的金額卡片（貨款、利息等）
+  - [ ] 每張小計 + 展開明細
+  - [ ] 底部請求總額 highlight bar
+- [ ] 驗收：底部面板可收合展開 → 可拖拉高度 → 爭點卡片可展開 → 金額計算正確
+
+---
+
+## Sprint 8 — 剩餘分析 Tabs + 法條搜尋 + 進階互動
+
+> 目標：補齊分析面板、串接法條 API、完善互動細節，交付完整產品。
+
+- [ ] 實作 Agent tool：`generate_timeline`
+- [ ] 後端 API：`GET /api/cases/:id/timeline`、`GET /api/cases/:id/parties`
+- [ ] Tab 3 — 時間軸
+  - [ ] 垂直 timeline（紅=關鍵 / 藍=一般 / 綠=當前）
+  - [ ] 每個事件：日期、標題、描述、來源文件
+- [ ] Tab 4 — 主張與舉證
+  - [ ] 表格：書狀主張 / 對應證據 / 狀態（ok / warn / miss）
+- [ ] Tab 5 — 當事人
+  - [ ] 原告/被告 兩張卡片（姓名、地址、代理人等）
+- [ ] 法條搜尋整合（需外部 API + Key 到位）
+  - [ ] 後端 API：`POST /api/law/search`
+  - [ ] 實作 Agent tool：`search_law`
+  - [ ] 右側面板法條區塊完整功能：badge + 條號 + 引用次數、展開全文 + 高亮、「插入引用」按鈕
+  - [ ] 底部搜尋輸入框
+- [ ] 爭點 ↔ 段落雙向連動
+  - [ ] 爭點 → 段落：點「跳到段落」→ 書狀中 `data-dispute="N"` 段落高亮 + 自動滾動
+  - [ ] 段落 → 爭點：雙擊段落 → 底部打開 + 切到爭點 tab + 高亮對應卡片
+  - [ ] 3 秒後自動取消高亮
+- [ ] 書狀類型選單功能（Header 下拉切換不同書狀）
+- [ ] 驗收：五個 Tab 完整可用 → 法條可搜尋並引用 → 雙向連動順暢 → 書狀可切換
+
+---
+
+## 未來規劃（Backlog）
+
+- [ ] 完整認證系統（email/password + PBKDF2 via Web Crypto API，register/login/logout）
+- [ ] 版本比對模式（左右雙欄 diff view，語意層級段落比對）
+- [ ] 動態快捷按鈕（Feature 4）：AI 根據書狀狀態動態生成建議按鈕
+- [ ] 金額修改連動訴之聲明段落
+- [ ] 多版本書狀管理
+- [ ] 多用戶 / 團隊協作（RBAC、案件權限控管）
+- [ ] 月度 token budget 上限 + 告警
+- [ ] PDF 匯出（`POST /api/briefs/:id/export/pdf`，嵌入 Noto Serif TC 字體）
+
+---
+
+## 提醒：錯誤處理策略（全功能完成後統一補強）
+
+> 各 Sprint 開發時先以 happy path 為主，功能全部到位後再統一補強錯誤處理。
+
+- [ ] Queue Consumer 失敗重試：dead letter queue、max retries、失敗狀態寫回 D1（status: error + error_message）
+- [ ] AI API 呼叫失敗：retry with exponential backoff、fallback 回應（「AI 暫時無法回應，請稍後再試」）
+- [ ] Agent loop 異常中斷：DO 狀態清理、前端顯示錯誤訊息、允許律師重新發送指令
+- [ ] D1 / R2 連接問題：graceful degradation、前端 toast 通知
+- [ ] PDF 文字提取失敗：標記 status: error、前端顯示「無法提取文字，請確認 PDF 非純圖片掃描檔」
+- [ ] SSE 連線中斷：前端自動重連、斷線期間訊息補回
+- [ ] 檔案上傳失敗：R2 寫入失敗回滾 D1 記錄、前端顯示具體錯誤原因
+- [ ] Token / 成本超限：接近上限時 Status Bar 警告、超限時阻止新的 Agent 請求
