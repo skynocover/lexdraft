@@ -24,6 +24,9 @@ export function CaseWorkspace() {
   const loadBriefs = useBriefStore((s) => s.loadBriefs)
   const loadDisputes = useBriefStore((s) => s.loadDisputes)
   const loadDamages = useBriefStore((s) => s.loadDamages)
+  const loadLawRefs = useBriefStore((s) => s.loadLawRefs)
+  const loadTimeline = useBriefStore((s) => s.loadTimeline)
+  const loadParties = useBriefStore((s) => s.loadParties)
   const tabs = useTabStore((s) => s.tabs)
   const activeTabId = useTabStore((s) => s.activeTabId)
   const openBriefTab = useTabStore((s) => s.openBriefTab)
@@ -57,6 +60,15 @@ export function CaseWorkspace() {
 
     // 載入金額
     loadDamages(caseId)
+
+    // 載入法條引用
+    loadLawRefs(caseId)
+
+    // 載入時間軸
+    loadTimeline(caseId)
+
+    // 載入當事人
+    loadParties(caseId)
 
     return () => {
       setCurrentCase(null)
@@ -94,9 +106,9 @@ export function CaseWorkspace() {
 
         <main className="flex flex-1 flex-col overflow-hidden bg-bg-0">
           <TabBar />
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* Editor / FileViewer — takes remaining space */}
-            <div className="flex-1 overflow-hidden">
+            <div className="relative min-h-0 flex-1">
               {activeTab?.data.type === 'brief' ? (
                 <BriefEditor
                   content={currentBrief?.content_structured ?? null}

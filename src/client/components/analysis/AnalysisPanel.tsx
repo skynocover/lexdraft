@@ -2,16 +2,22 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useUIStore } from '../../stores/useUIStore'
 import { DisputesTab } from './DisputesTab'
 import { DamagesTab } from './DamagesTab'
+import { TimelineTab } from './TimelineTab'
+import { EvidenceTab } from './EvidenceTab'
+import { PartiesTab } from './PartiesTab'
 
 const COLLAPSED_HEIGHT = 32
 const MIN_HEIGHT = 100
 const MAX_HEIGHT = 500
 
-type TabKey = 'disputes' | 'damages'
+type TabKey = 'disputes' | 'damages' | 'timeline' | 'evidence' | 'parties'
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'disputes', label: '爭點分析' },
   { key: 'damages', label: '金額計算' },
+  { key: 'timeline', label: '時間軸' },
+  { key: 'evidence', label: '主張與舉證' },
+  { key: 'parties', label: '當事人' },
 ]
 
 export function AnalysisPanel() {
@@ -106,6 +112,9 @@ export function AnalysisPanel() {
         <div className="flex-1 overflow-y-auto p-3">
           {tab === 'disputes' && <DisputesTab />}
           {tab === 'damages' && <DamagesTab />}
+          {tab === 'timeline' && <TimelineTab />}
+          {tab === 'evidence' && <EvidenceTab />}
+          {tab === 'parties' && <PartiesTab />}
         </div>
       )}
     </div>

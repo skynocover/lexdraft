@@ -62,6 +62,31 @@ export interface Damage {
   created_at: string
 }
 
+export interface LawRef {
+  id: string
+  case_id: string
+  law_name: string | null
+  article: string | null
+  title: string | null
+  full_text: string | null
+  highlight_ranges: string | null
+  usage_count: number | null
+}
+
+export interface TimelineEvent {
+  date: string
+  title: string
+  description: string
+  source_file: string
+  is_critical: boolean
+}
+
+export interface Party {
+  role: 'plaintiff' | 'defendant'
+  name: string
+  description?: string
+}
+
 type ContentSnapshot = { paragraphs: Paragraph[] }
 
 const MAX_HISTORY = 50
@@ -71,10 +96,14 @@ interface BriefState {
   briefs: Brief[]
   disputes: Dispute[]
   damages: Damage[]
+  lawRefs: LawRef[]
+  timeline: TimelineEvent[]
+  parties: Party[]
   rebuttalTargetFileIds: string[]
   dirty: boolean
   saving: boolean
   highlightCitationId: string | null
+  highlightDisputeId: string | null
   _history: ContentSnapshot[]
   _future: ContentSnapshot[]
 
@@ -82,9 +111,13 @@ interface BriefState {
   setBriefs: (briefs: Brief[]) => void
   setDisputes: (disputes: Dispute[]) => void
   setDamages: (damages: Damage[]) => void
+  setLawRefs: (lawRefs: LawRef[]) => void
+  setTimeline: (timeline: TimelineEvent[]) => void
+  setParties: (parties: Party[]) => void
   setRebuttalTargetFileIds: (ids: string[]) => void
   setDirty: (dirty: boolean) => void
   setHighlightCitationId: (id: string | null) => void
+  setHighlightDisputeId: (id: string | null) => void
   setContentStructured: (content: { paragraphs: Paragraph[] }) => void
   setTitle: (title: string) => void
 
@@ -92,6 +125,9 @@ interface BriefState {
   loadBrief: (briefId: string) => Promise<void>
   loadDisputes: (caseId: string) => Promise<void>
   loadDamages: (caseId: string) => Promise<void>
+  loadLawRefs: (caseId: string) => Promise<void>
+  loadTimeline: (caseId: string) => Promise<void>
+  loadParties: (caseId: string) => Promise<void>
   addParagraph: (paragraph: Paragraph) => void
   updateParagraph: (paragraphId: string, paragraph: Paragraph) => void
   removeParagraph: (paragraphId: string) => void
@@ -117,10 +153,14 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   briefs: [],
   disputes: [],
   damages: [],
+  lawRefs: [],
+  timeline: [],
+  parties: [],
   rebuttalTargetFileIds: [],
   dirty: false,
   saving: false,
   highlightCitationId: null,
+  highlightDisputeId: null,
   _history: [],
   _future: [],
 
@@ -128,9 +168,13 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   setBriefs: (briefs) => set({ briefs }),
   setDisputes: (disputes) => set({ disputes }),
   setDamages: (damages) => set({ damages }),
+  setLawRefs: (lawRefs) => set({ lawRefs }),
+  setTimeline: (timeline) => set({ timeline }),
+  setParties: (parties) => set({ parties }),
   setRebuttalTargetFileIds: (rebuttalTargetFileIds) => set({ rebuttalTargetFileIds }),
   setDirty: (dirty) => set({ dirty }),
   setHighlightCitationId: (highlightCitationId) => set({ highlightCitationId }),
+  setHighlightDisputeId: (highlightDisputeId) => set({ highlightDisputeId }),
 
   setContentStructured: (content: { paragraphs: Paragraph[] }) => {
     const { currentBrief, _history } = get()
@@ -195,6 +239,33 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       set({ damages })
     } catch (err) {
       console.error('loadDamages error:', err)
+    }
+  },
+
+  loadLawRefs: async (caseId: string) => {
+    try {
+      const lawRefs = await api.get<LawRef[]>(`/cases/${caseId}/law-refs`)
+      set({ lawRefs })
+    } catch (err) {
+      console.error('loadLawRefs error:', err)
+    }
+  },
+
+  loadTimeline: async (caseId: string) => {
+    try {
+      const timeline = await api.get<TimelineEvent[]>(`/cases/${caseId}/timeline`)
+      set({ timeline })
+    } catch (err) {
+      console.error('loadTimeline error:', err)
+    }
+  },
+
+  loadParties: async (caseId: string) => {
+    try {
+      const parties = await api.get<Party[]>(`/cases/${caseId}/parties`)
+      set({ parties })
+    } catch (err) {
+      console.error('loadParties error:', err)
     }
   },
 

@@ -1,9 +1,19 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { useCaseStore, type CaseFile } from '../../stores/useCaseStore'
-import { useBriefStore } from '../../stores/useBriefStore'
+import { useBriefStore, type LawRef } from '../../stores/useBriefStore'
 import { useTabStore } from '../../stores/useTabStore'
 import { api } from '../../lib/api'
 import { useAuthStore } from '../../stores/useAuthStore'
+
+interface SearchResult {
+  _id: string
+  law_name: string
+  article_no: string
+  content: string
+  pcode: string
+  nature: string
+  score: number
+}
 
 type Category = 'ours' | 'theirs' | 'court' | 'evidence' | 'other'
 
@@ -253,12 +263,104 @@ function FileGroup({
   )
 }
 
+/* ── 法條卡片 ── */
+function LawRefCard({ lawRef }: { lawRef: LawRef }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="rounded border border-bd bg-bg-2">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-start gap-2 px-2 py-1.5 text-left transition hover:bg-bg-h"
+      >
+        <span className="mt-0.5 shrink-0 rounded bg-purple-500/20 px-1 py-0.5 text-[9px] font-medium text-purple-400">
+          法規
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="truncate text-xs text-t1">{lawRef.law_name} {lawRef.article}</p>
+        </div>
+        {lawRef.usage_count && lawRef.usage_count > 0 && (
+          <span className="shrink-0 text-[9px] text-t3">{lawRef.usage_count}次</span>
+        )}
+        <span className="shrink-0 text-[10px] text-t3">{expanded ? '▾' : '▸'}</span>
+      </button>
+      {expanded && lawRef.full_text && (
+        <div className="border-t border-bd px-2 py-1.5">
+          <p className="text-[11px] leading-4 text-t2">{lawRef.full_text}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── 法條搜尋輸入框 ── */
+function LawSearchInput() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  const doSearch = useCallback(async (q: string) => {
+    if (!q.trim()) {
+      setResults([])
+      return
+    }
+    setSearching(true)
+    try {
+      const data = await api.post<{ results: SearchResult[] }>('/law/search', { query: q, limit: 8 })
+      setResults(data.results)
+    } catch {
+      setResults([])
+    } finally {
+      setSearching(false)
+    }
+  }, [])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value
+    setQuery(v)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => doSearch(v), 300)
+  }
+
+  return (
+    <div className="px-2">
+      <div className="relative">
+        <input
+          type="text"
+          value={query}
+          onChange={handleChange}
+          placeholder="搜尋法條..."
+          className="w-full rounded border border-bd bg-bg-2 px-2 py-1.5 text-xs text-t1 placeholder:text-t3 outline-none focus:border-ac"
+        />
+        {searching && (
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-t3">...</span>
+        )}
+      </div>
+      {results.length > 0 && (
+        <div className="mt-1 max-h-48 space-y-1 overflow-y-auto rounded border border-bd bg-bg-2 p-1">
+          {results.map((r) => (
+            <div
+              key={r._id}
+              className="rounded px-2 py-1.5 text-left transition hover:bg-bg-h cursor-default"
+            >
+              <p className="text-xs font-medium text-t1">{r.law_name} {r.article_no}</p>
+              <p className="mt-0.5 text-[10px] leading-3.5 text-t3 line-clamp-2">{r.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── 主元件 ── */
 export function RightSidebar() {
   const currentCase = useCaseStore((s) => s.currentCase)
   const caseFiles = useCaseStore((s) => s.files)
   const setFiles = useCaseStore((s) => s.setFiles)
   const rebuttalTargetFileIds = useBriefStore((s) => s.rebuttalTargetFileIds)
+  const lawRefs = useBriefStore((s) => s.lawRefs)
   const briefs = useBriefStore((s) => s.briefs)
   const deleteBrief = useBriefStore((s) => s.deleteBrief)
   const activeTabId = useTabStore((s) => s.activeTabId)
@@ -347,7 +449,7 @@ export function RightSidebar() {
   }
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-l border-bd bg-bg-1 overflow-y-auto">
+    <aside className="flex w-60 min-h-0 shrink-0 flex-col border-l border-bd bg-bg-1 overflow-y-auto">
       {/* 刪除確認彈窗 */}
       {confirmDelete && (
         <ConfirmDialog
@@ -494,14 +596,25 @@ export function RightSidebar() {
       <div>
         <SectionHeader
           label="法條引用"
-          count={0}
+          count={lawRefs.length}
           countUnit="條"
           open={lawRefsOpen}
           onToggle={() => setLawRefsOpen(!lawRefsOpen)}
         />
         {lawRefsOpen && (
-          <div className="px-3 pb-3">
-            <p className="text-center text-[11px] text-t3">尚無引用法條</p>
+          <div className="px-1 pb-3">
+            <div className="mb-2">
+              <LawSearchInput />
+            </div>
+            {lawRefs.length === 0 ? (
+              <p className="px-2 text-center text-[11px] text-t3">尚無引用法條</p>
+            ) : (
+              <div className="space-y-1 px-1">
+                {lawRefs.map((ref) => (
+                  <LawRefCard key={ref.id} lawRef={ref} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

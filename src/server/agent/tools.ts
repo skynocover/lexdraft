@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { getDB } from '../db'
-import { files, briefs, disputes, damages } from '../db/schema'
+import { files, briefs, disputes, damages, lawRefs, timelineEvents as timelineEventsTable } from '../db/schema'
+import { searchLaw } from '../lib/lawSearch'
 import { callClaudeWithCitations, type ClaudeDocument } from './claudeClient'
 import { callAIStreaming, type AIEnv } from './aiClient'
 import type { ToolDef } from './aiClient'
@@ -171,11 +172,45 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'search_law',
+      description: '搜尋法規條文。支援法規名稱（如「民法」）、特定條號（如「民法第184條」）、法律概念（如「損害賠償」）等搜尋方式。搜尋結果會自動寫入案件法條引用列表。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: '搜尋關鍵字，例如「民法第184條」或「損害賠償」',
+          },
+          limit: {
+            type: 'number',
+            description: '回傳筆數上限，預設 10',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_timeline',
+      description: '分析案件所有檔案，產生時間軸事件列表。自動載入所有已處理完成的檔案摘要，分析日期、事件等時間相關資訊，產生時間軸供律師參考。',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
 ]
 
 interface ExecuteToolContext {
   sendSSE: (event: SSEEvent) => Promise<void>
   aiEnv: AIEnv
+  mongoUrl: string
 }
 
 // Tool execution
@@ -655,6 +690,189 @@ amount 為整數，以新台幣元計。
 
       return {
         result: `已計算 ${damageRecords.length} 項金額：\n${damageSummary}\n\n請求總額：NT$ ${totalAmount.toLocaleString()}`,
+        success: true,
+      }
+    }
+
+    case 'search_law': {
+      if (!ctx) {
+        return { result: 'Error: missing execution context', success: false }
+      }
+
+      const query = args.query as string
+      const limit = (args.limit as number) || 10
+      if (!query) {
+        return { result: 'Error: query is required', success: false }
+      }
+
+      const results = await searchLaw(ctx.mongoUrl, { query, limit })
+
+      if (results.length === 0) {
+        return { result: `未找到與「${query}」相關的法條。`, success: true }
+      }
+
+      // Upsert into D1 law_refs table
+      for (const r of results) {
+        try {
+          const existing = await drizzle
+            .select()
+            .from(lawRefs)
+            .where(eq(lawRefs.id, r._id))
+          if (existing.length > 0) {
+            await drizzle
+              .update(lawRefs)
+              .set({ usage_count: (existing[0].usage_count || 0) + 1 })
+              .where(eq(lawRefs.id, r._id))
+          } else {
+            await drizzle.insert(lawRefs).values({
+              id: r._id,
+              case_id: caseId,
+              law_name: r.law_name,
+              article: r.article_no,
+              title: `${r.law_name} ${r.article_no}`,
+              full_text: r.content,
+              usage_count: 1,
+            })
+          }
+        } catch { /* skip on error */ }
+      }
+
+      // Read all law_refs for this case to send to frontend
+      const allRefs = await drizzle
+        .select()
+        .from(lawRefs)
+        .where(eq(lawRefs.case_id, caseId))
+
+      await ctx.sendSSE({
+        type: 'brief_update',
+        brief_id: '',
+        action: 'set_law_refs',
+        data: allRefs,
+      })
+
+      // Format result text
+      const formatted = results
+        .map((r) => `${r.law_name} ${r.article_no}：${r.content.slice(0, 80)}${r.content.length > 80 ? '...' : ''}`)
+        .join('\n')
+
+      return {
+        result: `找到 ${results.length} 條相關法條：\n${formatted}`,
+        success: true,
+      }
+    }
+
+    case 'generate_timeline': {
+      if (!ctx) {
+        return { result: 'Error: missing execution context', success: false }
+      }
+
+      // Load all ready files with summaries
+      const timelineFileRows = await drizzle
+        .select({
+          id: files.id,
+          filename: files.filename,
+          category: files.category,
+          doc_date: files.doc_date,
+          summary: files.summary,
+        })
+        .from(files)
+        .where(eq(files.case_id, caseId))
+
+      const timelineReadyFiles = timelineFileRows.filter((f) => f.summary)
+      if (!timelineReadyFiles.length) {
+        return { result: '沒有已處理完成的檔案，請先上傳並等待檔案處理完畢。', success: false }
+      }
+
+      const fileContext = timelineReadyFiles.map((f) => {
+        const summary = f.summary ? JSON.parse(f.summary) : {}
+        return `【${f.filename}】(${f.category})\n日期：${f.doc_date || '不明'}\n摘要：${summary.summary || '無'}`
+      }).join('\n\n')
+
+      const timelinePrompt = `你是專業的台灣法律分析助手。請根據以下案件文件摘要，產生時間軸事件列表。
+
+${fileContext}
+
+請以 JSON 格式回傳時間軸事件列表，格式如下：
+[
+  {
+    "date": "2024-01-15",
+    "title": "事件標題",
+    "description": "事件詳細描述",
+    "source_file": "來源檔案名稱",
+    "is_critical": true
+  }
+]
+
+規則：
+- date 格式為 YYYY-MM-DD，若只知年月則為 YYYY-MM-01，若只知年則為 YYYY-01-01
+- is_critical 為布林值，標記關鍵事件（如起訴、判決、簽約、違約等）
+- 按日期從早到晚排序
+- 重要：絕對不要使用 emoji 或特殊符號
+- 只回傳 JSON 陣列，不要其他文字。`
+
+      const timelineAiResponse = await callAIStreaming(ctx.aiEnv, {
+        messages: [
+          { role: 'system', content: '你是專業的台灣法律分析助手。' },
+          { role: 'user', content: timelinePrompt },
+        ],
+      })
+
+      const timelineResponseText = await collectStreamText(timelineAiResponse)
+
+      let timelineEvents: Array<{
+        date: string
+        title: string
+        description: string
+        source_file: string
+        is_critical: boolean
+      }> = []
+
+      try {
+        const jsonMatch = timelineResponseText.match(/\[[\s\S]*\]/)
+        if (jsonMatch) {
+          timelineEvents = JSON.parse(jsonMatch[0])
+        }
+      } catch {
+        return { result: 'Error: 無法解析時間軸結果', success: false }
+      }
+
+      if (!timelineEvents.length) {
+        return { result: '未能從檔案中識別出時間軸事件。', success: false }
+      }
+
+      // Sort by date
+      timelineEvents.sort((a, b) => a.date.localeCompare(b.date))
+
+      // Persist to D1 — delete old events for this case, then insert new ones
+      await drizzle.delete(timelineEventsTable).where(eq(timelineEventsTable.case_id, caseId))
+      const now = new Date().toISOString()
+      for (const evt of timelineEvents) {
+        await drizzle.insert(timelineEventsTable).values({
+          id: nanoid(),
+          case_id: caseId,
+          date: evt.date,
+          title: evt.title,
+          description: evt.description || '',
+          source_file: evt.source_file || '',
+          is_critical: evt.is_critical || false,
+          created_at: now,
+        })
+      }
+
+      // Send via SSE
+      await ctx.sendSSE({
+        type: 'brief_update',
+        brief_id: '',
+        action: 'set_timeline',
+        data: timelineEvents,
+      })
+
+      const timelineSummary = timelineEvents
+        .map((e) => `${e.date} ${e.title}${e.is_critical ? ' (關鍵)' : ''}`)
+        .join('\n')
+
+      return {
+        result: `已產生 ${timelineEvents.length} 個時間軸事件：\n${timelineSummary}`,
         success: true,
       }
     }

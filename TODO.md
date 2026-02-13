@@ -176,24 +176,24 @@
 
 > 目標：補齊分析面板、串接法條 API、完善互動細節，交付完整產品。
 
-- [ ] 實作 Agent tool：`generate_timeline`
-- [ ] 後端 API：`GET /api/cases/:id/timeline`、`GET /api/cases/:id/parties`
-- [ ] Tab 3 — 時間軸
-  - [ ] 垂直 timeline（紅=關鍵 / 藍=一般 / 綠=當前）
-  - [ ] 每個事件：日期、標題、描述、來源文件
-- [ ] Tab 4 — 主張與舉證
-  - [ ] 表格：書狀主張 / 對應證據 / 狀態（ok / warn / miss）
-- [ ] Tab 5 — 當事人
-  - [ ] 原告/被告 兩張卡片（姓名、地址、代理人等）
-- [ ] 法條搜尋整合（需外部 API + Key 到位）
-  - [ ] 後端 API：`POST /api/law/search`
-  - [ ] 實作 Agent tool：`search_law`
-  - [ ] 右側面板法條區塊完整功能：badge + 條號 + 引用次數、展開全文 + 高亮、「插入引用」按鈕
-  - [ ] 底部搜尋輸入框
-- [ ] 爭點 ↔ 段落雙向連動
-  - [ ] 爭點 → 段落：點「跳到段落」→ 書狀中 `data-dispute="N"` 段落高亮 + 自動滾動
-  - [ ] 段落 → 爭點：雙擊段落 → 底部打開 + 切到爭點 tab + 高亮對應卡片
-  - [ ] 3 秒後自動取消高亮
+- [x] 實作 Agent tool：`generate_timeline`
+- [x] 後端 API：`GET /api/cases/:id/timeline`、`GET /api/cases/:id/parties`
+- [x] Tab 3 — 時間軸
+  - [x] 垂直 timeline（紅=關鍵 / 藍=一般 / 綠=當前）
+  - [x] 每個事件：日期、標題、描述、來源文件
+- [x] Tab 4 — 主張與舉證
+  - [x] 表格：書狀主張 / 對應證據 / 狀態（ok / warn / miss）
+- [x] Tab 5 — 當事人
+  - [x] 原告/被告 兩張卡片（姓名、地址、代理人等）
+- [x] 法條搜尋整合（需外部 API + Key 到位）
+  - [x] 後端 API：`POST /api/law/search`
+  - [x] 實作 Agent tool：`search_law`
+  - [x] 右側面板法條區塊完整功能：badge + 條號 + 引用次數、展開全文 + 高亮、「插入引用」按鈕
+  - [x] 底部搜尋輸入框
+- [x] 爭點 ↔ 段落雙向連動
+  - [x] 爭點 → 段落：點「跳到段落」→ 書狀中 `data-dispute="N"` 段落高亮 + 自動滾動
+  - [x] 段落 → 爭點：雙擊段落 → 底部打開 + 切到爭點 tab + 高亮對應卡片
+  - [x] 3 秒後自動取消高亮
 - [ ] 驗收：五個 Tab 完整可用 → 法條可搜尋並引用 → 雙向連動順暢
 
 ---

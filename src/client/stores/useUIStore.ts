@@ -9,6 +9,7 @@ interface UIState {
   rightFilesOpen: boolean
   rightLawRefsOpen: boolean
   toggleBottomPanel: () => void
+  setBottomPanelOpen: (open: boolean) => void
   setBottomPanelHeight: (height: number) => void
   setBottomPanelTab: (tab: AnalysisTab) => void
   toggleRightFiles: () => void
@@ -22,6 +23,7 @@ export const useUIStore = create<UIState>((set) => ({
   rightFilesOpen: true,
   rightLawRefsOpen: true,
   toggleBottomPanel: () => set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
+  setBottomPanelOpen: (open) => set({ bottomPanelOpen: open }),
   setBottomPanelHeight: (height) => set({ bottomPanelHeight: Math.min(500, Math.max(100, height)) }),
   setBottomPanelTab: (tab) => set({ bottomPanelTab: tab }),
   toggleRightFiles: () => set((s) => ({ rightFilesOpen: !s.rightFilesOpen })),

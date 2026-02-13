@@ -1,0 +1,87 @@
+import { Hono } from 'hono'
+import { eq } from 'drizzle-orm'
+import { getDB } from '../db'
+import { lawRefs, timelineEvents, cases } from '../db/schema'
+import { asc } from 'drizzle-orm'
+import { searchLaw } from '../lib/lawSearch'
+import type { AppEnv } from '../types'
+
+const lawRouter = new Hono<AppEnv>()
+
+// POST /api/law/search — MongoDB Atlas Search
+lawRouter.post('/law/search', async (c) => {
+  const body = await c.req.json<{
+    query: string
+    limit?: number
+    nature?: string
+  }>()
+
+  if (!body.query) {
+    return c.json({ error: 'missing query' }, 400)
+  }
+
+  const results = await searchLaw(c.env.MONGO_URL, {
+    query: body.query,
+    limit: body.limit,
+    nature: body.nature,
+  })
+
+  return c.json({ query: body.query, total: results.length, results })
+})
+
+// GET /api/cases/:caseId/law-refs — D1 law_refs for a case
+lawRouter.get('/cases/:caseId/law-refs', async (c) => {
+  const caseId = c.req.param('caseId')
+  const db = getDB(c.env.DB)
+
+  const rows = await db
+    .select()
+    .from(lawRefs)
+    .where(eq(lawRefs.case_id, caseId))
+
+  return c.json(rows)
+})
+
+// GET /api/cases/:caseId/timeline — D1 timeline_events for a case
+lawRouter.get('/cases/:caseId/timeline', async (c) => {
+  const caseId = c.req.param('caseId')
+  const db = getDB(c.env.DB)
+
+  const rows = await db
+    .select()
+    .from(timelineEvents)
+    .where(eq(timelineEvents.case_id, caseId))
+    .orderBy(asc(timelineEvents.date))
+
+  return c.json(rows)
+})
+
+// GET /api/cases/:caseId/parties — parties from case record
+lawRouter.get('/cases/:caseId/parties', async (c) => {
+  const caseId = c.req.param('caseId')
+  const db = getDB(c.env.DB)
+
+  const [caseRow] = await db
+    .select({
+      plaintiff: cases.plaintiff,
+      defendant: cases.defendant,
+    })
+    .from(cases)
+    .where(eq(cases.id, caseId))
+
+  if (!caseRow) {
+    return c.json({ error: 'case not found' }, 404)
+  }
+
+  const parties = []
+  if (caseRow.plaintiff) {
+    parties.push({ role: 'plaintiff', name: caseRow.plaintiff })
+  }
+  if (caseRow.defendant) {
+    parties.push({ role: 'defendant', name: caseRow.defendant })
+  }
+
+  return c.json(parties)
+})
+
+export { lawRouter }

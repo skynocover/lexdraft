@@ -279,6 +279,15 @@ body {
   border-top-color: #e5e7eb;
 }
 
+/* ---- Highlight paragraph (dispute bidirectional link) ---- */
+.highlight-paragraph {
+  background-color: rgba(240, 200, 80, 0.2) !important;
+  outline: 2px solid rgba(240, 200, 80, 0.5);
+  outline-offset: 2px;
+  border-radius: 2px;
+  transition: background-color 0.3s, outline-color 0.3s;
+}
+
 /* ===================== Print ===================== */
 
 @media print {

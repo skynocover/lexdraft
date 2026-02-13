@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import type { BriefEditorProps } from '../types'
 import { useBriefStore } from '../../../stores/useBriefStore'
+import { useUIStore } from '../../../stores/useUIStore'
 import { useAutoSave } from '../../../hooks/useAutoSave'
 import { CitationNode } from './extensions/CitationNode'
 import { LegalHeading } from './extensions/LegalHeading'
@@ -31,6 +32,29 @@ export function A4PageEditor({ content }: BriefEditorProps) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useAutoSave()
+
+  // Paragraph double-click → jump to dispute in bottom panel
+  const handleEditorDoubleClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    const paragraphEl = target.closest('[data-dispute-id]') as HTMLElement | null
+    if (!paragraphEl) return
+
+    const disputeId = paragraphEl.getAttribute('data-dispute-id')
+    if (!disputeId) return
+
+    // Open bottom panel, switch to disputes tab, highlight the dispute card
+    useUIStore.getState().setBottomPanelOpen(true)
+    useUIStore.getState().setBottomPanelTab('disputes')
+    useBriefStore.getState().setHighlightDisputeId(disputeId)
+
+    // Scroll dispute card into view
+    setTimeout(() => {
+      const card = document.querySelector(`[data-dispute-card="${disputeId}"]`)
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 100)
+  }, [])
 
   const editor = useEditor({
     extensions: [
@@ -125,7 +149,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
   const briefTitle = currentBrief?.title || '書狀'
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="absolute inset-0 flex flex-col">
       {/* Toolbar */}
       <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-bd bg-bg-1 px-4 py-2">
         {/* Undo / Redo */}
@@ -189,7 +213,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
       </div>
 
       {/* A4 Editor Area */}
-      <div className="a4-editor-container flex-1 overflow-y-auto">
+      <div className="a4-editor-container min-h-0 flex-1 overflow-y-auto">
         {!content ? (
           <div className="flex items-center justify-center py-20">
             <p className="text-sm text-t3">尚無書狀內容</p>
@@ -213,7 +237,9 @@ export function A4PageEditor({ content }: BriefEditorProps) {
             </div>
 
             {/* Tiptap Editor Content */}
-            <EditorContent editor={editor} />
+            <div onDoubleClick={handleEditorDoubleClick}>
+              <EditorContent editor={editor} />
+            </div>
           </div>
         )}
       </div>

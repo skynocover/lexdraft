@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useBriefStore } from '../../stores/useBriefStore'
+import { useUIStore } from '../../stores/useUIStore'
 
 /** Strip emoji, U+FFFD replacement chars, and other non-text symbols */
 function cleanText(text: string): string {
@@ -17,6 +18,7 @@ function cleanText(text: string): string {
 
 export function DisputesTab() {
   const disputes = useBriefStore((s) => s.disputes)
+  const highlightDisputeId = useBriefStore((s) => s.highlightDisputeId)
 
   if (disputes.length === 0) {
     return (
@@ -29,17 +31,45 @@ export function DisputesTab() {
   return (
     <div className="space-y-2">
       {disputes.map((d) => (
-        <DisputeCard key={d.id} dispute={d} />
+        <DisputeCard key={d.id} dispute={d} isHighlighted={d.id === highlightDisputeId} />
       ))}
     </div>
   )
 }
 
-function DisputeCard({ dispute }: { dispute: ReturnType<typeof useBriefStore.getState>['disputes'][number] }) {
+function DisputeCard({ dispute, isHighlighted }: { dispute: ReturnType<typeof useBriefStore.getState>['disputes'][number]; isHighlighted?: boolean }) {
   const [expanded, setExpanded] = useState(false)
+  const setHighlightDisputeId = useBriefStore((s) => s.setHighlightDisputeId)
+
+  // Auto-expand and scroll into view when highlighted
+  useEffect(() => {
+    if (isHighlighted) {
+      setExpanded(true)
+      // Clear highlight after 3 seconds
+      const timer = setTimeout(() => {
+        setHighlightDisputeId(null)
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [isHighlighted, setHighlightDisputeId])
+
+  const handleJumpToParagraph = () => {
+    // Find paragraph element with matching dispute_id
+    const el = document.querySelector(`[data-dispute-id="${dispute.id}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('highlight-paragraph')
+      setTimeout(() => el.classList.remove('highlight-paragraph'), 3000)
+    }
+  }
 
   return (
-    <div className="rounded border border-bd bg-bg-2">
+    <div
+      className={`rounded border bg-bg-2 transition-colors ${
+        isHighlighted ? 'border-yl bg-yl/10' : 'border-bd'
+      }`}
+      data-dispute-card={dispute.id}
+    >
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-bg-h"
@@ -96,8 +126,8 @@ function DisputeCard({ dispute }: { dispute: ReturnType<typeof useBriefStore.get
           )}
 
           <button
+            onClick={handleJumpToParagraph}
             className="mt-1 text-[10px] text-t3 hover:text-ac"
-            title="Sprint 7 實作完整雙向連動"
           >
             跳到段落 →
           </button>
