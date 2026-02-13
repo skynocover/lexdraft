@@ -1,14 +1,17 @@
-import { useEditor, EditorContent } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import { useEffect } from 'react'
+import { useState } from 'react'
 import type { BriefEditorProps } from '../types'
-import type { Paragraph, Citation } from '../../../stores/useBriefStore'
+import type { Paragraph, Citation, TextSegment } from '../../../stores/useBriefStore'
+import { useBriefStore } from '../../../stores/useBriefStore'
 
-function CitationBadge({ citation }: { citation: Citation }) {
+function CitationBadge({ citation, index }: { citation: Citation; index?: number }) {
+  const [showPopover, setShowPopover] = useState(false)
   const isLaw = citation.type === 'law'
   const isPending = citation.status === 'pending'
 
-  let className = 'inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium cursor-pointer mx-0.5'
+  // Short label for inline display
+  const badgeNum = index != null ? index + 1 : null
+
+  let className = 'inline-flex items-center rounded px-1 py-0.5 text-[10px] font-medium cursor-pointer mx-0.5 relative align-super'
 
   if (isPending) {
     className += ' border border-dashed border-yl text-yl bg-yl/10'
@@ -19,8 +22,35 @@ function CitationBadge({ citation }: { citation: Citation }) {
   }
 
   return (
-    <span className={className} title={citation.quoted_text}>
-      [{citation.label}]
+    <span
+      className={className}
+      onMouseEnter={() => setShowPopover(true)}
+      onMouseLeave={() => setShowPopover(false)}
+    >
+      {badgeNum != null ? badgeNum : citation.label}
+      {showPopover && (
+        <div className="absolute bottom-full left-1/2 z-50 mb-2 w-96 -translate-x-1/2 rounded-lg border border-bd bg-bg-1 p-3 shadow-lg">
+          <div className="mb-2 flex items-center gap-2">
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+              isLaw ? 'bg-pu/20 text-pu' : 'bg-ac/20 text-ac'
+            }`}>
+              {isLaw ? '法條' : '文件'}
+            </span>
+            <span className="truncate text-xs font-medium text-t1">{citation.label}</span>
+            {isPending && (
+              <span className="shrink-0 rounded bg-yl/20 px-1 py-0.5 text-[9px] text-yl">待確認</span>
+            )}
+          </div>
+          {citation.quoted_text && (
+            <div className="max-h-48 overflow-y-auto rounded bg-bg-2 p-2.5">
+              <p className="whitespace-pre-wrap text-xs leading-5 text-t1 border-l-2 border-ac/40 pl-2.5">
+                {citation.quoted_text}
+              </p>
+            </div>
+          )}
+          <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-bd" />
+        </div>
+      )}
     </span>
   )
 }
@@ -60,13 +90,32 @@ function ParagraphBlock({
         }`}
         style={{ fontFamily: '"Noto Serif TC", "Source Han Serif TC", serif' }}
       >
-        <span>{paragraph.content_md}</span>
-        {paragraph.citations.length > 0 && (
-          <span className="ml-1">
-            {paragraph.citations.map((c) => (
-              <CitationBadge key={c.id} citation={c} />
-            ))}
-          </span>
+        {paragraph.segments && paragraph.segments.length > 0 ? (
+          // Inline citations: each segment followed by its numbered citation badges
+          (() => {
+            let citationCounter = 0
+            return paragraph.segments.map((seg, i) => (
+              <span key={i}>
+                <span>{seg.text}</span>
+                {seg.citations.length > 0 && seg.citations.map((c) => {
+                  const idx = citationCounter++
+                  return <CitationBadge key={c.id} citation={c} index={idx} />
+                })}
+              </span>
+            ))
+          })()
+        ) : (
+          // Fallback: old format (content_md + citations at end)
+          <>
+            <span>{paragraph.content_md}</span>
+            {paragraph.citations.length > 0 && (
+              <span className="ml-1">
+                {paragraph.citations.map((c, i) => (
+                  <CitationBadge key={c.id} citation={c} index={i} />
+                ))}
+              </span>
+            )}
+          </>
         )}
       </div>
     </>
@@ -80,6 +129,10 @@ export function TiptapEditor({
   onCitationClick,
   highlightParagraphs = [],
 }: BriefEditorProps) {
+  const currentBrief = useBriefStore((s) => s.currentBrief)
+  const citationStats = useBriefStore((s) => s.citationStats)
+  const stats = citationStats()
+
   // Preview mode: render structured content directly (no Tiptap needed)
   if (mode === 'preview' || !content) {
     return (
@@ -91,7 +144,16 @@ export function TiptapEditor({
           <span className="mx-2 h-4 w-px bg-bd" />
           <button className="rounded px-3 py-1 text-xs text-t3" disabled>比對</button>
           <span className="mx-2 h-4 w-px bg-bd" />
-          <span className="text-[11px] text-t3">引用審查</span>
+          {(stats.confirmed > 0 || stats.pending > 0) ? (
+            <span className="text-[11px] text-t3">
+              引用：<span className="text-gr">{stats.confirmed} 確認</span>
+              {stats.pending > 0 && (
+                <> · <span className="text-yl">{stats.pending} 待確認</span></>
+              )}
+            </span>
+          ) : (
+            <span className="text-[11px] text-t3">引用審查</span>
+          )}
         </div>
 
         {/* Content */}
@@ -105,7 +167,7 @@ export function TiptapEditor({
               {/* Brief header */}
               <div className="mb-8 text-center">
                 <h1 className="text-xl font-bold text-t1" style={{ fontFamily: '"Noto Serif TC", serif' }}>
-                  民事準備二狀
+                  {currentBrief?.title || '書狀'}
                 </h1>
               </div>
 

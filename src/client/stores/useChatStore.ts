@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
 import { useAuthStore } from './useAuthStore'
+import { useBriefStore, type Brief, type Paragraph, type Dispute } from './useBriefStore'
 import type { SSEEvent, ChatMessageRecord } from '../../shared/types'
 
 export interface ChatMessage {
@@ -178,6 +179,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   metadata: { tool_name: event.tool_name, tool_args: event.tool_args, status: 'running' },
                   created_at: new Date().toISOString(),
                 })
+                // Mark rebuttal target files when write_brief_section starts
+                if (event.tool_name === 'write_brief_section' && event.tool_args?.relevant_file_ids) {
+                  useBriefStore.getState().setRebuttalTargetFileIds(
+                    event.tool_args.relevant_file_ids as string[],
+                  )
+                }
                 break
 
               case 'tool_result':
@@ -204,6 +211,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 })
                 break
 
+              case 'brief_update': {
+                const briefStore = useBriefStore.getState()
+                if (event.action === 'create_brief') {
+                  const newBrief = event.data as Brief
+                  briefStore.setBriefs([...briefStore.briefs, newBrief])
+                  briefStore.setCurrentBrief(newBrief)
+                } else if (event.action === 'add_paragraph') {
+                  briefStore.addParagraph(event.data as Paragraph)
+                } else if (event.action === 'update_paragraph') {
+                  const p = event.data as Paragraph
+                  briefStore.updateParagraph(p.id, p)
+                } else if (event.action === 'set_disputes') {
+                  briefStore.setDisputes(event.data as Dispute[])
+                }
+                break
+              }
+
               case 'error':
                 setError(event.message)
                 break
@@ -224,6 +248,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       setIsStreaming(false)
       setAgentProgress(null)
       set({ _abortController: null })
+      // Clear rebuttal targets when done
+      useBriefStore.getState().setRebuttalTargetFileIds([])
     }
   },
 

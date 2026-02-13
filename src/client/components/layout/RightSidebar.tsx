@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { useCaseStore, type CaseFile } from '../../stores/useCaseStore'
+import { useBriefStore } from '../../stores/useBriefStore'
 import { api } from '../../lib/api'
 import { useAuthStore } from '../../stores/useAuthStore'
 
@@ -29,11 +30,13 @@ function formatSize(bytes: number | null) {
 function FileItem({
   file,
   groupColor,
+  isRebuttalTarget,
   onCategoryChange,
   onDelete,
 }: {
   file: CaseFile
   groupColor: string
+  isRebuttalTarget: boolean
   onCategoryChange: (id: string, category: string) => void
   onDelete: (id: string) => void
 }) {
@@ -44,11 +47,15 @@ function FileItem({
     <div className="mb-1">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition hover:bg-bg-h"
+        className={`flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition hover:bg-bg-h ${
+          isRebuttalTarget ? 'bg-yl/10' : ''
+        }`}
       >
         <span className="mt-0.5 text-rd text-[11px]">PDF</span>
         <div className="flex-1 min-w-0">
-          <p className="truncate text-xs text-t1">{file.filename}</p>
+          <p className={`truncate text-xs ${isRebuttalTarget ? 'text-yl font-medium' : 'text-t1'}`}>
+            {isRebuttalTarget && '* '}{file.filename}
+          </p>
           <div className="flex items-center gap-2 mt-0.5">
             {file.doc_date && <span className="text-[10px] text-t3">{file.doc_date}</span>}
             <span className="text-[10px] text-t3">{formatSize(file.file_size)}</span>
@@ -114,12 +121,14 @@ function FileGroup({
   label,
   color,
   files,
+  rebuttalTargetIds,
   onCategoryChange,
   onDelete,
 }: {
   label: string
   color: string
   files: CaseFile[]
+  rebuttalTargetIds: string[]
   onCategoryChange: (id: string, category: string) => void
   onDelete: (id: string) => void
 }) {
@@ -142,6 +151,7 @@ function FileGroup({
               key={f.id}
               file={f}
               groupColor={color}
+              isRebuttalTarget={rebuttalTargetIds.includes(f.id)}
               onCategoryChange={onCategoryChange}
               onDelete={onDelete}
             />
@@ -156,6 +166,7 @@ export function RightSidebar() {
   const currentCase = useCaseStore((s) => s.currentCase)
   const caseFiles = useCaseStore((s) => s.files)
   const setFiles = useCaseStore((s) => s.setFiles)
+  const rebuttalTargetFileIds = useBriefStore((s) => s.rebuttalTargetFileIds)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
 
@@ -252,6 +263,7 @@ export function RightSidebar() {
             label={g.label}
             color={g.color}
             files={g.files}
+            rebuttalTargetIds={rebuttalTargetFileIds}
             onCategoryChange={handleCategoryChange}
             onDelete={handleDelete}
           />
@@ -263,6 +275,7 @@ export function RightSidebar() {
             label="其他"
             color="text-t3"
             files={otherFiles}
+            rebuttalTargetIds={rebuttalTargetFileIds}
             onCategoryChange={handleCategoryChange}
             onDelete={handleDelete}
           />

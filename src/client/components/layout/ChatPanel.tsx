@@ -33,6 +33,8 @@ export function ChatPanel() {
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // IME 輸入中（如注音/拼音選字）不攔截 Enter
+    if (e.nativeEvent.isComposing) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
@@ -244,8 +246,23 @@ function MessageBubble({ message, isStreaming }: { message: ChatMessage; isStrea
               </pre>
             )}
 
+            {/* Structured display for create_brief */}
+            {toolName === 'create_brief' && !!fullResult && (
+              <p className="text-t2">{fullResult}</p>
+            )}
+
+            {/* Structured display for write_brief_section */}
+            {toolName === 'write_brief_section' && !!fullResult && (
+              <p className="text-t2">{fullResult}</p>
+            )}
+
+            {/* Structured display for analyze_disputes */}
+            {toolName === 'analyze_disputes' && !!fullResult && (
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-t2">{fullResult}</pre>
+            )}
+
             {/* Fallback for unknown tools */}
-            {toolName !== 'list_files' && toolName !== 'read_file' && !!fullResult && (
+            {!['list_files', 'read_file', 'create_brief', 'write_brief_section', 'analyze_disputes'].includes(toolName) && !!fullResult && (
               <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-t2">
                 {fullResult.length > 500 ? fullResult.slice(0, 500) + '...' : fullResult}
               </pre>
@@ -292,6 +309,29 @@ function getToolLabel(
     }
     if (args?.file_id) return `read_file — ${String(args.file_id).slice(0, 12)}...`
     return 'read_file'
+  }
+
+  if (toolName === 'create_brief') {
+    const title = args?.title as string | undefined
+    if (status === 'running') return `正在建立書狀...`
+    return `已建立書狀「${title || '書狀'}」`
+  }
+
+  if (toolName === 'write_brief_section') {
+    const section = args?.section as string | undefined
+    const subsection = args?.subsection as string | undefined
+    const label = subsection || section || '段落'
+    if (status === 'running') return `正在撰寫 ${label}...`
+    return `已撰寫 ${label}`
+  }
+
+  if (toolName === 'analyze_disputes') {
+    if (status === 'running') return '正在分析爭點...'
+    if (fullResult) {
+      const match = fullResult.match(/已識別 (\d+) 個爭點/)
+      if (match) return `已識別 ${match[1]} 個爭點`
+    }
+    return '已分析爭點'
   }
 
   return toolName
