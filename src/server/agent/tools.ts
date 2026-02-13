@@ -1,12 +1,60 @@
 import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { getDB } from '../db'
-import { files, briefs, disputes } from '../db/schema'
+import { files, briefs, disputes, damages } from '../db/schema'
 import { callClaudeWithCitations, type ClaudeDocument } from './claudeClient'
 import { callAIStreaming, type AIEnv } from './aiClient'
 import type { ToolDef } from './aiClient'
 import type { SSEEvent } from '../../shared/types'
 import type { Paragraph } from '../../client/stores/useBriefStore'
+
+/**
+ * Collect full text from an SSE streaming response.
+ * Flushes the TextDecoder and strips U+FFFD replacement characters
+ * that appear when multi-byte UTF-8 chars are split across chunks.
+ */
+async function collectStreamText(response: Response): Promise<string> {
+  let text = ''
+  const reader = response.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const data = line.slice(6).trim()
+      if (data === '[DONE]') continue
+      try {
+        const chunk = JSON.parse(data)
+        const content = chunk.choices?.[0]?.delta?.content
+        if (content) text += content
+      } catch { /* skip */ }
+    }
+  }
+  // Flush remaining bytes in decoder
+  buffer += decoder.decode()
+  if (buffer) {
+    const lines = buffer.split('\n')
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const data = line.slice(6).trim()
+      if (data === '[DONE]') continue
+      try {
+        const chunk = JSON.parse(data)
+        const content = chunk.choices?.[0]?.delta?.content
+        if (content) text += content
+      } catch { /* skip */ }
+    }
+  }
+
+  // Strip U+FFFD replacement characters from corrupted multi-byte sequences
+  return text.replace(/\uFFFD/g, '')
+}
 
 // Tool definitions in OpenAI function calling format
 export const TOOL_DEFINITIONS: ToolDef[] = [
@@ -104,6 +152,18 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
     function: {
       name: 'analyze_disputes',
       description: '分析案件所有檔案，識別雙方爭點。會自動載入所有已處理完成的檔案摘要和主張，分析後寫入爭點資料庫。',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'calculate_damages',
+      description: '分析案件文件，計算各項請求金額明細。會自動載入所有已處理完成的檔案摘要（含 key_amounts），分析後寫入金額資料庫。',
       parameters: {
         type: 'object',
         properties: {},
@@ -400,6 +460,7 @@ ${fileContext}
   }
 ]
 
+重要：絕對不要使用 emoji 或特殊符號（如 ✅❌🔷📄⚖️💰🔨 等），只用純中文文字和標點符號。
 只回傳 JSON 陣列，不要其他文字。`
 
       const aiResponse = await callAIStreaming(ctx.aiEnv, {
@@ -409,29 +470,7 @@ ${fileContext}
         ],
       })
 
-      // Parse streaming response to get full text
-      let responseText = ''
-      const reader = aiResponse.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6).trim()
-          if (data === '[DONE]') continue
-          try {
-            const chunk = JSON.parse(data)
-            const content = chunk.choices?.[0]?.delta?.content
-            if (content) responseText += content
-          } catch { /* skip */ }
-        }
-      }
+      const responseText = await collectStreamText(aiResponse)
 
       // 3. Parse disputes from response
       let disputeList: Array<{
@@ -458,7 +497,9 @@ ${fileContext}
         return { result: '未能識別出爭點，請確認檔案已正確處理。', success: false }
       }
 
-      // 4. Write to disputes table
+      // 4. Clear old disputes for this case, then write new ones
+      await drizzle.delete(disputes).where(eq(disputes.case_id, caseId))
+
       const disputeRecords = disputeList.map((d) => ({
         id: nanoid(),
         case_id: caseId,
@@ -490,6 +531,130 @@ ${fileContext}
 
       return {
         result: `已識別 ${disputeRecords.length} 個爭點：\n${summary}`,
+        success: true,
+      }
+    }
+
+    case 'calculate_damages': {
+      if (!ctx) {
+        return { result: 'Error: missing execution context', success: false }
+      }
+
+      // 1. Load all ready files with summaries
+      const damageFileRows = await drizzle
+        .select({
+          id: files.id,
+          filename: files.filename,
+          category: files.category,
+          summary: files.summary,
+          extracted_claims: files.extracted_claims,
+        })
+        .from(files)
+        .where(eq(files.case_id, caseId))
+
+      const damageReadyFiles = damageFileRows.filter((f) => f.summary)
+      if (!damageReadyFiles.length) {
+        return { result: '沒有已處理完成的檔案，請先上傳並等待檔案處理完畢。', success: false }
+      }
+
+      // Build context for AI
+      const damageFileContext = damageReadyFiles.map((f) => {
+        const summary = f.summary ? JSON.parse(f.summary) : {}
+        const claims = f.extracted_claims ? JSON.parse(f.extracted_claims) : []
+        return `【${f.filename}】(${f.category})\n摘要：${summary.summary || '無'}\n金額：${summary.key_amounts ? JSON.stringify(summary.key_amounts) : '無'}\n主張：${claims.length > 0 ? claims.join('；') : '無'}`
+      }).join('\n\n')
+
+      // 2. Call AI for damage analysis
+      const damagePrompt = `你是專業的台灣法律分析助手。請根據以下案件文件摘要，計算各項請求金額明細。
+
+${damageFileContext}
+
+請以 JSON 格式回傳金額項目列表，格式如下：
+[
+  {
+    "category": "貨款",
+    "description": "合約貨款尾款",
+    "amount": 1200000,
+    "basis": "依系爭買賣合約第5條",
+    "evidence_refs": ["原證二"]
+  }
+]
+
+金額 category 常見分類：貨款、利息、違約金、精神慰撫金、損害賠償、其他。
+amount 為整數，以新台幣元計。
+重要：絕對不要使用 emoji 或特殊符號（如 ✅❌🔷📄⚖️💰🔨 等），只用純中文文字和標點符號。
+只回傳 JSON 陣列，不要其他文字。`
+
+      const damageAiResponse = await callAIStreaming(ctx.aiEnv, {
+        messages: [
+          { role: 'system', content: '你是專業的台灣法律分析助手。' },
+          { role: 'user', content: damagePrompt },
+        ],
+      })
+
+      const damageResponseText = await collectStreamText(damageAiResponse)
+
+      // 3. Parse damages from response
+      let damageList: Array<{
+        category: string
+        description: string
+        amount: number
+        basis: string
+        evidence_refs: string[]
+      }> = []
+
+      try {
+        const jsonMatch = damageResponseText.match(/\[[\s\S]*\]/)
+        if (jsonMatch) {
+          damageList = JSON.parse(jsonMatch[0])
+        }
+      } catch {
+        return { result: 'Error: 無法解析金額計算結果', success: false }
+      }
+
+      if (!damageList.length) {
+        return { result: '未能識別出請求金額項目，請確認檔案已正確處理。', success: false }
+      }
+
+      // 4. Clear old damages for this case, then write new ones
+      await drizzle.delete(damages).where(eq(damages.case_id, caseId))
+      const damageRecords = damageList.map((d) => ({
+        id: nanoid(),
+        case_id: caseId,
+        category: d.category,
+        description: d.description || null,
+        amount: d.amount,
+        basis: d.basis || null,
+        evidence_refs: JSON.stringify(d.evidence_refs || []),
+        dispute_id: null,
+        created_at: new Date().toISOString(),
+      }))
+
+      for (const record of damageRecords) {
+        await drizzle.insert(damages).values(record)
+      }
+
+      // 5. Send SSE brief_update with set_damages
+      const damageData = damageRecords.map((r) => ({
+        ...r,
+        evidence_refs: JSON.parse(r.evidence_refs),
+      }))
+
+      await ctx.sendSSE({
+        type: 'brief_update',
+        brief_id: '',
+        action: 'set_damages',
+        data: damageData,
+      })
+
+      // 6. Return summary
+      const totalAmount = damageRecords.reduce((sum, d) => sum + d.amount, 0)
+      const damageSummary = damageRecords
+        .map((d) => `- ${d.category}：NT$ ${d.amount.toLocaleString()}`)
+        .join('\n')
+
+      return {
+        result: `已計算 ${damageRecords.length} 項金額：\n${damageSummary}\n\n請求總額：NT$ ${totalAmount.toLocaleString()}`,
         success: true,
       }
     }

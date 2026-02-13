@@ -72,7 +72,20 @@ export const disputes = sqliteTable('disputes', {
   priority: integer('priority').default(0),
 })
 
-// 3.5 law_refs — 法條引用
+// 3.5 damages — 金額計算
+export const damages = sqliteTable('damages', {
+  id: text('id').primaryKey(),
+  case_id: text('case_id').notNull().references(() => cases.id),
+  category: text('category').notNull(),     // 貨款、利息、違約金、精神慰撫金 等
+  description: text('description'),          // 明細說明
+  amount: integer('amount').notNull(),       // 金額（整數，以新台幣元計）
+  basis: text('basis'),                      // 計算依據
+  evidence_refs: text('evidence_refs'),      // JSON array — 引用的證據檔案
+  dispute_id: text('dispute_id').references(() => disputes.id), // 可選：關聯爭點
+  created_at: text('created_at'),
+})
+
+// 3.6 law_refs — 法條引用
 export const lawRefs = sqliteTable('law_refs', {
   id: text('id').primaryKey(),
   case_id: text('case_id').notNull().references(() => cases.id),

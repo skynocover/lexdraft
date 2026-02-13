@@ -12,6 +12,7 @@ import { RightSidebar } from '../components/layout/RightSidebar'
 import { TabBar } from '../components/layout/TabBar'
 import { BriefEditor } from '../components/editor'
 import { FileViewer } from '../components/editor/FileViewer'
+import { AnalysisPanel } from '../components/analysis/AnalysisPanel'
 
 export function CaseWorkspace() {
   const { caseId } = useParams()
@@ -22,6 +23,7 @@ export function CaseWorkspace() {
   const setCurrentBrief = useBriefStore((s) => s.setCurrentBrief)
   const loadBriefs = useBriefStore((s) => s.loadBriefs)
   const loadDisputes = useBriefStore((s) => s.loadDisputes)
+  const loadDamages = useBriefStore((s) => s.loadDamages)
   const tabs = useTabStore((s) => s.tabs)
   const activeTabId = useTabStore((s) => s.activeTabId)
   const openBriefTab = useTabStore((s) => s.openBriefTab)
@@ -52,6 +54,9 @@ export function CaseWorkspace() {
 
     // 載入爭點
     loadDisputes(caseId)
+
+    // 載入金額
+    loadDamages(caseId)
 
     return () => {
       setCurrentCase(null)
@@ -89,21 +94,28 @@ export function CaseWorkspace() {
 
         <main className="flex flex-1 flex-col overflow-hidden bg-bg-0">
           <TabBar />
-          {activeTab?.data.type === 'brief' ? (
-            <BriefEditor
-              content={currentBrief?.content_structured ?? null}
-            />
-          ) : activeTab?.data.type === 'file' ? (
-            <FileViewer
-              filename={activeTab.data.filename}
-              pdfUrl={activeTab.data.pdfUrl}
-              loading={activeTab.data.loading}
-            />
-          ) : (
-            <div className="flex flex-1 items-center justify-center">
-              <p className="text-sm text-t3">請從右側面板選擇書狀或檔案</p>
+          <div className="flex flex-1 flex-col overflow-hidden">
+            {/* Editor / FileViewer — takes remaining space */}
+            <div className="flex-1 overflow-hidden">
+              {activeTab?.data.type === 'brief' ? (
+                <BriefEditor
+                  content={currentBrief?.content_structured ?? null}
+                />
+              ) : activeTab?.data.type === 'file' ? (
+                <FileViewer
+                  filename={activeTab.data.filename}
+                  pdfUrl={activeTab.data.pdfUrl}
+                  loading={activeTab.data.loading}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-sm text-t3">請從右側面板選擇書狀或檔案</p>
+                </div>
+              )}
             </div>
-          )}
+            {/* Analysis Panel — shrink-0, below editor */}
+            <AnalysisPanel />
+          </div>
         </main>
 
         <RightSidebar />

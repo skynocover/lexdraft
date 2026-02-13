@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
 import { useAuthStore } from './useAuthStore'
-import { useBriefStore, type Brief, type Paragraph, type Dispute } from './useBriefStore'
+import { useBriefStore, type Brief, type Paragraph, type Dispute, type Damage } from './useBriefStore'
 import { useTabStore } from './useTabStore'
 import type { SSEEvent, ChatMessageRecord } from '../../shared/types'
 
@@ -237,6 +237,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   }
                 } else if (event.action === 'set_disputes') {
                   briefStore.setDisputes(event.data as Dispute[])
+                } else if (event.action === 'set_damages') {
+                  briefStore.setDamages(event.data as Damage[])
                 }
                 break
               }

@@ -50,6 +50,18 @@ export interface Dispute {
   priority: number
 }
 
+export interface Damage {
+  id: string
+  case_id: string
+  category: string
+  description: string | null
+  amount: number
+  basis: string | null
+  evidence_refs: string[]
+  dispute_id: string | null
+  created_at: string
+}
+
 type ContentSnapshot = { paragraphs: Paragraph[] }
 
 const MAX_HISTORY = 50
@@ -58,6 +70,7 @@ interface BriefState {
   currentBrief: Brief | null
   briefs: Brief[]
   disputes: Dispute[]
+  damages: Damage[]
   rebuttalTargetFileIds: string[]
   dirty: boolean
   saving: boolean
@@ -68,6 +81,7 @@ interface BriefState {
   setCurrentBrief: (brief: Brief | null) => void
   setBriefs: (briefs: Brief[]) => void
   setDisputes: (disputes: Dispute[]) => void
+  setDamages: (damages: Damage[]) => void
   setRebuttalTargetFileIds: (ids: string[]) => void
   setDirty: (dirty: boolean) => void
   setHighlightCitationId: (id: string | null) => void
@@ -77,6 +91,7 @@ interface BriefState {
   loadBriefs: (caseId: string) => Promise<void>
   loadBrief: (briefId: string) => Promise<void>
   loadDisputes: (caseId: string) => Promise<void>
+  loadDamages: (caseId: string) => Promise<void>
   addParagraph: (paragraph: Paragraph) => void
   updateParagraph: (paragraphId: string, paragraph: Paragraph) => void
   removeParagraph: (paragraphId: string) => void
@@ -101,6 +116,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   currentBrief: null,
   briefs: [],
   disputes: [],
+  damages: [],
   rebuttalTargetFileIds: [],
   dirty: false,
   saving: false,
@@ -111,6 +127,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   setCurrentBrief: (currentBrief) => set({ currentBrief, _history: [], _future: [] }),
   setBriefs: (briefs) => set({ briefs }),
   setDisputes: (disputes) => set({ disputes }),
+  setDamages: (damages) => set({ damages }),
   setRebuttalTargetFileIds: (rebuttalTargetFileIds) => set({ rebuttalTargetFileIds }),
   setDirty: (dirty) => set({ dirty }),
   setHighlightCitationId: (highlightCitationId) => set({ highlightCitationId }),
@@ -169,6 +186,15 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       set({ disputes })
     } catch (err) {
       console.error('loadDisputes error:', err)
+    }
+  },
+
+  loadDamages: async (caseId: string) => {
+    try {
+      const damages = await api.get<Damage[]>(`/cases/${caseId}/damages`)
+      set({ damages })
+    } catch (err) {
+      console.error('loadDamages error:', err)
     }
   },
 

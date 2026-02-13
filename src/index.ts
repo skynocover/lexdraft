@@ -6,6 +6,7 @@ import { casesRouter } from './server/routes/cases'
 import { filesRouter } from './server/routes/files'
 import { chatRouter } from './server/routes/chat'
 import { briefsRouter } from './server/routes/briefs'
+import { damagesRouter } from './server/routes/damages'
 import { processFileMessage } from './server/queue/fileProcessor'
 
 const app = new Hono<AppEnv>()
@@ -32,6 +33,9 @@ api.route('/', chatRouter)
 
 // 書狀（包含 /cases/:caseId/briefs 和 /briefs/:id 路由）
 api.route('/', briefsRouter)
+
+// 金額計算（包含 /cases/:caseId/damages 和 /damages/:id 路由）
+api.route('/', damagesRouter)
 
 app.route('/api', api)
 

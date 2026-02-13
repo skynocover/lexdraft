@@ -7,7 +7,7 @@ export type SSEEvent =
   | { type: 'tool_result'; message_id: string; tool_name: string; result_summary: string; success: boolean }
   | { type: 'progress'; current: number; total: number }
   | { type: 'usage'; prompt_tokens: number; completion_tokens: number; total_tokens: number; estimated_cost_ntd: number }
-  | { type: 'brief_update'; brief_id: string; action: 'create_brief' | 'add_paragraph' | 'update_paragraph' | 'set_disputes'; data: unknown }
+  | { type: 'brief_update'; brief_id: string; action: 'create_brief' | 'add_paragraph' | 'update_paragraph' | 'set_disputes' | 'set_damages'; data: unknown }
   | { type: 'error'; message: string }
   | { type: 'done' }
 

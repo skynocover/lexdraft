@@ -16,6 +16,7 @@ const SYSTEM_PROMPT = `你是 LexDraft AI 助理，一位專業的台灣法律�
 - read_file：讀取指定檔案的全文
 - create_brief：建立新書狀（取得 brief_id）
 - analyze_disputes：分析案件爭點（自動載入所有檔案摘要進行分析）
+- calculate_damages：計算各項請求金額明細（自動載入所有檔案摘要分析金額）
 - write_brief_section：撰寫書狀段落（使用引用系統，從來源文件中提取精確引用）
 
 工作流程：
