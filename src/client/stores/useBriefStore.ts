@@ -66,6 +66,7 @@ interface BriefState {
   loadDisputes: (caseId: string) => Promise<void>
   addParagraph: (paragraph: Paragraph) => void
   updateParagraph: (paragraphId: string, paragraph: Paragraph) => void
+  deleteBrief: (briefId: string) => Promise<void>
 
   citationStats: () => { confirmed: number; pending: number }
 }
@@ -137,6 +138,19 @@ export const useBriefStore = create<BriefState>((set, get) => ({
         },
       },
     })
+  },
+
+  deleteBrief: async (briefId: string) => {
+    try {
+      await api.delete(`/briefs/${briefId}`)
+      const { briefs, currentBrief } = get()
+      set({ briefs: briefs.filter((b) => b.id !== briefId) })
+      if (currentBrief?.id === briefId) {
+        set({ currentBrief: null })
+      }
+    } catch (err) {
+      console.error('deleteBrief error:', err)
+    }
   },
 
   citationStats: () => {

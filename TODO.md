@@ -102,43 +102,35 @@
 
 ---
 
-## Sprint 4 — 書狀撰寫 + 引用系統
+## Sprint 4 — 書狀撰寫 + 引用系統 + Tab 系統
 
 > 目標：核心價值交付。AI 可撰寫書狀草稿，引用標籤可互動，書狀即時顯示在編輯器。
 > Tiptap 骨架已在 Sprint 1 建立，此處專注 Agent tools + Citations API 整合。
+> 加入 Tab 系統，讓使用者可以在主區域切換書狀與 PDF 檔案。
 
+- [x] 實作 Agent tool：`write_brief_section`（撰寫/重寫段落）
+- [x] 實作 Agent tool：`analyze_disputes`（分析爭點）
+- [x] 後端 API：`GET /api/cases/:id/briefs`、`GET /api/briefs/:id`、`PUT /api/briefs/:id`
+- [x] 後端 API：`GET /api/cases/:id/disputes`
+- [x] briefs 表：content_structured 為唯一 source of truth
+- [x] 引用標籤渲染：證據引用（藍底 badge）、法條引用（紫底 badge）、待確認引用（黃色虛線）
+- [x] 引用 hover 浮動卡片（來源文件 + 被引用原文）
+- [x] 工具列：預覽/編輯 toggle（編輯模式暫 disabled）、引用統計（「6 確認 · 3 待確認 →」）
+- [x] SSE brief_update event：AI 寫完段落即時推送到編輯器
+- [x] useBriefStore 完整整合：引用狀態、爭點資料
+- [x] 右側面板：反駁目標文件黃色字體 + 星號標記（撰寫時才知道目標）
+- [x] Tab 系統：useTabStore 狀態管理、TabBar 元件、書狀/檔案 tab 切換
+- [x] PDF 檔案檢視器：react-pdf 渲染（CMap 支援 CJK）、從 R2 串流原始 PDF
+- [x] 右側面板改進：書狀草稿區塊（含刪除功能）、可折疊區段、點擊檔案開 tab
+- [x] Header 簡化：移除書狀下拉選單（改由 Tab 切換）
+- [x] SSE create_brief 自動開新 tab
 - [ ] Tiptap custom extensions：citation node、paragraph-block node
-- [ ] 實作 Agent tool：`write_brief_section`（撰寫/重寫段落）
-- [ ] 實作 Agent tool：`analyze_disputes`（分析爭點）
 - [ ] Claude Citations API 整合：document content blocks + citations.enabled
-- [ ] 後端 API：`GET /api/cases/:id/briefs`、`GET /api/briefs/:id`、`PUT /api/briefs/:id`
-- [ ] 後端 API：`GET /api/cases/:id/disputes`
-- [ ] briefs 表：content_structured 為唯一 source of truth
-- [ ] 引用標籤渲染：證據引用（藍底 badge）、法條引用（紫底 badge）、待確認引用（黃色虛線）
-- [ ] 引用 hover 浮動卡片（來源文件 + 被引用原文）
-- [ ] 工具列：預覽/編輯 toggle（編輯模式暫 disabled）、引用統計（「6 確認 · 3 待確認 →」）
-- [ ] SSE brief_update event：AI 寫完段落即時推送到編輯器
-- [ ] useBriefStore 完整整合：引用狀態、爭點資料
-- [ ] 右側面板：反駁目標文件黃色字體 + 星號標記（撰寫時才知道目標）
-- [ ] 驗收：輸入「撰寫民事準備二狀」→ AI 分析卷宗 → 生成帶引用的書狀 → 編輯器即時顯示 → 引用可 hover 查看原文
+- [x] 驗收：輸入「撰寫民事準備二狀」→ AI 分析卷宗 → 生成帶引用的書狀 → 編輯器即時顯示 → 引用可 hover 查看原文
 
 ---
 
-## Sprint 5 — Word 匯出
-
-> 目標：律師可將書狀下載為 Word 檔，直接送法院。
-
-- [ ] 安裝 docx（docx-js）
-- [ ] 後端 API：`POST /api/briefs/:id/export/docx`
-- [ ] Word 格式：A4、邊距 2.54/3.17cm、標楷體/新細明體、12pt 內文、1.8 倍行距
-- [ ] 引用轉換：inline badge → 括號引用文字（如「（原證一，事故分析研判表）」）
-- [ ] content_structured → docx 段落映射（section/subsection 對應 heading 層級）
-- [ ] 前端：Header「下載 Word」按鈕功能實作
-- [ ] 驗收：點擊下載 → 取得格式正確的 .docx → Word 開啟排版正常 → 引用轉為括號文字
-
----
-
-## Sprint 6 — 編輯器增強
+## Sprint 5 — 編輯器增強
 
 > 目標：律師可精細編輯書狀，逐段請 AI 重寫，並審查所有引用。
 > Tiptap 架構已在 Sprint 4 建立，此處只需解鎖編輯模式並加入互動功能。
@@ -160,10 +152,10 @@
 
 ---
 
-## Sprint 7 — 底部案件分析面板（核心 Tabs）
+## Sprint 6 — 底部案件分析面板（核心 Tabs）
 
 > 目標：提供最重要的案件分析視圖，輔助律師撰寫策略。
-> 先交付爭點和金額兩個高價值 Tab，其餘 Tab 移至 Sprint 8。
+> 先交付爭點和金額兩個高價值 Tab，其餘 Tab 移至 Sprint 7。
 
 - [ ] 底部面板通用機制：toggle bar 收合/展開、Tab 切換、可拖拉高度（resize handle, 100px ~ 500px）
 - [ ] 實作 Agent tool：`calculate_damages`
@@ -180,7 +172,7 @@
 
 ---
 
-## Sprint 8 — 剩餘分析 Tabs + 法條搜尋 + 進階互動
+## Sprint 7 — 剩餘分析 Tabs + 法條搜尋 + 進階互動
 
 > 目標：補齊分析面板、串接法條 API、完善互動細節，交付完整產品。
 
@@ -202,8 +194,21 @@
   - [ ] 爭點 → 段落：點「跳到段落」→ 書狀中 `data-dispute="N"` 段落高亮 + 自動滾動
   - [ ] 段落 → 爭點：雙擊段落 → 底部打開 + 切到爭點 tab + 高亮對應卡片
   - [ ] 3 秒後自動取消高亮
-- [ ] 書狀類型選單功能（Header 下拉切換不同書狀）
-- [ ] 驗收：五個 Tab 完整可用 → 法條可搜尋並引用 → 雙向連動順暢 → 書狀可切換
+- [ ] 驗收：五個 Tab 完整可用 → 法條可搜尋並引用 → 雙向連動順暢
+
+---
+
+## Sprint 8 — Word 匯出
+
+> 目標：律師可將書狀下載為 Word 檔，直接送法院。
+
+- [ ] 安裝 docx（docx-js）
+- [ ] 後端 API：`POST /api/briefs/:id/export/docx`
+- [ ] Word 格式：A4、邊距 2.54/3.17cm、標楷體/新細明體、12pt 內文、1.8 倍行距
+- [ ] 引用轉換：inline badge → 括號引用文字（如「（原證一，事故分析研判表）」）
+- [ ] content_structured → docx 段落映射（section/subsection 對應 heading 層級）
+- [ ] 前端：Header「下載 Word」按鈕功能實作
+- [ ] 驗收：點擊下載 → 取得格式正確的 .docx → Word 開啟排版正常 → 引用轉為括號文字
 
 ---
 

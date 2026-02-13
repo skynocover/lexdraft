@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { nanoid } from 'nanoid'
 import { useAuthStore } from './useAuthStore'
 import { useBriefStore, type Brief, type Paragraph, type Dispute } from './useBriefStore'
+import { useTabStore } from './useTabStore'
 import type { SSEEvent, ChatMessageRecord } from '../../shared/types'
 
 export interface ChatMessage {
@@ -217,11 +218,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   const newBrief = event.data as Brief
                   briefStore.setBriefs([...briefStore.briefs, newBrief])
                   briefStore.setCurrentBrief(newBrief)
+                  useTabStore.getState().openBriefTab(newBrief.id, newBrief.title || newBrief.brief_type)
                 } else if (event.action === 'add_paragraph') {
-                  briefStore.addParagraph(event.data as Paragraph)
+                  const p = event.data as Paragraph
+                  const briefId = (event as Record<string, unknown>).brief_id as string | undefined
+                  if (!briefId || briefStore.currentBrief?.id === briefId) {
+                    briefStore.addParagraph(p)
+                  }
                 } else if (event.action === 'update_paragraph') {
                   const p = event.data as Paragraph
-                  briefStore.updateParagraph(p.id, p)
+                  const briefId = (event as Record<string, unknown>).brief_id as string | undefined
+                  if (!briefId || briefStore.currentBrief?.id === briefId) {
+                    briefStore.updateParagraph(p.id, p)
+                  }
                 } else if (event.action === 'set_disputes') {
                   briefStore.setDisputes(event.data as Dispute[])
                 }

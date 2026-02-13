@@ -123,6 +123,19 @@ briefsRouter.put('/briefs/:id', async (c) => {
   })
 })
 
+// DELETE /api/briefs/:id — 刪除書狀
+briefsRouter.delete('/briefs/:id', async (c) => {
+  const id = c.req.param('id')
+  const db = getDB(c.env.DB)
+
+  // 先清除關聯的爭點
+  await db.delete(disputes).where(eq(disputes.brief_id, id))
+  // 刪除書狀
+  await db.delete(briefs).where(eq(briefs.id, id))
+
+  return c.json({ success: true })
+})
+
 // GET /api/cases/:caseId/disputes — 列出爭點
 briefsRouter.get('/cases/:caseId/disputes', async (c) => {
   const caseId = c.req.param('caseId')

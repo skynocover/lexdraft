@@ -153,6 +153,30 @@ filesRouter.delete('/files/:id', async (c) => {
   return c.json({ ok: true })
 })
 
+// GET /api/files/:id/pdf — 回傳原始 PDF
+filesRouter.get('/files/:id/pdf', async (c) => {
+  const db = getDB(c.env.DB)
+  const result = await db.select().from(files).where(eq(files.id, c.req.param('id')))
+
+  if (result.length === 0) {
+    return c.json({ error: '檔案不存在' }, 404)
+  }
+
+  const file = result[0]
+  const object = await c.env.BUCKET.get(file.r2_key)
+  if (!object) {
+    return c.json({ error: '檔案不存在於儲存空間' }, 404)
+  }
+
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${encodeURIComponent(file.filename)}"`,
+      'Cache-Control': 'private, max-age=3600',
+    },
+  })
+})
+
 // GET /api/files/:id/content — 取得全文
 filesRouter.get('/files/:id/content', async (c) => {
   const db = getDB(c.env.DB)
