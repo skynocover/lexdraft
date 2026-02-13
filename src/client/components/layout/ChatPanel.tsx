@@ -14,6 +14,9 @@ export function ChatPanel() {
   const setError = useChatStore((s) => s.setError)
   const clearConversation = useChatStore((s) => s.clearConversation)
 
+  const prefillInput = useChatStore((s) => s.prefillInput)
+  const setPrefillInput = useChatStore((s) => s.setPrefillInput)
+
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -22,6 +25,19 @@ export function ChatPanel() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Prefill input from floating toolbar
+  useEffect(() => {
+    if (prefillInput) {
+      setInput(prefillInput)
+      setPrefillInput(null)
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+        textareaRef.current.style.height = 'auto'
+        textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px'
+      }
+    }
+  }, [prefillInput])
 
   const handleSend = () => {
     if (!input.trim() || !caseId || isStreaming) return

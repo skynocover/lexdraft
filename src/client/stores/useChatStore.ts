@@ -26,6 +26,7 @@ interface ChatState {
   agentProgress: { current: number; total: number } | null
   tokenUsage: TokenUsage | null
   error: string | null
+  prefillInput: string | null
 
   setMessages: (messages: ChatMessage[]) => void
   addMessage: (message: ChatMessage) => void
@@ -36,6 +37,7 @@ interface ChatState {
   setAgentProgress: (progress: { current: number; total: number } | null) => void
   setTokenUsage: (usage: TokenUsage | null) => void
   setError: (error: string | null) => void
+  setPrefillInput: (text: string | null) => void
 
   loadHistory: (caseId: string) => Promise<void>
   sendMessage: (caseId: string, message: string) => Promise<void>
@@ -51,6 +53,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   agentProgress: null,
   tokenUsage: null,
   error: null,
+  prefillInput: null,
   _abortController: null,
 
   setMessages: (messages) => set({ messages }),
@@ -70,6 +73,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setAgentProgress: (agentProgress) => set({ agentProgress }),
   setTokenUsage: (tokenUsage) => set({ tokenUsage }),
   setError: (error) => set({ error }),
+  setPrefillInput: (prefillInput) => set({ prefillInput }),
 
   loadHistory: async (caseId: string) => {
     try {
