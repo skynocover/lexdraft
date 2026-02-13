@@ -131,3 +131,169 @@ body {
   border-top: 1px solid var(--color-bd);
   margin: 0.5em 0;
 }
+
+/* ===================== A4 Editor ===================== */
+
+/* Editor container — full white, like Word */
+.a4-editor-container {
+  background: white;
+  overflow-y: auto;
+}
+
+/* Editor content area */
+.a4-editor-content {
+  max-width: 21cm;
+  margin: 0 auto;
+  padding: 2.5cm;
+  background: white;
+  color: #1a1a1a;
+  font-family: "DFKai-SB","BiauKai","標楷體","Noto Serif TC",serif;
+  font-size: 14pt;
+  line-height: 25pt;
+}
+
+/* Title inside A4 page */
+.a4-title {
+  text-align: center;
+  font-size: 18pt;
+  font-weight: bold;
+  margin-bottom: 1.5em;
+  cursor: default;
+}
+
+.a4-title:hover {
+  outline: 1px dashed #cbd5e1;
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+.a4-title-input {
+  width: 100%;
+  text-align: center;
+  font-size: 18pt;
+  font-weight: bold;
+  font-family: inherit;
+  line-height: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #7c9aff;
+  outline: none;
+  padding: 0;
+}
+
+/* ProseMirror editable area (inside .a4-editor-content) */
+.a4-editor-prose {
+  outline: none;
+}
+
+.a4-editor-prose:focus {
+  outline: none;
+}
+
+/* Headings inside A4 editor */
+.a4-editor-content h2 {
+  font-size: 16pt;
+  font-weight: bold;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  text-indent: 0;
+}
+
+.a4-editor-content h3 {
+  font-size: 14pt;
+  font-weight: bold;
+  margin-top: 1em;
+  margin-bottom: 0.3em;
+  text-indent: 0;
+}
+
+/* Paragraphs inside A4 editor */
+.a4-editor-content p {
+  text-indent: 2em;
+  margin: 0.3em 0;
+}
+
+/* ---- Citation badges (inline, small superscript) ---- */
+.a4-editor-content [data-node-view-wrapper] {
+  display: inline;
+}
+
+.a4-editor-content .citation-badge {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: super;
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin: 0 1px;
+  cursor: pointer;
+  position: relative;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.citation-badge.citation-law {
+  background: rgba(139,92,246,0.15);
+  color: #6d28d9;
+}
+
+.citation-badge.citation-file {
+  background: rgba(59,130,246,0.15);
+  color: #1d4ed8;
+}
+
+.citation-badge.citation-pending {
+  background: rgba(234,179,8,0.1);
+  color: #a16207;
+  border: 1px dashed #a16207;
+}
+
+/* Citation popover */
+.citation-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 50;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-indent: 0;
+  font-weight: normal;
+}
+
+.citation-popover-arrow {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #e5e7eb;
+}
+
+/* ===================== Print ===================== */
+
+@media print {
+  header, nav, aside, .sticky {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .a4-editor-content {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+}

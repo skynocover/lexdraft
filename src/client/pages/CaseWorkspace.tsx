@@ -20,7 +20,6 @@ export function CaseWorkspace() {
   const files = useCaseStore((s) => s.files)
   const currentBrief = useBriefStore((s) => s.currentBrief)
   const setCurrentBrief = useBriefStore((s) => s.setCurrentBrief)
-  const editorMode = useBriefStore((s) => s.editorMode)
   const loadBriefs = useBriefStore((s) => s.loadBriefs)
   const loadDisputes = useBriefStore((s) => s.loadDisputes)
   const tabs = useTabStore((s) => s.tabs)
@@ -93,9 +92,6 @@ export function CaseWorkspace() {
           {activeTab?.data.type === 'brief' ? (
             <BriefEditor
               content={currentBrief?.content_structured ?? null}
-              mode={editorMode}
-              onContentChange={() => {}}
-              onCitationClick={() => {}}
             />
           ) : activeTab?.data.type === 'file' ? (
             <FileViewer

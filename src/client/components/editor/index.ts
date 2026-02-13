@@ -1,2 +1,2 @@
-export { TiptapEditor as BriefEditor } from './tiptap/TiptapEditor'
+export { A4PageEditor as BriefEditor } from './tiptap/A4PageEditor'
 export type { BriefEditorProps } from './types'

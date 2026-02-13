@@ -393,7 +393,7 @@ export function RightSidebar() {
                         <p className={`truncate text-xs ${isActive ? 'text-ac font-medium' : 'text-t1'}`}>
                           {b.title || '書狀'}
                         </p>
-                        <span className="text-[10px] text-t3">{b.brief_type}</span>
+                        <span className="text-[10px] text-t3">{{ complaint: '起訴狀', defense: '答辯狀', preparation: '準備書狀', appeal: '上訴狀' }[b.brief_type] || b.brief_type}</span>
                       </div>
                     </button>
                     <button

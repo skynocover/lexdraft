@@ -124,7 +124,7 @@
 - [x] 右側面板改進：書狀草稿區塊（含刪除功能）、可折疊區段、點擊檔案開 tab
 - [x] Header 簡化：移除書狀下拉選單（改由 Tab 切換）
 - [x] SSE create_brief 自動開新 tab
-- [ ] Tiptap custom extensions：citation node、paragraph-block node
+- [x] Tiptap custom extensions：citation node、paragraph-block node
 - [ ] Claude Citations API 整合：document content blocks + citations.enabled
 - [x] 驗收：輸入「撰寫民事準備二狀」→ AI 分析卷宗 → 生成帶引用的書狀 → 編輯器即時顯示 → 引用可 hover 查看原文
 
@@ -135,20 +135,20 @@
 > 目標：律師可精細編輯書狀，逐段請 AI 重寫，並審查所有引用。
 > Tiptap 架構已在 Sprint 4 建立，此處只需解鎖編輯模式並加入互動功能。
 
-- [ ] 啟用 Tiptap 編輯模式（所見即所得）
-- [ ] 預覽/編輯模式切換
-- [ ] 段落浮動工具列（hover 時右上角顯示）
-  - [ ] AI 重寫 → 填入聊天指令
-  - [ ] 加強論述 → 填入聊天指令
-  - [ ] 插入引用 → 填入聊天指令
-  - [ ] 刪除段落 → 標記刪除線 + 確認
-- [ ] 引用審查模式
-  - [ ] 工具列「待確認」按鈕 → 打開 modal overlay
-  - [ ] 審查卡片：來源原文 vs 書狀引用
-  - [ ] 按鈕：確認正確 / 移除引用 / 跳過
-  - [ ] 書狀中對應引用閃爍高亮
-  - [ ] 自動跳到下一個待確認引用
-- [ ] 驗收：可切換編輯模式 → hover 段落出現工具列 → 點「AI 重寫」指令進入聊天 → 引用審查流程完整可用
+- [x] 啟用 Tiptap 編輯模式（所見即所得）— 改為 A4PageEditor，使用真正的 Tiptap useEditor()
+- [x] 預覽/編輯模式切換 — 移除雙模式，改為永遠可編輯（類似 Word）
+- [x] 段落浮動工具列（hover 時右上角顯示）— 已在先前 Sprint 實作
+  - [x] AI 重寫 → 填入聊天指令
+  - [x] 加強論述 → 填入聊天指令
+  - [x] 插入引用 → 填入聊天指令
+  - [x] 刪除段落 → 標記刪除線 + 確認
+- [x] 引用審查模式
+  - [x] 工具列「待確認」按鈕 → 打開 modal overlay
+  - [x] 審查卡片：來源原文 vs 書狀引用
+  - [x] 按鈕：確認正確 / 移除引用 / 跳過
+  - [x] 書狀中對應引用閃爍高亮
+  - [x] 自動跳到下一個待確認引用
+- [x] 驗收：永遠可編輯 → hover 段落出現工具列 → 點「AI 重寫」指令進入聊天 → 引用審查流程完整可用
 
 ---
 

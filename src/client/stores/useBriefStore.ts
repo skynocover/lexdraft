@@ -59,7 +59,6 @@ interface BriefState {
   briefs: Brief[]
   disputes: Dispute[]
   rebuttalTargetFileIds: string[]
-  editorMode: 'preview' | 'edit'
   dirty: boolean
   saving: boolean
   highlightCitationId: string | null
@@ -70,9 +69,10 @@ interface BriefState {
   setBriefs: (briefs: Brief[]) => void
   setDisputes: (disputes: Dispute[]) => void
   setRebuttalTargetFileIds: (ids: string[]) => void
-  setEditorMode: (mode: 'preview' | 'edit') => void
   setDirty: (dirty: boolean) => void
   setHighlightCitationId: (id: string | null) => void
+  setContentStructured: (content: { paragraphs: Paragraph[] }) => void
+  setTitle: (title: string) => void
 
   loadBriefs: (caseId: string) => Promise<void>
   loadBrief: (briefId: string) => Promise<void>
@@ -80,8 +80,6 @@ interface BriefState {
   addParagraph: (paragraph: Paragraph) => void
   updateParagraph: (paragraphId: string, paragraph: Paragraph) => void
   removeParagraph: (paragraphId: string) => void
-  updateParagraphText: (paragraphId: string, newContentMd: string) => void
-  updateParagraphFromEdit: (paragraphId: string, newSegments: TextSegment[]) => void
   updateCitationStatus: (paragraphId: string, citationId: string, status: 'confirmed' | 'rejected') => void
   removeCitation: (paragraphId: string, citationId: string) => void
   deleteBrief: (briefId: string) => Promise<void>
@@ -104,7 +102,6 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   briefs: [],
   disputes: [],
   rebuttalTargetFileIds: [],
-  editorMode: 'preview',
   dirty: false,
   saving: false,
   highlightCitationId: null,
@@ -115,9 +112,38 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   setBriefs: (briefs) => set({ briefs }),
   setDisputes: (disputes) => set({ disputes }),
   setRebuttalTargetFileIds: (rebuttalTargetFileIds) => set({ rebuttalTargetFileIds }),
-  setEditorMode: (editorMode) => set({ editorMode }),
   setDirty: (dirty) => set({ dirty }),
   setHighlightCitationId: (highlightCitationId) => set({ highlightCitationId }),
+
+  setContentStructured: (content: { paragraphs: Paragraph[] }) => {
+    const { currentBrief, _history } = get()
+    if (!currentBrief) return
+
+    const snapshot = currentBrief.content_structured
+      ? cloneSnapshot(currentBrief.content_structured)
+      : null
+
+    const newState: Partial<BriefState> = {
+      currentBrief: { ...currentBrief, content_structured: content },
+      dirty: true,
+      _future: [],
+    }
+
+    if (snapshot) {
+      newState._history = [..._history.slice(-(MAX_HISTORY - 1)), snapshot]
+    }
+
+    set(newState)
+  },
+
+  setTitle: (title: string) => {
+    const { currentBrief } = get()
+    if (!currentBrief) return
+    set({
+      currentBrief: { ...currentBrief, title },
+      dirty: true,
+    })
+  },
 
   loadBriefs: async (caseId: string) => {
     try {
@@ -189,72 +215,6 @@ export const useBriefStore = create<BriefState>((set, get) => ({
           paragraphs: currentBrief.content_structured.paragraphs.filter(
             (p) => p.id !== paragraphId,
           ),
-        },
-      },
-      dirty: true,
-      _history: [..._history.slice(-(MAX_HISTORY - 1)), snapshot],
-      _future: [],
-    })
-  },
-
-  updateParagraphText: (paragraphId: string, newContentMd: string) => {
-    const { currentBrief, _history } = get()
-    if (!currentBrief?.content_structured) return
-
-    const snapshot = cloneSnapshot(currentBrief.content_structured)
-    set({
-      currentBrief: {
-        ...currentBrief,
-        content_structured: {
-          paragraphs: currentBrief.content_structured.paragraphs.map((p) => {
-            if (p.id !== paragraphId) return p
-            // Collect all citations from segments (if any) and merge with paragraph-level citations
-            const segmentCitations: Citation[] = []
-            if (p.segments) {
-              for (const seg of p.segments) {
-                segmentCitations.push(...seg.citations)
-              }
-            }
-            const allCitations = [...p.citations]
-            for (const sc of segmentCitations) {
-              if (!allCitations.some((c) => c.id === sc.id)) {
-                allCitations.push(sc)
-              }
-            }
-            return {
-              ...p,
-              content_md: newContentMd,
-              segments: undefined,
-              citations: allCitations,
-            }
-          }),
-        },
-      },
-      dirty: true,
-      _history: [..._history.slice(-(MAX_HISTORY - 1)), snapshot],
-      _future: [],
-    })
-  },
-
-  updateParagraphFromEdit: (paragraphId: string, newSegments: TextSegment[]) => {
-    const { currentBrief, _history } = get()
-    if (!currentBrief?.content_structured) return
-
-    const snapshot = cloneSnapshot(currentBrief.content_structured)
-    set({
-      currentBrief: {
-        ...currentBrief,
-        content_structured: {
-          paragraphs: currentBrief.content_structured.paragraphs.map((p) => {
-            if (p.id !== paragraphId) return p
-            const newContentMd = newSegments.map((s) => s.text).join('')
-            return {
-              ...p,
-              content_md: newContentMd,
-              segments: newSegments,
-              citations: p.citations,
-            }
-          }),
         },
       },
       dirty: true,
@@ -379,6 +339,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     set({ saving: true })
     try {
       await api.put(`/briefs/${currentBrief.id}`, {
+        title: currentBrief.title,
         content_structured: currentBrief.content_structured,
       })
       set({ dirty: false })
