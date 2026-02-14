@@ -1,41 +1,41 @@
 interface AIEnv {
-  CF_ACCOUNT_ID: string
-  CF_GATEWAY_ID: string
-  CF_AIG_TOKEN: string
+  CF_ACCOUNT_ID: string;
+  CF_GATEWAY_ID: string;
+  CF_AIG_TOKEN: string;
 }
 
 interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string
-  tool_calls?: ToolCall[]
-  tool_call_id?: string
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
 }
 
 interface ToolCall {
-  id: string
-  type: 'function'
-  function: { name: string; arguments: string }
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
 }
 
 interface ToolDef {
-  type: 'function'
+  type: 'function';
   function: {
-    name: string
-    description: string
-    parameters: Record<string, unknown>
-  }
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
 }
 
 interface CallAIOptions {
-  messages: ChatMessage[]
-  tools?: ToolDef[]
-  signal?: AbortSignal
+  messages: ChatMessage[];
+  tools?: ToolDef[];
+  signal?: AbortSignal;
 }
 
-const MODEL = 'google-ai-studio/gemini-2.5-flash'
+const MODEL = 'google-ai-studio/gemini-2.5-flash';
 
 function getGatewayUrl(env: AIEnv): string {
-  return `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`
+  return `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`;
 }
 
 /**
@@ -48,9 +48,9 @@ export async function callAIStreaming(env: AIEnv, opts: CallAIOptions): Promise<
     messages: opts.messages,
     stream: true,
     max_tokens: 4096,
-  }
+  };
   if (opts.tools?.length) {
-    body.tools = opts.tools
+    body.tools = opts.tools;
   }
 
   const response = await fetch(getGatewayUrl(env), {
@@ -61,14 +61,40 @@ export async function callAIStreaming(env: AIEnv, opts: CallAIOptions): Promise<
     },
     body: JSON.stringify(body),
     signal: opts.signal,
-  })
+  });
 
   if (!response.ok) {
-    const errText = await response.text()
-    throw new Error(`AI Gateway error: ${response.status} - ${errText}`)
+    const errText = await response.text();
+    throw new Error(`AI Gateway error: ${response.status} - ${errText}`);
   }
 
-  return response
+  return response;
 }
 
-export type { ChatMessage, ToolCall, ToolDef, AIEnv }
+/**
+ * Call AI Gateway without streaming. Returns the full response content.
+ */
+export const callAI = async (
+  env: AIEnv,
+  messages: ChatMessage[],
+  model?: string,
+): Promise<{ content: string }> => {
+  const response = await fetch(getGatewayUrl(env), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+    },
+    body: JSON.stringify({ model: model || MODEL, messages, stream: false, max_tokens: 4096 }),
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`AI Gateway error: ${response.status} - ${errText}`);
+  }
+  const data = (await response.json()) as {
+    choices: Array<{ message: { content: string } }>;
+  };
+  return { content: data.choices[0]?.message?.content || '' };
+};
+
+export type { ChatMessage, ToolCall, ToolDef, AIEnv };
