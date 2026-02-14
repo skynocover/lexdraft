@@ -1,13 +1,13 @@
-import { create } from "zustand";
-import { api } from "../lib/api";
+import { create } from 'zustand';
+import { api } from '../lib/api';
 
 // Re-export analysis types for backward compatibility
-export type { Dispute, Damage, TimelineEvent, Party } from "./useAnalysisStore";
+export type { Dispute, Damage, TimelineEvent, Party } from './useAnalysisStore';
 
 export interface Citation {
   id: string;
   label: string;
-  type: "file" | "law";
+  type: 'file' | 'law';
   file_id?: string;
   location?: {
     block_index?: number;
@@ -15,7 +15,7 @@ export interface Citation {
     char_end?: number;
   };
   quoted_text: string;
-  status: "confirmed" | "pending" | "rejected";
+  status: 'confirmed' | 'pending' | 'rejected';
 }
 
 export interface TextSegment {
@@ -51,7 +51,7 @@ export interface BriefVersion {
   label: string;
   content_structured?: { paragraphs: Paragraph[] } | null;
   created_at: string;
-  created_by: "user" | "ai" | "system";
+  created_by: 'user' | 'ai' | 'system';
 }
 
 export interface LawRef {
@@ -63,7 +63,7 @@ export interface LawRef {
   full_text: string | null;
   highlight_ranges: string | null;
   usage_count: number | null;
-  source: "search" | "manual" | "cited" | null;
+  source: 'search' | 'manual' | 'cited' | null;
 }
 
 type ContentSnapshot = { paragraphs: Paragraph[] };
@@ -100,7 +100,7 @@ interface BriefState {
   updateCitationStatus: (
     paragraphId: string,
     citationId: string,
-    status: "confirmed" | "rejected",
+    status: 'confirmed' | 'rejected',
   ) => void;
   removeCitation: (paragraphId: string, citationId: string) => void;
   removeLawRef: (lawRefId: string) => Promise<void>;
@@ -136,12 +136,10 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   _history: [],
   _future: [],
 
-  setCurrentBrief: (currentBrief) =>
-    set({ currentBrief, _history: [], _future: [] }),
+  setCurrentBrief: (currentBrief) => set({ currentBrief, _history: [], _future: [] }),
   setBriefs: (briefs) => set({ briefs }),
   setLawRefs: (lawRefs) => set({ lawRefs }),
-  setRebuttalTargetFileIds: (rebuttalTargetFileIds) =>
-    set({ rebuttalTargetFileIds }),
+  setRebuttalTargetFileIds: (rebuttalTargetFileIds) => set({ rebuttalTargetFileIds }),
   setDirty: (dirty) => set({ dirty }),
   setHighlightCitationId: (highlightCitationId) => set({ highlightCitationId }),
 
@@ -167,10 +165,11 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   },
 
   setTitle: (title: string) => {
-    const { currentBrief } = get();
+    const { currentBrief, briefs } = get();
     if (!currentBrief) return;
     set({
       currentBrief: { ...currentBrief, title },
+      briefs: briefs.map((b) => (b.id === currentBrief.id ? { ...b, title } : b)),
       dirty: true,
     });
   },
@@ -180,7 +179,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       const briefs = await api.get<Brief[]>(`/cases/${caseId}/briefs`);
       set({ briefs });
     } catch (err) {
-      console.error("loadBriefs error:", err);
+      console.error('loadBriefs error:', err);
     }
   },
 
@@ -189,7 +188,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       const brief = await api.get<Brief>(`/briefs/${briefId}`);
       set({ currentBrief: brief, _history: [], _future: [] });
     } catch (err) {
-      console.error("loadBrief error:", err);
+      console.error('loadBrief error:', err);
     }
   },
 
@@ -198,7 +197,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       const lawRefs = await api.get<LawRef[]>(`/cases/${caseId}/law-refs`);
       set({ lawRefs });
     } catch (err) {
-      console.error("loadLawRefs error:", err);
+      console.error('loadLawRefs error:', err);
     }
   },
 
@@ -256,14 +255,13 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   updateCitationStatus: (
     paragraphId: string,
     citationId: string,
-    status: "confirmed" | "rejected",
+    status: 'confirmed' | 'rejected',
   ) => {
     const { currentBrief, _history } = get();
     if (!currentBrief?.content_structured) return;
 
     const snapshot = cloneSnapshot(currentBrief.content_structured);
-    const updateCitation = (c: Citation): Citation =>
-      c.id === citationId ? { ...c, status } : c;
+    const updateCitation = (c: Citation): Citation => (c.id === citationId ? { ...c, status } : c);
 
     set({
       currentBrief: {
@@ -355,12 +353,10 @@ export const useBriefStore = create<BriefState>((set, get) => ({
 
   loadVersions: async (briefId: string) => {
     try {
-      const versions = await api.get<BriefVersion[]>(
-        `/briefs/${briefId}/versions`,
-      );
+      const versions = await api.get<BriefVersion[]>(`/briefs/${briefId}/versions`);
       set({ versions });
     } catch (err) {
-      console.error("loadVersions error:", err);
+      console.error('loadVersions error:', err);
     }
   },
 
@@ -371,7 +367,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       await api.post(`/briefs/${currentBrief.id}/versions`, { label });
       await get().loadVersions(currentBrief.id);
     } catch (err) {
-      console.error("createVersion error:", err);
+      console.error('createVersion error:', err);
     }
   },
 
@@ -380,7 +376,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       await api.delete(`/brief-versions/${versionId}`);
       set({ versions: get().versions.filter((v) => v.id !== versionId) });
     } catch (err) {
-      console.error("deleteVersion error:", err);
+      console.error('deleteVersion error:', err);
     }
   },
 
@@ -388,9 +384,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     const { currentBrief } = get();
     if (!currentBrief) return;
     try {
-      const version = await api.get<BriefVersion>(
-        `/brief-versions/${versionId}`,
-      );
+      const version = await api.get<BriefVersion>(`/brief-versions/${versionId}`);
       if (!version.content_structured) return;
 
       set({
@@ -404,7 +398,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       await get().saveBrief();
       await get().loadVersions(currentBrief.id);
     } catch (err) {
-      console.error("restoreVersion error:", err);
+      console.error('restoreVersion error:', err);
     }
   },
 
@@ -413,7 +407,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     try {
       await api.delete(`/law-refs/${lawRefId}`);
     } catch (err) {
-      console.error("removeLawRef error:", err);
+      console.error('removeLawRef error:', err);
     }
   },
 
@@ -426,7 +420,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
         set({ currentBrief: null });
       }
     } catch (err) {
-      console.error("deleteBrief error:", err);
+      console.error('deleteBrief error:', err);
     }
   },
 
@@ -442,7 +436,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       });
       set({ dirty: false });
     } catch (err) {
-      console.error("saveBrief error:", err);
+      console.error('saveBrief error:', err);
     } finally {
       set({ saving: false });
     }
@@ -456,14 +450,14 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     let pending = 0;
     for (const p of currentBrief.content_structured.paragraphs) {
       for (const c of p.citations) {
-        if (c.status === "confirmed") confirmed++;
-        else if (c.status === "pending") pending++;
+        if (c.status === 'confirmed') confirmed++;
+        else if (c.status === 'pending') pending++;
       }
       if (p.segments) {
         for (const seg of p.segments) {
           for (const c of seg.citations) {
-            if (c.status === "confirmed") confirmed++;
-            else if (c.status === "pending") pending++;
+            if (c.status === 'confirmed') confirmed++;
+            else if (c.status === 'pending') pending++;
           }
         }
       }

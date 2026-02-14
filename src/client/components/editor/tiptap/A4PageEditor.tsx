@@ -1,21 +1,19 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import type { BriefEditorProps } from "../types";
-import { useBriefStore } from "../../../stores/useBriefStore";
-import { useAnalysisStore } from "../../../stores/useAnalysisStore";
-import { useUIStore } from "../../../stores/useUIStore";
-import { useAutoSave } from "../../../hooks/useAutoSave";
-import { CitationNode } from "./extensions/CitationNode";
-import { LegalHeading } from "./extensions/LegalHeading";
-import { LegalParagraph } from "./extensions/LegalParagraph";
-import {
-  contentStructuredToTiptapDoc,
-  tiptapDocToContentStructured,
-} from "./converters";
-import { CitationReviewModal } from "./CitationReviewModal";
-import { PrintPreviewModal } from "./PrintPreviewModal";
-import { VersionPanel } from "../VersionPanel";
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import type { BriefEditorProps } from '../types';
+import { useBriefStore } from '../../../stores/useBriefStore';
+import { useTabStore } from '../../../stores/useTabStore';
+import { useAnalysisStore } from '../../../stores/useAnalysisStore';
+import { useUIStore } from '../../../stores/useUIStore';
+import { useAutoSave } from '../../../hooks/useAutoSave';
+import { CitationNode } from './extensions/CitationNode';
+import { LegalHeading } from './extensions/LegalHeading';
+import { LegalParagraph } from './extensions/LegalParagraph';
+import { contentStructuredToTiptapDoc, tiptapDocToContentStructured } from './converters';
+import { CitationReviewModal } from './CitationReviewModal';
+import { PrintPreviewModal } from './PrintPreviewModal';
+import { VersionPanel } from '../VersionPanel';
 
 export function A4PageEditor({ content }: BriefEditorProps) {
   const currentBrief = useBriefStore((s) => s.currentBrief);
@@ -30,7 +28,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false);
   const [versionPanelOpen, setVersionPanelOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState("");
+  const [titleDraft, setTitleDraft] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Flag to prevent loop: when we update store from editor, don't re-sync editor
@@ -42,24 +40,22 @@ export function A4PageEditor({ content }: BriefEditorProps) {
   // Paragraph double-click → jump to dispute in bottom panel
   const handleEditorDoubleClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    const paragraphEl = target.closest(
-      "[data-dispute-id]",
-    ) as HTMLElement | null;
+    const paragraphEl = target.closest('[data-dispute-id]') as HTMLElement | null;
     if (!paragraphEl) return;
 
-    const disputeId = paragraphEl.getAttribute("data-dispute-id");
+    const disputeId = paragraphEl.getAttribute('data-dispute-id');
     if (!disputeId) return;
 
     // Open bottom panel, switch to disputes tab, highlight the dispute card
     useUIStore.getState().setBottomPanelOpen(true);
-    useUIStore.getState().setBottomPanelTab("disputes");
+    useUIStore.getState().setBottomPanelTab('disputes');
     useAnalysisStore.getState().setHighlightDisputeId(disputeId);
 
     // Scroll dispute card into view
     setTimeout(() => {
       const card = document.querySelector(`[data-dispute-card="${disputeId}"]`);
       if (card) {
-        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }, 100);
   }, []);
@@ -77,7 +73,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
     content: contentStructuredToTiptapDoc(content),
     editorProps: {
       attributes: {
-        class: "a4-editor-prose",
+        class: 'a4-editor-prose',
       },
     },
     onUpdate: ({ editor }) => {
@@ -110,9 +106,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
     const editorDoc = editor.getJSON();
     const editorStructured = tiptapDocToContentStructured(editorDoc);
     const storeJson = JSON.stringify(content.paragraphs.map((p) => p.id));
-    const editorJson = JSON.stringify(
-      editorStructured.paragraphs.map((p) => p.id),
-    );
+    const editorJson = JSON.stringify(editorStructured.paragraphs.map((p) => p.id));
 
     if (storeJson !== editorJson) {
       const newDoc = contentStructuredToTiptapDoc(content);
@@ -136,27 +130,31 @@ export function A4PageEditor({ content }: BriefEditorProps) {
   }, [editingTitle]);
 
   const handleTitleDoubleClick = () => {
-    setTitleDraft(currentBrief?.title || "");
+    setTitleDraft(currentBrief?.title || '');
     setEditingTitle(true);
   };
 
   const handleTitleBlur = () => {
     setEditingTitle(false);
-    if (titleDraft.trim() && titleDraft !== currentBrief?.title) {
-      setTitle(titleDraft.trim());
+    const newTitle = titleDraft.trim();
+    if (newTitle && newTitle !== currentBrief?.title) {
+      setTitle(newTitle);
+      if (currentBrief) {
+        useTabStore.getState().updateBriefTabTitle(currentBrief.id, newTitle);
+      }
     }
   };
 
   const handleTitleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+    if (e.key === 'Enter') {
       e.preventDefault();
       handleTitleBlur();
-    } else if (e.key === "Escape") {
+    } else if (e.key === 'Escape') {
       setEditingTitle(false);
     }
   };
 
-  const briefTitle = currentBrief?.title || "書狀";
+  const briefTitle = currentBrief?.title || '書狀';
 
   return (
     <div className="absolute inset-0 flex flex-col">
@@ -215,12 +213,12 @@ export function A4PageEditor({ content }: BriefEditorProps) {
         {stats.confirmed > 0 || stats.pending > 0 ? (
           <button
             onClick={() => stats.pending > 0 && setCitationReviewOpen(true)}
-            className={`text-[11px] ${stats.pending > 0 ? "hover:text-t1 cursor-pointer" : ""} text-t3`}
+            className={`text-[11px] ${stats.pending > 0 ? 'hover:text-t1 cursor-pointer' : ''} text-t3`}
           >
             引用：<span className="text-gr">{stats.confirmed} 確認</span>
             {stats.pending > 0 && (
               <>
-                {" "}
+                {' '}
                 · <span className="text-yl">{stats.pending} 待確認</span>
               </>
             )}
@@ -242,7 +240,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
         {/* Version history button */}
         <button
           onClick={() => setVersionPanelOpen((v) => !v)}
-          className={`rounded px-3 py-1 text-xs transition ${versionPanelOpen ? "bg-bg-3 text-t1" : "text-t3 hover:text-t1 hover:bg-bg-3"}`}
+          className={`rounded px-3 py-1 text-xs transition ${versionPanelOpen ? 'bg-bg-3 text-t1' : 'text-t3 hover:text-t1 hover:bg-bg-3'}`}
         >
           版本紀錄
         </button>
@@ -290,16 +288,10 @@ export function A4PageEditor({ content }: BriefEditorProps) {
       </div>
 
       {/* Version Panel */}
-      <VersionPanel
-        open={versionPanelOpen}
-        onClose={() => setVersionPanelOpen(false)}
-      />
+      <VersionPanel open={versionPanelOpen} onClose={() => setVersionPanelOpen(false)} />
 
       {/* Modals */}
-      <CitationReviewModal
-        open={citationReviewOpen}
-        onClose={() => setCitationReviewOpen(false)}
-      />
+      <CitationReviewModal open={citationReviewOpen} onClose={() => setCitationReviewOpen(false)} />
       {printPreviewOpen && editor && (
         <PrintPreviewModal
           html={editor.getHTML()}
