@@ -56,6 +56,7 @@ export interface ClaudeDocument {
   title: string;
   content: string;
   file_id?: string;
+  doc_type?: "file" | "law";
 }
 
 export interface TextSegment {
@@ -71,108 +72,39 @@ export interface ClaudeCitationResult {
 
 // ── Chunking ──
 
-const MAX_CHUNK_LENGTH = 500;
+const MAX_CHUNK_LENGTH = 800;
 
 /**
  * Split document content into chunks for custom content citations.
  *
- * Strategy:
- * 1. Split by \n into lines
- * 2. Detect structural break lines (section headers, key-value fields, numbered items)
- * 3. Group lines between breaks into chunks
- * 4. If a chunk > MAX_CHUNK_LENGTH, split further by 。
+ * If the content contains ## headers (AI-generated markdown), split by ## boundaries.
+ * Otherwise fall back to splitting by 。 sentence boundaries.
  *
- * Structural breaks detected:
- * - Blank lines
- * - Lines ending with ： (section headers like 診斷病名：, 醫師囑言：)
- * - Short key-value lines with ： early in the line (like 病歷編號：12345)
- * - Chinese formal numbering (壹、貳、參、)
- * - Chinese standard numbering (一、二、三、)
- * - Parenthesized numbering ((一)(二))
- * - Arabic numeral patterns (1. 2.)
- *
- * This produces fine-grained chunks so that citations pinpoint specific
- * sections rather than entire documents. All chunks are still sent to
- * Claude together — only citation granularity is affected.
+ * All chunks are sent to Claude together — only citation granularity is affected.
  */
 const chunkContent = (content: string): string[] => {
   const trimmed = content.trim();
   if (!trimmed) return [trimmed];
 
-  const lines = trimmed.split("\n");
-  const chunks: string[] = [];
-  let buffer = "";
-
-  for (const line of lines) {
-    const t = line.trim();
-    if (!t) {
-      // Blank line: flush buffer
-      if (buffer.trim()) {
-        chunks.push(buffer.trim());
-        buffer = "";
+  // Split by ## headers if present
+  if (/^##\s/m.test(trimmed)) {
+    const sections = trimmed.split(/(?=^##\s)/m);
+    const chunks: string[] = [];
+    for (const section of sections) {
+      const s = section.trim();
+      if (!s) continue;
+      if (s.length <= MAX_CHUNK_LENGTH) {
+        chunks.push(s);
+      } else {
+        chunks.push(...splitBySentence(s));
       }
-      continue;
     }
-
-    // If this line starts a new structural section, flush previous buffer first
-    if (isStructuralBreak(t) && buffer.trim()) {
-      chunks.push(buffer.trim());
-      buffer = "";
-    }
-
-    buffer += (buffer ? "\n" : "") + t;
+    return chunks.length > 0 ? chunks : [trimmed];
   }
 
-  if (buffer.trim()) {
-    chunks.push(buffer.trim());
-  }
-
-  // Post-process: split oversized chunks by sentence
-  const split: string[] = [];
-  for (const chunk of chunks) {
-    if (chunk.length <= MAX_CHUNK_LENGTH) {
-      split.push(chunk);
-    } else {
-      split.push(...splitBySentence(chunk));
-    }
-  }
-
-  // Post-process: merge standalone section headers (ending with ：) with the next chunk
-  // e.g. "診斷病名：" alone → merge with "一、左側鎖骨骨折" → "診斷病名：\n一、左側鎖骨骨折"
-  const result: string[] = [];
-  for (let i = 0; i < split.length; i++) {
-    if (/[：:]$/.test(split[i].trim()) && i + 1 < split.length) {
-      result.push(split[i] + "\n" + split[i + 1]);
-      i++; // skip next chunk (already merged)
-    } else {
-      result.push(split[i]);
-    }
-  }
-
-  return result.length > 0 ? result : [trimmed];
-};
-
-/**
- * Detect if a line is a structural break point for chunking.
- * These lines start a new chunk boundary.
- */
-const isStructuralBreak = (line: string): boolean => {
-  // Lines ending with ： or : (pure section headers like 診斷病名：, 醫師囑言：)
-  if (/[：:]$/.test(line)) return true;
-
-  // Formal Chinese section numbering (壹、貳、參、肆、)
-  if (/^[壹貳參肆伍陸柒捌玖拾]+、/.test(line)) return true;
-
-  // Standard Chinese numbering (一、二、三、)
-  if (/^[一二三四五六七八九十]+、/.test(line)) return true;
-
-  // Parenthesized numbering ((一)(二) or （一）（二）)
-  if (/^[（(][一二三四五六七八九十]+[）)]/.test(line)) return true;
-
-  // Arabic numeral patterns (1. 2. or 1、2、)
-  if (/^\d+[.、]/.test(line)) return true;
-
-  return false;
+  // Fallback: no ## headers — split by 。 if too long
+  if (trimmed.length <= MAX_CHUNK_LENGTH) return [trimmed];
+  return splitBySentence(trimmed);
 };
 
 /** Split a long text into chunks by 。 boundaries, each <= MAX_CHUNK_LENGTH */
@@ -284,7 +216,7 @@ export const callClaudeWithCitations = async (
           const citation: Citation = {
             id: nanoid(),
             label: cite.document_title,
-            type: doc?.file_id ? "file" : "law",
+            type: doc?.doc_type || (doc?.file_id ? "file" : "law"),
             file_id: doc?.file_id,
             location:
               cite.type === "content_block_location"

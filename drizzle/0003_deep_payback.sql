@@ -1,0 +1,1 @@
+ALTER TABLE `files` ADD `content_md` text;

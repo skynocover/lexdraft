@@ -5,6 +5,10 @@ import { useBriefStore } from "../../../../stores/useBriefStore";
 
 const POPOVER_CLOSE_DELAY = 150;
 
+/** Strip markdown headers (## ###) from cited text for display */
+const stripMarkdownHeaders = (text: string): string =>
+  text.replace(/^#{1,3}\s+/gm, "");
+
 export function CitationNodeView({ node }: NodeViewProps) {
   const [showPopover, setShowPopover] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -142,7 +146,7 @@ export function CitationNodeView({ node }: NodeViewProps) {
                   textIndent: 0,
                 }}
               >
-                {quotedText}
+                {stripMarkdownHeaders(quotedText)}
               </p>
             </div>
           )}
