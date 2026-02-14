@@ -44,6 +44,16 @@ export interface Brief {
   updated_at: string;
 }
 
+export interface BriefVersion {
+  id: string;
+  brief_id: string;
+  version_no: number;
+  label: string;
+  content_structured?: { paragraphs: Paragraph[] } | null;
+  created_at: string;
+  created_by: "user" | "ai" | "system";
+}
+
 export interface LawRef {
   id: string;
   case_id: string;
@@ -64,6 +74,7 @@ interface BriefState {
   currentBrief: Brief | null;
   briefs: Brief[];
   lawRefs: LawRef[];
+  versions: BriefVersion[];
   rebuttalTargetFileIds: string[];
   dirty: boolean;
   saving: boolean;
@@ -101,6 +112,11 @@ interface BriefState {
   canUndo: () => boolean;
   canRedo: () => boolean;
 
+  loadVersions: (briefId: string) => Promise<void>;
+  createVersion: (label: string) => Promise<void>;
+  deleteVersion: (versionId: string) => Promise<void>;
+  restoreVersion: (versionId: string) => Promise<void>;
+
   citationStats: () => { confirmed: number; pending: number };
 }
 
@@ -112,6 +128,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   currentBrief: null,
   briefs: [],
   lawRefs: [],
+  versions: [],
   rebuttalTargetFileIds: [],
   dirty: false,
   saving: false,
@@ -335,6 +352,61 @@ export const useBriefStore = create<BriefState>((set, get) => ({
 
   canUndo: () => get()._history.length > 0,
   canRedo: () => get()._future.length > 0,
+
+  loadVersions: async (briefId: string) => {
+    try {
+      const versions = await api.get<BriefVersion[]>(
+        `/briefs/${briefId}/versions`,
+      );
+      set({ versions });
+    } catch (err) {
+      console.error("loadVersions error:", err);
+    }
+  },
+
+  createVersion: async (label: string) => {
+    const { currentBrief } = get();
+    if (!currentBrief) return;
+    try {
+      await api.post(`/briefs/${currentBrief.id}/versions`, { label });
+      await get().loadVersions(currentBrief.id);
+    } catch (err) {
+      console.error("createVersion error:", err);
+    }
+  },
+
+  deleteVersion: async (versionId: string) => {
+    try {
+      await api.delete(`/brief-versions/${versionId}`);
+      set({ versions: get().versions.filter((v) => v.id !== versionId) });
+    } catch (err) {
+      console.error("deleteVersion error:", err);
+    }
+  },
+
+  restoreVersion: async (versionId: string) => {
+    const { currentBrief } = get();
+    if (!currentBrief) return;
+    try {
+      const version = await api.get<BriefVersion>(
+        `/brief-versions/${versionId}`,
+      );
+      if (!version.content_structured) return;
+
+      set({
+        currentBrief: {
+          ...currentBrief,
+          content_structured: version.content_structured,
+        },
+        dirty: true,
+      });
+
+      await get().saveBrief();
+      await get().loadVersions(currentBrief.id);
+    } catch (err) {
+      console.error("restoreVersion error:", err);
+    }
+  },
 
   removeLawRef: async (lawRefId: string) => {
     set({ lawRefs: get().lawRefs.filter((r) => r.id !== lawRefId) });

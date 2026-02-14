@@ -42,8 +42,20 @@ const SortableTab = ({
   };
 
   const isBrief = tabData.type === "brief";
+  const isVersion = tabData.type === "version-preview";
   const label =
-    tabData.type === "brief" ? tabData.title || "書狀" : tabData.filename;
+    tabData.type === "brief"
+      ? tabData.title || "書狀"
+      : tabData.type === "version-preview"
+        ? tabData.label
+        : tabData.filename;
+
+  const badgeClass = isBrief
+    ? "bg-ac/20 text-ac"
+    : isVersion
+      ? "bg-pp/20 text-pp"
+      : "bg-rd/20 text-rd";
+  const badgeText = isBrief ? "DOC" : isVersion ? "VER" : "PDF";
 
   return (
     <button
@@ -59,11 +71,9 @@ const SortableTab = ({
       }`}
     >
       <span
-        className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${
-          isBrief ? "bg-ac/20 text-ac" : "bg-rd/20 text-rd"
-        }`}
+        className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${badgeClass}`}
       >
-        {isBrief ? "DOC" : "PDF"}
+        {badgeText}
       </span>
       <span className="truncate">{label}</span>
       <span

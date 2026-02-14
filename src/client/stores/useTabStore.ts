@@ -1,15 +1,17 @@
-import { create } from "zustand";
-import { useBriefStore } from "./useBriefStore";
-import { useAuthStore } from "./useAuthStore";
+import { create } from 'zustand';
+import { useBriefStore } from './useBriefStore';
+import type { Paragraph } from './useBriefStore';
+import { useAuthStore } from './useAuthStore';
+import { api } from '../lib/api';
 
 interface BriefTab {
-  type: "brief";
+  type: 'brief';
   briefId: string;
   title: string;
 }
 
 interface FileTab {
-  type: "file";
+  type: 'file';
   fileId: string;
   filename: string;
   pdfUrl: string | null;
@@ -17,7 +19,17 @@ interface FileTab {
   highlightText: string | null;
 }
 
-export type TabData = BriefTab | FileTab;
+interface VersionPreviewTab {
+  type: 'version-preview';
+  versionId: string;
+  briefId: string;
+  briefTitle: string;
+  label: string;
+  content: { paragraphs: Paragraph[] } | null;
+  loading: boolean;
+}
+
+export type TabData = BriefTab | FileTab | VersionPreviewTab;
 
 export interface Panel {
   id: string;
@@ -32,11 +44,7 @@ interface TabState {
 
   openBriefTab: (briefId: string, title: string) => void;
   openFileTab: (fileId: string, filename: string) => void;
-  openFileTabWithHighlight: (
-    fileId: string,
-    filename: string,
-    highlightText: string,
-  ) => void;
+  openFileTabWithHighlight: (fileId: string, filename: string, highlightText: string) => void;
   openFileTabInOtherPanel: (
     fileId: string,
     filename: string,
@@ -48,18 +56,19 @@ interface TabState {
   focusPanel: (panelId: string) => void;
   splitPanel: (tabId: string, panelId: string) => void;
   closePanel: (panelId: string) => void;
-  moveTab: (
-    tabId: string,
-    fromPanelId: string,
-    toPanelId: string,
-    index?: number,
-  ) => void;
+  moveTab: (tabId: string, fromPanelId: string, toPanelId: string, index?: number) => void;
   reorderTab: (panelId: string, fromIndex: number, toIndex: number) => void;
+  openVersionPreviewTab: (
+    versionId: string,
+    briefId: string,
+    label: string,
+    briefTitle: string,
+  ) => void;
   updateBriefTabTitle: (briefId: string, title: string) => void;
   clearTabs: () => void;
 }
 
-const MAIN_PANEL_ID = "main";
+const MAIN_PANEL_ID = 'main';
 
 const createMainPanel = (): Panel => ({
   id: MAIN_PANEL_ID,
@@ -84,9 +93,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     const existingPanel = findPanelWithTab(panels, tabId);
     if (existingPanel) {
       set({
-        panels: panels.map((p) =>
-          p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p,
-        ),
+        panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
         focusedPanelId: existingPanel.id,
       });
       useBriefStore.getState().loadBrief(briefId);
@@ -96,14 +103,12 @@ export const useTabStore = create<TabState>((set, get) => ({
     // Add to focused panel
     const newRegistry = {
       ...tabRegistry,
-      [tabId]: { type: "brief" as const, briefId, title },
+      [tabId]: { type: 'brief' as const, briefId, title },
     };
     set({
       tabRegistry: newRegistry,
       panels: panels.map((p) =>
-        p.id === focusedPanelId
-          ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId }
-          : p,
+        p.id === focusedPanelId ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId } : p,
       ),
     });
     useBriefStore.getState().loadBrief(briefId);
@@ -117,9 +122,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     const existingPanel = findPanelWithTab(panels, tabId);
     if (existingPanel) {
       set({
-        panels: panels.map((p) =>
-          p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p,
-        ),
+        panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
         focusedPanelId: existingPanel.id,
       });
       return;
@@ -129,7 +132,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     const newRegistry = {
       ...tabRegistry,
       [tabId]: {
-        type: "file" as const,
+        type: 'file' as const,
         fileId,
         filename,
         pdfUrl: null,
@@ -140,9 +143,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     set({
       tabRegistry: newRegistry,
       panels: panels.map((p) =>
-        p.id === focusedPanelId
-          ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId }
-          : p,
+        p.id === focusedPanelId ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId } : p,
       ),
     });
 
@@ -152,7 +153,7 @@ export const useTabStore = create<TabState>((set, get) => ({
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(async (res) => {
-        if (!res.ok) throw new Error("Failed to fetch PDF");
+        if (!res.ok) throw new Error('Failed to fetch PDF');
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const reg = get().tabRegistry;
@@ -170,7 +171,7 @@ export const useTabStore = create<TabState>((set, get) => ({
         }
       })
       .catch((err) => {
-        console.error("Failed to load PDF:", err);
+        console.error('Failed to load PDF:', err);
         const reg = get().tabRegistry;
         if (reg[tabId]) {
           set({
@@ -202,9 +203,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     const existingPanel = findPanelWithTab(panels, tabId);
     if (existingPanel && existingPanel.id !== focusedPanelId) {
       set({
-        panels: panels.map((p) =>
-          p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p,
-        ),
+        panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
       });
       if (highlightText) setFileHighlight(fileId, highlightText);
       return;
@@ -241,7 +240,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     const tabId = `file:${fileId}`;
     const { tabRegistry } = get();
     const tabData = tabRegistry[tabId];
-    if (tabData?.type === "file") {
+    if (tabData?.type === 'file') {
       set({
         tabRegistry: {
           ...tabRegistry,
@@ -261,7 +260,7 @@ export const useTabStore = create<TabState>((set, get) => ({
 
     // Revoke blob URL if file tab
     const tabData = tabRegistry[tabId];
-    if (tabData?.type === "file" && tabData.pdfUrl) {
+    if (tabData?.type === 'file' && tabData.pdfUrl) {
       URL.revokeObjectURL(tabData.pdfUrl);
     }
 
@@ -280,9 +279,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     }
 
     // Check if tab is still used in another panel
-    const usedElsewhere = panels.some(
-      (p) => p.id !== panelId && p.tabIds.includes(tabId),
-    );
+    const usedElsewhere = panels.some((p) => p.id !== panelId && p.tabIds.includes(tabId));
     const newRegistry = { ...tabRegistry };
     if (!usedElsewhere) {
       delete newRegistry[tabId];
@@ -291,10 +288,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     // If panel is now empty and it's not the last panel, remove it
     if (newTabIds.length === 0 && panels.length > 1) {
       const newPanels = panels.filter((p) => p.id !== panelId);
-      const newFocused =
-        get().focusedPanelId === panelId
-          ? newPanels[0].id
-          : get().focusedPanelId;
+      const newFocused = get().focusedPanelId === panelId ? newPanels[0].id : get().focusedPanelId;
       set({
         tabRegistry: newRegistry,
         panels: newPanels,
@@ -303,10 +297,8 @@ export const useTabStore = create<TabState>((set, get) => ({
       // If focus switched, sync brief
       if (newFocused !== get().focusedPanelId) {
         const focusedPanel = newPanels.find((p) => p.id === newFocused);
-        const activeData = focusedPanel?.activeTabId
-          ? newRegistry[focusedPanel.activeTabId]
-          : null;
-        if (activeData?.type === "brief") {
+        const activeData = focusedPanel?.activeTabId ? newRegistry[focusedPanel.activeTabId] : null;
+        if (activeData?.type === 'brief') {
           useBriefStore.getState().loadBrief(activeData.briefId);
         }
       }
@@ -316,20 +308,14 @@ export const useTabStore = create<TabState>((set, get) => ({
     set({
       tabRegistry: newRegistry,
       panels: panels.map((p) =>
-        p.id === panelId
-          ? { ...p, tabIds: newTabIds, activeTabId: newActiveTabId }
-          : p,
+        p.id === panelId ? { ...p, tabIds: newTabIds, activeTabId: newActiveTabId } : p,
       ),
     });
 
     // If the closed tab was active and new active is a brief, sync
-    if (
-      panel.activeTabId === tabId &&
-      newActiveTabId &&
-      panelId === get().focusedPanelId
-    ) {
+    if (panel.activeTabId === tabId && newActiveTabId && panelId === get().focusedPanelId) {
       const newActiveData = newRegistry[newActiveTabId];
-      if (newActiveData?.type === "brief") {
+      if (newActiveData?.type === 'brief') {
         useBriefStore.getState().loadBrief(newActiveData.briefId);
       }
     }
@@ -341,14 +327,12 @@ export const useTabStore = create<TabState>((set, get) => ({
     if (!panel || !panel.tabIds.includes(tabId)) return;
 
     set({
-      panels: panels.map((p) =>
-        p.id === panelId ? { ...p, activeTabId: tabId } : p,
-      ),
+      panels: panels.map((p) => (p.id === panelId ? { ...p, activeTabId: tabId } : p)),
       focusedPanelId: panelId,
     });
 
     const tabData = tabRegistry[tabId];
-    if (tabData?.type === "brief") {
+    if (tabData?.type === 'brief') {
       useBriefStore.getState().loadBrief(tabData.briefId);
     }
   },
@@ -365,7 +349,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     // Sync brief for newly focused panel
     if (panel.activeTabId) {
       const tabData = tabRegistry[panel.activeTabId];
-      if (tabData?.type === "brief") {
+      if (tabData?.type === 'brief') {
         useBriefStore.getState().loadBrief(tabData.briefId);
       }
     }
@@ -420,7 +404,7 @@ export const useTabStore = create<TabState>((set, get) => ({
 
     // Sync brief if the split tab is a brief
     const tabData = tabRegistry[tabId];
-    if (tabData?.type === "brief") {
+    if (tabData?.type === 'brief') {
       useBriefStore.getState().loadBrief(tabData.briefId);
     }
   },
@@ -435,7 +419,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     // Revoke blob URLs for file tabs in this panel
     for (const tabId of panel.tabIds) {
       const tabData = tabRegistry[tabId];
-      if (tabData?.type === "file" && tabData.pdfUrl) {
+      if (tabData?.type === 'file' && tabData.pdfUrl) {
         URL.revokeObjectURL(tabData.pdfUrl);
       }
     }
@@ -443,17 +427,14 @@ export const useTabStore = create<TabState>((set, get) => ({
     // Remove tabs that are only in this panel
     const newRegistry = { ...tabRegistry };
     for (const tabId of panel.tabIds) {
-      const usedElsewhere = panels.some(
-        (p) => p.id !== panelId && p.tabIds.includes(tabId),
-      );
+      const usedElsewhere = panels.some((p) => p.id !== panelId && p.tabIds.includes(tabId));
       if (!usedElsewhere) {
         delete newRegistry[tabId];
       }
     }
 
     const newPanels = panels.filter((p) => p.id !== panelId);
-    const newFocused =
-      get().focusedPanelId === panelId ? newPanels[0].id : get().focusedPanelId;
+    const newFocused = get().focusedPanelId === panelId ? newPanels[0].id : get().focusedPanelId;
 
     set({
       tabRegistry: newRegistry,
@@ -490,11 +471,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     if (newFromTabIds.length === 0 && panels.length > 1) {
       newPanels = panels
         .filter((p) => p.id !== fromPanelId)
-        .map((p) =>
-          p.id === toPanelId
-            ? { ...p, tabIds: newToTabIds, activeTabId: tabId }
-            : p,
-        );
+        .map((p) => (p.id === toPanelId ? { ...p, tabIds: newToTabIds, activeTabId: tabId } : p));
     } else {
       newPanels = panels.map((p) => {
         if (p.id === fromPanelId) {
@@ -514,7 +491,7 @@ export const useTabStore = create<TabState>((set, get) => ({
 
     // Sync brief if moved tab is a brief
     const tabData = get().tabRegistry[tabId];
-    if (tabData?.type === "brief") {
+    if (tabData?.type === 'brief') {
       useBriefStore.getState().loadBrief(tabData.briefId);
     }
   },
@@ -529,17 +506,103 @@ export const useTabStore = create<TabState>((set, get) => ({
     newTabIds.splice(toIndex, 0, moved);
 
     set({
-      panels: panels.map((p) =>
-        p.id === panelId ? { ...p, tabIds: newTabIds } : p,
-      ),
+      panels: panels.map((p) => (p.id === panelId ? { ...p, tabIds: newTabIds } : p)),
     });
+  },
+
+  openVersionPreviewTab: (versionId, briefId, label, briefTitle) => {
+    const { tabRegistry, panels, focusedPanelId } = get();
+    const tabId = `version:${versionId}`;
+
+    // If tab already exists in any panel, focus it
+    const existingPanel = findPanelWithTab(panels, tabId);
+    if (existingPanel) {
+      set({
+        panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
+        focusedPanelId: existingPanel.id,
+      });
+      return;
+    }
+
+    // Create tab data (loading state)
+    const newRegistry = {
+      ...tabRegistry,
+      [tabId]: {
+        type: 'version-preview' as const,
+        versionId,
+        briefId,
+        briefTitle,
+        label,
+        content: null,
+        loading: true,
+      },
+    };
+
+    // Open in another panel (like file preview)
+    const otherPanel = panels.find((p) => p.id !== focusedPanelId);
+    if (otherPanel) {
+      set({
+        tabRegistry: newRegistry,
+        panels: panels.map((p) =>
+          p.id === otherPanel.id ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId } : p,
+        ),
+      });
+    } else {
+      // Only one panel — add tab then split
+      set({
+        tabRegistry: newRegistry,
+        panels: panels.map((p) =>
+          p.id === focusedPanelId ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId } : p,
+        ),
+      });
+      get().splitPanel(tabId, focusedPanelId);
+      // Restore focus to original panel (where the brief is)
+      set({ focusedPanelId });
+    }
+
+    // Fetch version content
+    api
+      .get<{ content_structured: { paragraphs: Paragraph[] } | null }>(
+        `/brief-versions/${versionId}`,
+      )
+      .then((data) => {
+        const reg = get().tabRegistry;
+        if (reg[tabId]) {
+          set({
+            tabRegistry: {
+              ...reg,
+              [tabId]: {
+                ...reg[tabId],
+                content: data.content_structured || { paragraphs: [] },
+                loading: false,
+              } as VersionPreviewTab,
+            },
+          });
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load version:', err);
+        const reg = get().tabRegistry;
+        if (reg[tabId]) {
+          set({
+            tabRegistry: {
+              ...reg,
+              [tabId]: {
+                ...reg[tabId],
+                content: null,
+                loading: false,
+              } as VersionPreviewTab,
+            },
+          });
+        }
+      });
   },
 
   updateBriefTabTitle: (briefId, title) => {
     const tabId = `brief:${briefId}`;
     const { tabRegistry } = get();
     const tabData = tabRegistry[tabId];
-    if (tabData?.type === "brief") {
+    if (tabData?.type === 'brief') {
       set({
         tabRegistry: { ...tabRegistry, [tabId]: { ...tabData, title } },
       });
@@ -550,7 +613,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     // Revoke all blob URLs
     const { tabRegistry } = get();
     for (const tabData of Object.values(tabRegistry)) {
-      if (tabData.type === "file" && tabData.pdfUrl) {
+      if (tabData.type === 'file' && tabData.pdfUrl) {
         URL.revokeObjectURL(tabData.pdfUrl);
       }
     }

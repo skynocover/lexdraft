@@ -65,6 +65,19 @@ export const briefs = sqliteTable("briefs", {
   updated_at: text("updated_at"),
 });
 
+// 3.3.1 brief_versions — 書狀版本紀錄
+export const briefVersions = sqliteTable("brief_versions", {
+  id: text("id").primaryKey(),
+  brief_id: text("brief_id")
+    .notNull()
+    .references(() => briefs.id),
+  version_no: integer("version_no").notNull(),
+  label: text("label").notNull(),
+  content_structured: text("content_structured").notNull(),
+  created_at: text("created_at").notNull(),
+  created_by: text("created_by").notNull(), // 'user' | 'ai' | 'system'
+});
+
 // 3.4 disputes — 爭點
 export const disputes = sqliteTable("disputes", {
   id: text("id").primaryKey(),
