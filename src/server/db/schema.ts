@@ -108,6 +108,7 @@ export const lawRefs = sqliteTable("law_refs", {
   full_text: text("full_text"),
   highlight_ranges: text("highlight_ranges"), // JSON
   usage_count: integer("usage_count").default(0),
+  source: text("source").default("search"), // search | manual | cited
 });
 
 // 3.7 timeline_events — 時間軸事件

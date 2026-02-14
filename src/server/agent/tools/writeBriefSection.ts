@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { files, briefs, lawRefs } from "../../db/schema";
 import { callClaudeWithCitations, type ClaudeDocument } from "../claudeClient";
@@ -61,24 +61,88 @@ export const handleWriteBriefSection: ToolHandler = async (
     doc_type: "file" as const,
   }));
 
-  // 2. Load law refs and add as documents
+  // 2a. Load manual law refs (lawyer's curated picks) — always included
+  const manualLawRows = await drizzle
+    .select()
+    .from(lawRefs)
+    .where(and(eq(lawRefs.case_id, caseId), eq(lawRefs.source, "manual")));
+
+  const loadedLawIds = new Set<string>();
+  for (const ref of manualLawRows) {
+    if (ref.full_text) {
+      documents.push({
+        title: `${ref.law_name} ${ref.article}`,
+        content: ref.full_text,
+        doc_type: "law" as const,
+      });
+      loadedLawIds.add(ref.id);
+    }
+  }
+
+  // 2b. Load agent-specified law refs (relevant_law_ids): D1 cache first, fallback to MongoDB
   if (relevantLawIds.length) {
-    const allLawRefRows = await drizzle
-      .select()
-      .from(lawRefs)
-      .where(eq(lawRefs.case_id, caseId));
+    const uncachedIds = relevantLawIds.filter((id) => !loadedLawIds.has(id));
 
-    const matchingLawRefs = allLawRefRows.filter((r) =>
-      relevantLawIds.includes(r.id),
-    );
+    if (uncachedIds.length) {
+      // Check D1 cache
+      const cachedRows = await drizzle
+        .select()
+        .from(lawRefs)
+        .where(
+          and(eq(lawRefs.case_id, caseId), inArray(lawRefs.id, uncachedIds)),
+        );
 
-    for (const ref of matchingLawRefs) {
-      if (ref.full_text) {
-        documents.push({
-          title: `${ref.law_name} ${ref.article}`,
-          content: ref.full_text,
-          doc_type: "law" as const,
-        });
+      for (const ref of cachedRows) {
+        if (ref.full_text) {
+          documents.push({
+            title: `${ref.law_name} ${ref.article}`,
+            content: ref.full_text,
+            doc_type: "law" as const,
+          });
+          loadedLawIds.add(ref.id);
+        }
+      }
+
+      // Fetch missing from MongoDB and cache in D1
+      const stillMissing = uncachedIds.filter((id) => !loadedLawIds.has(id));
+      if (stillMissing.length && ctx.mongoUrl) {
+        for (const lawId of stillMissing) {
+          try {
+            const results = await searchLaw(ctx.mongoUrl, {
+              query: lawId,
+              limit: 1,
+            });
+            if (results.length > 0) {
+              const r = results[0];
+              await drizzle
+                .insert(lawRefs)
+                .values({
+                  id: r._id,
+                  case_id: caseId,
+                  law_name: r.law_name,
+                  article: r.article_no,
+                  title: `${r.law_name} ${r.article_no}`,
+                  full_text: r.content,
+                  usage_count: 1,
+                  source: "search",
+                })
+                .onConflictDoUpdate({
+                  target: lawRefs.id,
+                  set: {
+                    usage_count: sql`coalesce(${lawRefs.usage_count}, 0) + 1`,
+                  },
+                });
+              documents.push({
+                title: `${r.law_name} ${r.article_no}`,
+                content: r.content,
+                doc_type: "law" as const,
+              });
+              loadedLawIds.add(r._id);
+            }
+          } catch {
+            /* skip on error */
+          }
+        }
       }
     }
   }
@@ -106,10 +170,23 @@ export const handleWriteBriefSection: ToolHandler = async (
     claudeInstruction,
   );
 
-  // 4. Post-processing: detect uncited law references and populate lawRefs
+  // 4. Post-processing: store cited laws in D1 (source='cited'), detect uncited mentions
   const citedLawLabels = new Set(
     citations.filter((c) => c.type === "law").map((c) => c.label),
   );
+
+  // Mark cited laws in D1 as source='cited'
+  for (const label of citedLawLabels) {
+    const matchingManual = manualLawRows.find(
+      (r) => `${r.law_name} ${r.article}` === label,
+    );
+    if (matchingManual) {
+      await drizzle
+        .update(lawRefs)
+        .set({ source: "cited" })
+        .where(eq(lawRefs.id, matchingManual.id));
+    }
+  }
 
   // Deduplicate: use Set to avoid redundant MongoDB queries for same law
   const mentionedLawKeys = new Set<string>();
@@ -117,7 +194,7 @@ export const handleWriteBriefSection: ToolHandler = async (
     mentionedLawKeys.add(`${match[1]}|第${match[2]}`);
   }
 
-  // Find laws mentioned in text but not cited by Claude
+  // Find laws mentioned in text but not cited by Claude — store in D1 as cache
   const uncitedLaws = Array.from(mentionedLawKeys)
     .map((key) => {
       const [lawName, article] = key.split("|");
@@ -144,10 +221,12 @@ export const handleWriteBriefSection: ToolHandler = async (
               title: `${r.law_name} ${r.article_no}`,
               full_text: r.content,
               usage_count: 1,
+              source: "cited",
             })
             .onConflictDoUpdate({
               target: lawRefs.id,
               set: {
+                source: "cited",
                 usage_count: sql`coalesce(${lawRefs.usage_count}, 0) + 1`,
               },
             });
@@ -156,20 +235,25 @@ export const handleWriteBriefSection: ToolHandler = async (
         /* skip on error */
       }
     }
-
-    // Send updated lawRefs to frontend
-    const allRefs = await drizzle
-      .select()
-      .from(lawRefs)
-      .where(eq(lawRefs.case_id, caseId));
-
-    await ctx.sendSSE({
-      type: "brief_update",
-      brief_id: "",
-      action: "set_law_refs",
-      data: allRefs,
-    });
   }
+
+  // Send updated law refs (manual + cited only) to frontend
+  const displayRefs = await drizzle
+    .select()
+    .from(lawRefs)
+    .where(
+      and(
+        eq(lawRefs.case_id, caseId),
+        inArray(lawRefs.source, ["manual", "cited"]),
+      ),
+    );
+
+  await ctx.sendSSE({
+    type: "brief_update",
+    brief_id: "",
+    action: "set_law_refs",
+    data: displayRefs,
+  });
 
   // 5. Build Paragraph object
   const lawCitationCount = citations.filter((c) => c.type === "law").length;

@@ -1,13 +1,11 @@
-import { eq, sql } from "drizzle-orm";
-import { lawRefs } from "../../db/schema";
 import { searchLaw } from "../../lib/lawSearch";
 import type { ToolHandler } from "./types";
 
 export const handleSearchLaw: ToolHandler = async (
   args,
-  caseId,
+  _caseId,
   _db,
-  drizzle,
+  _drizzle,
   ctx,
 ) => {
   if (!ctx) {
@@ -25,42 +23,6 @@ export const handleSearchLaw: ToolHandler = async (
   if (results.length === 0) {
     return { result: `未找到與「${query}」相關的法條。`, success: true };
   }
-
-  // Upsert into D1 law_refs table (single query per result via ON CONFLICT)
-  for (const r of results) {
-    try {
-      await drizzle
-        .insert(lawRefs)
-        .values({
-          id: r._id,
-          case_id: caseId,
-          law_name: r.law_name,
-          article: r.article_no,
-          title: `${r.law_name} ${r.article_no}`,
-          full_text: r.content,
-          usage_count: 1,
-        })
-        .onConflictDoUpdate({
-          target: lawRefs.id,
-          set: { usage_count: sql`coalesce(${lawRefs.usage_count}, 0) + 1` },
-        });
-    } catch {
-      /* skip on error */
-    }
-  }
-
-  // Read all law_refs for this case to send to frontend
-  const allRefs = await drizzle
-    .select()
-    .from(lawRefs)
-    .where(eq(lawRefs.case_id, caseId));
-
-  await ctx.sendSSE({
-    type: "brief_update",
-    brief_id: "",
-    action: "set_law_refs",
-    data: allRefs,
-  });
 
   // Format result text (include IDs so agent can pass them to write_brief_section)
   const formatted = results

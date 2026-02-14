@@ -53,6 +53,7 @@ export interface LawRef {
   full_text: string | null;
   highlight_ranges: string | null;
   usage_count: number | null;
+  source: "search" | "manual" | "cited" | null;
 }
 
 type ContentSnapshot = { paragraphs: Paragraph[] };
@@ -91,6 +92,7 @@ interface BriefState {
     status: "confirmed" | "rejected",
   ) => void;
   removeCitation: (paragraphId: string, citationId: string) => void;
+  removeLawRef: (lawRefId: string) => Promise<void>;
   deleteBrief: (briefId: string) => Promise<void>;
   saveBrief: () => Promise<void>;
 
@@ -333,6 +335,15 @@ export const useBriefStore = create<BriefState>((set, get) => ({
 
   canUndo: () => get()._history.length > 0,
   canRedo: () => get()._future.length > 0,
+
+  removeLawRef: async (lawRefId: string) => {
+    set({ lawRefs: get().lawRefs.filter((r) => r.id !== lawRefId) });
+    try {
+      await api.delete(`/law-refs/${lawRefId}`);
+    } catch (err) {
+      console.error("removeLawRef error:", err);
+    }
+  },
 
   deleteBrief: async (briefId: string) => {
     try {

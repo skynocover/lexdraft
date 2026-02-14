@@ -9,7 +9,7 @@ import { SectionHeader } from "./sidebar/SectionHeader";
 import { ConfirmDialog } from "./sidebar/ConfirmDialog";
 import { FileGroup } from "./sidebar/FileGroup";
 import { LawRefCard } from "./sidebar/LawRefCard";
-import { LawSearchInput } from "./sidebar/LawSearchInput";
+import { LawSearchDialog } from "./sidebar/LawSearchDialog";
 
 type Category = "ours" | "theirs" | "court" | "evidence" | "other";
 
@@ -29,6 +29,7 @@ export function RightSidebar() {
   const briefs = useBriefStore((s) => s.briefs);
   const currentBrief = useBriefStore((s) => s.currentBrief);
   const deleteBrief = useBriefStore((s) => s.deleteBrief);
+  const removeLawRef = useBriefStore((s) => s.removeLawRef);
   const activeTabId = useTabStore((s) => s.activeTabId);
   const openBriefTab = useTabStore((s) => s.openBriefTab);
   const closeTab = useTabStore((s) => s.closeTab);
@@ -38,6 +39,7 @@ export function RightSidebar() {
   const [briefsOpen, setBriefsOpen] = useState(true);
   const [filesOpen, setFilesOpen] = useState(true);
   const [lawRefsOpen, setLawRefsOpen] = useState(true);
+  const [lawSearchOpen, setLawSearchOpen] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState<{
     id: string;
@@ -52,22 +54,37 @@ export function RightSidebar() {
     (f) => !f.category || !FILE_GROUPS.some((g) => g.key === f.category),
   );
 
-  // Only show law refs that are actually cited in brief paragraphs
-  const citedLawRefs = useMemo(() => {
+  // Two-tier law refs: cited in current brief vs manual pool
+  const { citedLawRefs, availableLawRefs } = useMemo(() => {
+    // Scan current brief paragraphs for cited law labels
     const citedLabels = new Set<string>();
-    const sources = [currentBrief, ...briefs];
-    for (const brief of sources) {
-      if (!brief?.content_structured?.paragraphs) continue;
-      for (const p of brief.content_structured.paragraphs) {
+    if (currentBrief?.content_structured?.paragraphs) {
+      for (const p of currentBrief.content_structured.paragraphs) {
         for (const c of p.citations) {
           if (c.type === "law") citedLabels.add(c.label);
         }
+        if (p.segments) {
+          for (const seg of p.segments) {
+            for (const c of seg.citations) {
+              if (c.type === "law") citedLabels.add(c.label);
+            }
+          }
+        }
       }
     }
-    return lawRefs.filter((ref) =>
-      citedLabels.has(`${ref.law_name} ${ref.article}`),
-    );
-  }, [lawRefs, briefs, currentBrief]);
+    const cited: typeof lawRefs = [];
+    const available: typeof lawRefs = [];
+    for (const ref of lawRefs) {
+      const label = `${ref.law_name} ${ref.article}`;
+      if (citedLabels.has(label) || ref.source === "cited") {
+        cited.push(ref);
+      } else if (ref.source === "manual") {
+        available.push(ref);
+      }
+      // source='search' — not displayed in sidebar
+    }
+    return { citedLawRefs: cited, availableLawRefs: available };
+  }, [lawRefs, currentBrief]);
 
   const totalFiles = caseFiles.length;
   const readyFiles = caseFiles.filter((f) => f.status === "ready").length;
@@ -304,32 +321,86 @@ export function RightSidebar() {
 
       {/* 法條引用區塊 */}
       <div>
-        <SectionHeader
-          label="法條引用"
-          count={citedLawRefs.length}
-          countUnit="條"
-          open={lawRefsOpen}
-          onToggle={() => setLawRefsOpen(!lawRefsOpen)}
-        />
+        <div className="flex items-center">
+          <div className="flex-1">
+            <SectionHeader
+              label="法條引用"
+              count={lawRefs.length}
+              countUnit="條"
+              open={lawRefsOpen}
+              onToggle={() => setLawRefsOpen(!lawRefsOpen)}
+            />
+          </div>
+          <button
+            onClick={() => setLawSearchOpen(true)}
+            className="mr-2 rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac"
+            title="搜尋法條"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+        </div>
         {lawRefsOpen && (
           <div className="px-1 pb-3">
-            <div className="mb-2">
-              <LawSearchInput />
-            </div>
-            {citedLawRefs.length === 0 ? (
-              <p className="px-2 text-center text-[11px] text-t3">
-                尚無引用法條
-              </p>
+            {citedLawRefs.length === 0 && availableLawRefs.length === 0 ? (
+              <div className="px-2 py-4 text-center">
+                <p className="text-[11px] text-t3">尚無法條</p>
+                <button
+                  onClick={() => setLawSearchOpen(true)}
+                  className="mt-1.5 text-[11px] text-ac transition hover:underline"
+                >
+                  搜尋並加入法條
+                </button>
+              </div>
             ) : (
               <div className="space-y-1 px-1">
-                {citedLawRefs.map((ref) => (
-                  <LawRefCard key={ref.id} lawRef={ref} />
-                ))}
+                {/* 已引用 */}
+                {citedLawRefs.length > 0 && (
+                  <>
+                    <p className="px-1 pt-1 text-[9px] font-medium uppercase tracking-wider text-t3">
+                      已引用 ({citedLawRefs.length})
+                    </p>
+                    {citedLawRefs.map((ref) => (
+                      <LawRefCard key={ref.id} lawRef={ref} cited />
+                    ))}
+                  </>
+                )}
+                {/* 備用 */}
+                {availableLawRefs.length > 0 && (
+                  <>
+                    <p className="px-1 pt-2 text-[9px] font-medium uppercase tracking-wider text-t3">
+                      備用 ({availableLawRefs.length})
+                    </p>
+                    {availableLawRefs.map((ref) => (
+                      <LawRefCard
+                        key={ref.id}
+                        lawRef={ref}
+                        onRemove={removeLawRef}
+                      />
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>
         )}
       </div>
+
+      <LawSearchDialog
+        open={lawSearchOpen}
+        onClose={() => setLawSearchOpen(false)}
+      />
     </aside>
   );
 }
