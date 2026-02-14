@@ -1,5 +1,17 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { useParams } from "react-router";
+import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  Group as PanelGroup,
+  Panel as ResizablePanel,
+  Separator as PanelResizeHandle,
+} from "react-resizable-panels";
 import { useCaseStore, type Case, type CaseFile } from "../stores/useCaseStore";
 import { useBriefStore } from "../stores/useBriefStore";
 import { useAnalysisStore } from "../stores/useAnalysisStore";
@@ -10,18 +22,15 @@ import { Header } from "../components/layout/Header";
 import { StatusBar } from "../components/layout/StatusBar";
 import { ChatPanel } from "../components/layout/ChatPanel";
 import { RightSidebar } from "../components/layout/RightSidebar";
-import { TabBar } from "../components/layout/TabBar";
-import { BriefEditor } from "../components/editor";
-import { FileViewer } from "../components/editor/FileViewer";
-import { OutlinePanel } from "../components/editor/OutlinePanel";
+import { EditorPanel } from "../components/editor/EditorPanel";
 import { AnalysisPanel } from "../components/analysis/AnalysisPanel";
+import { useUIStore } from "../stores/useUIStore";
 
 export function CaseWorkspace() {
   const { caseId } = useParams();
   const setCurrentCase = useCaseStore((s) => s.setCurrentCase);
   const setFiles = useCaseStore((s) => s.setFiles);
   const files = useCaseStore((s) => s.files);
-  const currentBrief = useBriefStore((s) => s.currentBrief);
   const setCurrentBrief = useBriefStore((s) => s.setCurrentBrief);
   const loadBriefs = useBriefStore((s) => s.loadBriefs);
   const loadLawRefs = useBriefStore((s) => s.loadLawRefs);
@@ -29,13 +38,53 @@ export function CaseWorkspace() {
   const loadDamages = useAnalysisStore((s) => s.loadDamages);
   const loadTimeline = useAnalysisStore((s) => s.loadTimeline);
   const loadParties = useAnalysisStore((s) => s.loadParties);
-  const tabs = useTabStore((s) => s.tabs);
-  const activeTabId = useTabStore((s) => s.activeTabId);
+  const panels = useTabStore((s) => s.panels);
   const openBriefTab = useTabStore((s) => s.openBriefTab);
   const clearTabs = useTabStore((s) => s.clearTabs);
+  const reorderTab = useTabStore((s) => s.reorderTab);
+  const moveTab = useTabStore((s) => s.moveTab);
+  const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen);
+  const rightSidebarOpen = useUIStore((s) => s.rightSidebarOpen);
+  const toggleLeftSidebar = useUIStore((s) => s.toggleLeftSidebar);
+  const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
   const pollingRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
-  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeData = active.data.current as
+      | { panelId: string; tabId: string }
+      | undefined;
+    const overData = over.data.current as
+      | { panelId: string; tabId: string }
+      | undefined;
+
+    if (!activeData || !overData) return;
+
+    if (activeData.panelId === overData.panelId) {
+      // Reorder within same panel
+      const panel = panels.find((p) => p.id === activeData.panelId);
+      if (!panel) return;
+      const fromIndex = panel.tabIds.indexOf(activeData.tabId);
+      const toIndex = panel.tabIds.indexOf(overData.tabId);
+      if (fromIndex !== -1 && toIndex !== -1) {
+        reorderTab(activeData.panelId, fromIndex, toIndex);
+      }
+    } else {
+      // Move between panels
+      const toPanel = panels.find((p) => p.id === overData.panelId);
+      if (!toPanel) return;
+      const toIndex = toPanel.tabIds.indexOf(overData.tabId);
+      moveTab(activeData.tabId, activeData.panelId, overData.panelId, toIndex);
+    }
+  };
 
   useEffect(() => {
     if (!caseId) return;
@@ -112,39 +161,98 @@ export function CaseWorkspace() {
       <Header />
 
       <div className="flex flex-1 overflow-hidden">
-        <ChatPanel />
+        {/* Left sidebar: ChatPanel */}
+        {leftSidebarOpen ? (
+          <ChatPanel />
+        ) : (
+          <SidebarStrip side="left" onClick={toggleLeftSidebar} />
+        )}
 
         <main className="flex flex-1 flex-col overflow-hidden bg-bg-0">
-          <TabBar />
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {/* Editor / FileViewer — takes remaining space */}
-            <div className="relative min-h-0 flex-1 flex flex-col overflow-hidden">
-              {activeTab?.data.type === "brief" && <OutlinePanel />}
-              {activeTab?.data.type === "brief" ? (
-                <BriefEditor
-                  content={currentBrief?.content_structured ?? null}
-                />
-              ) : activeTab?.data.type === "file" ? (
-                <FileViewer
-                  filename={activeTab.data.filename}
-                  pdfUrl={activeTab.data.pdfUrl}
-                  loading={activeTab.data.loading}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center">
-                  <p className="text-sm text-t3">請從右側面板選擇書狀或檔案</p>
-                </div>
-              )}
-            </div>
+            {/* Editor panels area */}
+            <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+              <div className="relative min-h-0 flex-1 flex flex-col overflow-hidden">
+                <PanelGroup orientation="horizontal">
+                  {panels.map((panel, i) => (
+                    <Fragment key={panel.id}>
+                      {i > 0 && (
+                        <PanelResizeHandle className="w-1 bg-bg-3 transition-colors hover:bg-ac cursor-col-resize" />
+                      )}
+                      <ResizablePanel minSize={20}>
+                        <EditorPanel panelId={panel.id} />
+                      </ResizablePanel>
+                    </Fragment>
+                  ))}
+                </PanelGroup>
+              </div>
+            </DndContext>
             {/* Analysis Panel — shrink-0, below editor */}
             <AnalysisPanel />
           </div>
         </main>
 
-        <RightSidebar />
+        {/* Right sidebar: RightSidebar */}
+        {rightSidebarOpen ? (
+          <RightSidebar />
+        ) : (
+          <SidebarStrip side="right" onClick={toggleRightSidebar} />
+        )}
       </div>
 
       <StatusBar />
     </div>
   );
 }
+
+const SidebarStrip = ({
+  side,
+  onClick,
+}: {
+  side: "left" | "right";
+  onClick: () => void;
+}) => {
+  const isLeft = side === "left";
+  return (
+    <div
+      className={`flex w-10 shrink-0 flex-col items-center border-bd bg-bg-1 ${
+        isLeft ? "border-r" : "border-l"
+      }`}
+    >
+      <button
+        onClick={onClick}
+        className="mt-2 rounded p-1.5 text-t3 transition hover:bg-bg-h hover:text-t1"
+        title={isLeft ? "展開 AI 助理" : "展開側邊欄"}
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {isLeft ? (
+            <>
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </>
+          ) : (
+            <>
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="15" y1="3" x2="15" y2="21" />
+            </>
+          )}
+        </svg>
+      </button>
+      <span
+        className="mt-3 text-[10px] text-t3"
+        style={{ writingMode: "vertical-lr" }}
+      >
+        {isLeft ? "AI 助理" : "案件資料"}
+      </span>
+    </div>
+  );
+};

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, memo, type KeyboardEvent } from "react";
 import { useParams } from "react-router";
 import Markdown from "react-markdown";
 import { useChatStore, type ChatMessage } from "../../stores/useChatStore";
+import { useUIStore } from "../../stores/useUIStore";
 
 export function ChatPanel() {
   const { caseId } = useParams();
@@ -81,14 +82,35 @@ export function ChatPanel() {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-bd px-3 py-2">
         <span className="text-xs font-medium text-t2">AI 助理</span>
-        {messages.length > 0 && !isStreaming && (
+        <div className="flex items-center gap-1">
+          {messages.length > 0 && !isStreaming && (
+            <button
+              onClick={handleClear}
+              className="text-[11px] text-t3 hover:text-rd"
+            >
+              清除對話
+            </button>
+          )}
           <button
-            onClick={handleClear}
-            className="text-[11px] text-t3 hover:text-rd"
+            onClick={() => useUIStore.getState().toggleLeftSidebar()}
+            className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+            title="收合 AI 助理"
           >
-            清除對話
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="11 17 6 12 11 7" />
+              <polyline points="18 17 13 12 18 7" />
+            </svg>
           </button>
-        )}
+        </div>
       </div>
 
       {/* Message list */}

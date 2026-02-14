@@ -15,8 +15,10 @@ export function FileItem({
   const openFileTab = useTabStore((s) => s.openFileTab);
   const summary = file.summary ? JSON.parse(file.summary) : null;
 
-  const activeTabId = useTabStore((s) => s.activeTabId);
-  const isFileActive = activeTabId === `file:${file.id}`;
+  const focusedPanelId = useTabStore((s) => s.focusedPanelId);
+  const panels = useTabStore((s) => s.panels);
+  const focusedPanel = panels.find((p) => p.id === focusedPanelId);
+  const isFileActive = focusedPanel?.activeTabId === `file:${file.id}`;
 
   const handleClick = () => {
     if (file.status === "ready") {

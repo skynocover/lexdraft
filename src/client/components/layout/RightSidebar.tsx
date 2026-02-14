@@ -2,6 +2,7 @@ import { useRef, useState, useMemo } from "react";
 import { useCaseStore, type CaseFile } from "../../stores/useCaseStore";
 import { useBriefStore } from "../../stores/useBriefStore";
 import { useTabStore } from "../../stores/useTabStore";
+import { useUIStore } from "../../stores/useUIStore";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../stores/useAuthStore";
 
@@ -30,9 +31,14 @@ export function RightSidebar() {
   const currentBrief = useBriefStore((s) => s.currentBrief);
   const deleteBrief = useBriefStore((s) => s.deleteBrief);
   const removeLawRef = useBriefStore((s) => s.removeLawRef);
-  const activeTabId = useTabStore((s) => s.activeTabId);
+  const panels = useTabStore((s) => s.panels);
+  const focusedPanelId = useTabStore((s) => s.focusedPanelId);
   const openBriefTab = useTabStore((s) => s.openBriefTab);
   const closeTab = useTabStore((s) => s.closeTab);
+
+  // Derive activeTabId from the focused panel
+  const focusedPanel = panels.find((p) => p.id === focusedPanelId);
+  const activeTabId = focusedPanel?.activeTabId ?? null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -150,12 +156,44 @@ export function RightSidebar() {
     const briefId = confirmDelete.id;
     setConfirmDelete(null);
 
-    closeTab(`brief:${briefId}`);
+    // Find the panel containing this brief tab and close it
+    const tabId = `brief:${briefId}`;
+    const { panels: currentPanels } = useTabStore.getState();
+    const ownerPanel = currentPanels.find((p) => p.tabIds.includes(tabId));
+    if (ownerPanel) {
+      closeTab(tabId, ownerPanel.id);
+    }
     await deleteBrief(briefId);
   };
 
+  const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
+
   return (
     <aside className="flex w-80 min-h-0 shrink-0 flex-col border-l border-bd bg-bg-1 overflow-y-auto">
+      {/* Sidebar header with collapse button */}
+      <div className="flex items-center justify-between border-b border-bd px-3 py-2">
+        <span className="text-xs font-medium text-t2">案件資料</span>
+        <button
+          onClick={toggleRightSidebar}
+          className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+          title="收合側邊欄"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="13 17 18 12 13 7" />
+            <polyline points="6 17 11 12 6 7" />
+          </svg>
+        </button>
+      </div>
+
       {confirmDelete && (
         <ConfirmDialog
           message={`確定要刪除「${confirmDelete.title}」嗎？此操作無法復原。`}
