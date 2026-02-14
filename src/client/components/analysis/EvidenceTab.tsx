@@ -1,4 +1,4 @@
-import { useBriefStore } from '../../stores/useBriefStore'
+import { useAnalysisStore } from '../../stores/useAnalysisStore'
 
 type EvidenceStatus = 'ok' | 'warn' | 'miss'
 
@@ -16,8 +16,8 @@ const STATUS_STYLE: Record<EvidenceStatus, { label: string; cls: string }> = {
 }
 
 export function EvidenceTab() {
-  const disputes = useBriefStore((s) => s.disputes)
-  const damages = useBriefStore((s) => s.damages)
+  const disputes = useAnalysisStore((s) => s.disputes)
+  const damages = useAnalysisStore((s) => s.damages)
 
   // Build evidence rows from disputes and damages
   const rows: EvidenceRow[] = []

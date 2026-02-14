@@ -1,19 +1,15 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState } from 'react'
 import { useCaseStore, type CaseFile } from '../../stores/useCaseStore'
-import { useBriefStore, type LawRef } from '../../stores/useBriefStore'
+import { useBriefStore } from '../../stores/useBriefStore'
 import { useTabStore } from '../../stores/useTabStore'
 import { api } from '../../lib/api'
 import { useAuthStore } from '../../stores/useAuthStore'
 
-interface SearchResult {
-  _id: string
-  law_name: string
-  article_no: string
-  content: string
-  pcode: string
-  nature: string
-  score: number
-}
+import { SectionHeader } from './sidebar/SectionHeader'
+import { ConfirmDialog } from './sidebar/ConfirmDialog'
+import { FileGroup } from './sidebar/FileGroup'
+import { LawRefCard } from './sidebar/LawRefCard'
+import { LawSearchInput } from './sidebar/LawSearchInput'
 
 type Category = 'ours' | 'theirs' | 'court' | 'evidence' | 'other'
 
@@ -24,337 +20,6 @@ const FILE_GROUPS: { key: Category; label: string; color: string }[] = [
   { key: 'evidence', label: '證據資料', color: 'text-gr' },
 ]
 
-const STATUS_ICON: Record<string, string> = {
-  pending: '⏳',
-  processing: '⏳',
-  ready: '✅',
-  error: '❌',
-}
-
-function formatSize(bytes: number | null) {
-  if (!bytes) return ''
-  if (bytes < 1024) return `${bytes}B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
-}
-
-/* ── 確認刪除彈窗 ── */
-function ConfirmDialog({
-  message,
-  onConfirm,
-  onCancel,
-}: {
-  message: string
-  onConfirm: () => void
-  onCancel: () => void
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-72 rounded-lg border border-bd bg-bg-1 p-4 shadow-xl">
-        <p className="mb-4 text-sm text-t1">{message}</p>
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="rounded border border-bd px-3 py-1 text-xs text-t2 transition hover:bg-bg-h"
-          >
-            取消
-          </button>
-          <button
-            onClick={onConfirm}
-            className="rounded bg-rd px-3 py-1 text-xs text-white transition hover:bg-rd/80"
-          >
-            刪除
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ── 可折疊區段標題 ── */
-function SectionHeader({
-  label,
-  count,
-  countUnit,
-  open,
-  onToggle,
-}: {
-  label: string
-  count: number
-  countUnit: string
-  open: boolean
-  onToggle: () => void
-}) {
-  return (
-    <button
-      onClick={onToggle}
-      className="flex w-full items-center justify-between px-3 py-2 transition hover:bg-bg-h"
-    >
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-t3">{open ? '▾' : '▸'}</span>
-        <span className="text-xs font-medium text-t2">{label}</span>
-      </div>
-      <span className="text-[10px] text-t3">{count} {countUnit}</span>
-    </button>
-  )
-}
-
-/* ── 檔案項目 ── */
-function FileItem({
-  file,
-  groupColor,
-  isRebuttalTarget,
-  onCategoryChange,
-  onDelete,
-}: {
-  file: CaseFile
-  groupColor: string
-  isRebuttalTarget: boolean
-  onCategoryChange: (id: string, category: string) => void
-  onDelete: (id: string) => void
-}) {
-  const [expanded, setExpanded] = useState(false)
-  const openFileTab = useTabStore((s) => s.openFileTab)
-  const summary = file.summary ? JSON.parse(file.summary) : null
-
-  const activeTabId = useTabStore((s) => s.activeTabId)
-  const isFileActive = activeTabId === `file:${file.id}`
-
-  const handleClick = () => {
-    if (file.status === 'ready') {
-      openFileTab(file.id, file.filename)
-    }
-  }
-
-  return (
-    <div className="mb-1">
-      <div
-        className={`flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition hover:bg-bg-h ${
-          isRebuttalTarget ? 'bg-yl/10' : isFileActive ? 'bg-ac/10' : ''
-        }`}
-      >
-        <button
-          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
-          className="mt-1 shrink-0 text-[10px] text-t3"
-        >
-          {expanded ? '▾' : '▸'}
-        </button>
-        <button onClick={handleClick} className="flex flex-1 items-start gap-2 min-w-0">
-          <span className="mt-0.5 text-rd text-[11px]">PDF</span>
-          <div className="flex-1 min-w-0">
-            <p className={`truncate text-xs ${isRebuttalTarget ? 'text-yl font-medium' : isFileActive ? 'text-ac font-medium' : 'text-t1'}`}>
-              {isRebuttalTarget && '* '}{file.filename}
-            </p>
-            <div className="flex items-center gap-2 mt-0.5">
-              {file.doc_date && <span className="text-[10px] text-t3">{file.doc_date}</span>}
-              <span className="text-[10px] text-t3">{formatSize(file.file_size)}</span>
-            </div>
-          </div>
-        </button>
-        <span className="text-[10px] shrink-0 mt-0.5">{STATUS_ICON[file.status] || '⏳'}</span>
-      </div>
-
-      {expanded && (
-        <div className="mx-2 mb-2 rounded bg-bg-2 p-2">
-          {file.status === 'ready' && summary ? (
-            <>
-              <div className="mb-1.5 flex items-center gap-1">
-                <span className={`rounded px-1 py-0.5 text-[9px] font-medium ${
-                  file.category === 'theirs' ? 'bg-or/20 text-or' : 'bg-gr/20 text-gr'
-                }`}>
-                  {file.category === 'theirs' ? 'AI 重點' : 'AI 摘要'}
-                </span>
-              </div>
-              <p className="text-[11px] leading-4 text-t2">{summary.summary}</p>
-              {summary.key_claims?.length > 0 && (
-                <ul className="mt-1.5 space-y-0.5">
-                  {summary.key_claims.map((claim: string, i: number) => (
-                    <li key={i} className="text-[10px] text-t3">· {claim}</li>
-                  ))}
-                </ul>
-              )}
-            </>
-          ) : file.status === 'error' ? (
-            <p className="text-[11px] text-rd">處理失敗</p>
-          ) : (
-            <p className="text-[11px] text-t3">處理中...</p>
-          )}
-
-          {/* 檢視全文按鈕 */}
-          {file.status === 'ready' && (
-            <button
-              onClick={() => openFileTab(file.id, file.filename)}
-              className="mt-2 text-[11px] text-ac hover:underline"
-            >
-              檢視全文 →
-            </button>
-          )}
-
-          {/* 手動修改分類 */}
-          <div className="mt-2 flex items-center gap-1">
-            <span className="text-[10px] text-t3">分類：</span>
-            <select
-              value={file.category || 'other'}
-              onChange={(e) => onCategoryChange(file.id, e.target.value)}
-              className="rounded border border-bd bg-bg-3 px-1 py-0.5 text-[10px] text-t2 outline-none"
-            >
-              <option value="ours">我方</option>
-              <option value="theirs">對方</option>
-              <option value="court">法院</option>
-              <option value="evidence">證據</option>
-              <option value="other">其他</option>
-            </select>
-            <button
-              onClick={() => onDelete(file.id)}
-              className="ml-auto text-[10px] text-rd hover:underline"
-            >
-              刪除
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/* ── 檔案分類群組 ── */
-function FileGroup({
-  label,
-  color,
-  files,
-  rebuttalTargetIds,
-  onCategoryChange,
-  onDelete,
-}: {
-  label: string
-  color: string
-  files: CaseFile[]
-  rebuttalTargetIds: string[]
-  onCategoryChange: (id: string, category: string) => void
-  onDelete: (id: string) => void
-}) {
-  const [open, setOpen] = useState(true)
-
-  return (
-    <div className="mb-1">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 px-3 py-1.5 transition hover:bg-bg-h"
-      >
-        <span className="text-[10px] text-t3">{open ? '▾' : '▸'}</span>
-        <span className={`text-xs font-medium ${color}`}>{label}</span>
-        <span className="text-[10px] text-t3">({files.length})</span>
-      </button>
-      {open && files.length > 0 && (
-        <div className="px-1">
-          {files.map((f) => (
-            <FileItem
-              key={f.id}
-              file={f}
-              groupColor={color}
-              isRebuttalTarget={rebuttalTargetIds.includes(f.id)}
-              onCategoryChange={onCategoryChange}
-              onDelete={onDelete}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/* ── 法條卡片 ── */
-function LawRefCard({ lawRef }: { lawRef: LawRef }) {
-  const [expanded, setExpanded] = useState(false)
-
-  return (
-    <div className="rounded border border-bd bg-bg-2">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-start gap-2 px-2 py-1.5 text-left transition hover:bg-bg-h"
-      >
-        <span className="mt-0.5 shrink-0 rounded bg-purple-500/20 px-1 py-0.5 text-[9px] font-medium text-purple-400">
-          法規
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className="truncate text-xs text-t1">{lawRef.law_name} {lawRef.article}</p>
-        </div>
-        {lawRef.usage_count && lawRef.usage_count > 0 && (
-          <span className="shrink-0 text-[9px] text-t3">{lawRef.usage_count}次</span>
-        )}
-        <span className="shrink-0 text-[10px] text-t3">{expanded ? '▾' : '▸'}</span>
-      </button>
-      {expanded && lawRef.full_text && (
-        <div className="border-t border-bd px-2 py-1.5">
-          <p className="text-[11px] leading-4 text-t2">{lawRef.full_text}</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/* ── 法條搜尋輸入框 ── */
-function LawSearchInput() {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResult[]>([])
-  const [searching, setSearching] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
-
-  const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) {
-      setResults([])
-      return
-    }
-    setSearching(true)
-    try {
-      const data = await api.post<{ results: SearchResult[] }>('/law/search', { query: q, limit: 8 })
-      setResults(data.results)
-    } catch {
-      setResults([])
-    } finally {
-      setSearching(false)
-    }
-  }, [])
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value
-    setQuery(v)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => doSearch(v), 300)
-  }
-
-  return (
-    <div className="px-2">
-      <div className="relative">
-        <input
-          type="text"
-          value={query}
-          onChange={handleChange}
-          placeholder="搜尋法條..."
-          className="w-full rounded border border-bd bg-bg-2 px-2 py-1.5 text-xs text-t1 placeholder:text-t3 outline-none focus:border-ac"
-        />
-        {searching && (
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-t3">...</span>
-        )}
-      </div>
-      {results.length > 0 && (
-        <div className="mt-1 max-h-48 space-y-1 overflow-y-auto rounded border border-bd bg-bg-2 p-1">
-          {results.map((r) => (
-            <div
-              key={r._id}
-              className="rounded px-2 py-1.5 text-left transition hover:bg-bg-h cursor-default"
-            >
-              <p className="text-xs font-medium text-t1">{r.law_name} {r.article_no}</p>
-              <p className="mt-0.5 text-[10px] leading-3.5 text-t3 line-clamp-2">{r.content}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/* ── 主元件 ── */
 export function RightSidebar() {
   const currentCase = useCaseStore((s) => s.currentCase)
   const caseFiles = useCaseStore((s) => s.files)
@@ -369,12 +34,10 @@ export function RightSidebar() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
 
-  // 折疊狀態
   const [briefsOpen, setBriefsOpen] = useState(true)
   const [filesOpen, setFilesOpen] = useState(true)
   const [lawRefsOpen, setLawRefsOpen] = useState(true)
 
-  // 刪除確認彈窗
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null)
 
   const grouped = FILE_GROUPS.map((g) => ({
@@ -443,14 +106,12 @@ export function RightSidebar() {
     const briefId = confirmDelete.id
     setConfirmDelete(null)
 
-    // 關閉對應 tab
     closeTab(`brief:${briefId}`)
     await deleteBrief(briefId)
   }
 
   return (
     <aside className="flex w-60 min-h-0 shrink-0 flex-col border-l border-bd bg-bg-1 overflow-y-auto">
-      {/* 刪除確認彈窗 */}
       {confirmDelete && (
         <ConfirmDialog
           message={`確定要刪除「${confirmDelete.title}」嗎？此操作無法復原。`}
@@ -529,7 +190,6 @@ export function RightSidebar() {
         />
         {filesOpen && (
           <>
-            {/* 處理進度 */}
             {processingFiles > 0 && (
               <div className="mx-3 mb-2">
                 <div className="flex items-center justify-between mb-1">
@@ -545,7 +205,6 @@ export function RightSidebar() {
               </div>
             )}
 
-            {/* 分類群組 */}
             {grouped.map((g) => (
               <FileGroup
                 key={g.key}
@@ -558,7 +217,6 @@ export function RightSidebar() {
               />
             ))}
 
-            {/* 未分類 */}
             {otherFiles.length > 0 && (
               <FileGroup
                 label="其他"
@@ -570,7 +228,6 @@ export function RightSidebar() {
               />
             )}
 
-            {/* 上傳入口 */}
             <div className="px-3 pb-3 pt-1">
               <input
                 ref={fileInputRef}

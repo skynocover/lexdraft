@@ -1,7 +1,7 @@
-import { useBriefStore } from '../../stores/useBriefStore'
+import { useAnalysisStore } from '../../stores/useAnalysisStore'
 
 export function TimelineTab() {
-  const timeline = useBriefStore((s) => s.timeline)
+  const timeline = useAnalysisStore((s) => s.timeline)
 
   if (timeline.length === 0) {
     return (

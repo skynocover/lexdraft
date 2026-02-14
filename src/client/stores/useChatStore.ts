@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
 import { useAuthStore } from './useAuthStore'
-import { useBriefStore, type Brief, type Paragraph, type Dispute, type Damage, type LawRef, type TimelineEvent, type Party } from './useBriefStore'
+import { useBriefStore, type Brief, type Paragraph, type LawRef } from './useBriefStore'
+import { useAnalysisStore, type Dispute, type Damage, type TimelineEvent, type Party } from './useAnalysisStore'
 import { useTabStore } from './useTabStore'
 import type { SSEEvent, ChatMessageRecord } from '../../shared/types'
 
@@ -218,6 +219,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
               case 'brief_update': {
                 const briefStore = useBriefStore.getState()
+                const analysisStore = useAnalysisStore.getState()
                 if (event.action === 'create_brief') {
                   const newBrief = event.data as Brief
                   briefStore.setBriefs([...briefStore.briefs, newBrief])
@@ -236,15 +238,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     briefStore.updateParagraph(p.id, p)
                   }
                 } else if (event.action === 'set_disputes') {
-                  briefStore.setDisputes(event.data as Dispute[])
+                  analysisStore.setDisputes(event.data as Dispute[])
                 } else if (event.action === 'set_damages') {
-                  briefStore.setDamages(event.data as Damage[])
+                  analysisStore.setDamages(event.data as Damage[])
                 } else if (event.action === 'set_law_refs') {
                   briefStore.setLawRefs(event.data as LawRef[])
                 } else if (event.action === 'set_timeline') {
-                  briefStore.setTimeline(event.data as TimelineEvent[])
+                  analysisStore.setTimeline(event.data as TimelineEvent[])
                 } else if (event.action === 'set_parties') {
-                  briefStore.setParties(event.data as Party[])
+                  analysisStore.setParties(event.data as Party[])
                 }
                 break
               }

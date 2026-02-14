@@ -1,24 +1,10 @@
 import { useState, useEffect } from 'react'
-import { useBriefStore } from '../../stores/useBriefStore'
-import { useUIStore } from '../../stores/useUIStore'
-
-/** Strip emoji, U+FFFD replacement chars, and other non-text symbols */
-function cleanText(text: string): string {
-  return text
-    .replace(/\uFFFD/g, '')
-    .replace(/[\u{1F600}-\u{1F9FF}]/gu, '')
-    .replace(/[\u{2600}-\u{27BF}]/gu, '')
-    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
-    .replace(/[\u{1F000}-\u{1FAFF}]/gu, '')
-    .replace(/[\u{200D}]/gu, '')
-    .replace(/[\u{20E3}]/gu, '')
-    .replace(/[\u{E0020}-\u{E007F}]/gu, '')
-    .trim()
-}
+import { useAnalysisStore } from '../../stores/useAnalysisStore'
+import { cleanText } from '../../lib/textUtils'
 
 export function DisputesTab() {
-  const disputes = useBriefStore((s) => s.disputes)
-  const highlightDisputeId = useBriefStore((s) => s.highlightDisputeId)
+  const disputes = useAnalysisStore((s) => s.disputes)
+  const highlightDisputeId = useAnalysisStore((s) => s.highlightDisputeId)
 
   if (disputes.length === 0) {
     return (
@@ -37,9 +23,9 @@ export function DisputesTab() {
   )
 }
 
-function DisputeCard({ dispute, isHighlighted }: { dispute: ReturnType<typeof useBriefStore.getState>['disputes'][number]; isHighlighted?: boolean }) {
+function DisputeCard({ dispute, isHighlighted }: { dispute: ReturnType<typeof useAnalysisStore.getState>['disputes'][number]; isHighlighted?: boolean }) {
   const [expanded, setExpanded] = useState(false)
-  const setHighlightDisputeId = useBriefStore((s) => s.setHighlightDisputeId)
+  const setHighlightDisputeId = useAnalysisStore((s) => s.setHighlightDisputeId)
 
   // Auto-expand and scroll into view when highlighted
   useEffect(() => {

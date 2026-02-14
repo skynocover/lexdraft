@@ -5,6 +5,7 @@ import { getDB } from '../db'
 import { messages } from '../db/schema'
 import { callAIStreaming, type ChatMessage, type ToolCall, type AIEnv } from '../agent/aiClient'
 import { TOOL_DEFINITIONS, executeTool } from '../agent/tools'
+import { parseOpenAIStream, type OpenAIChunk } from '../agent/sseParser'
 import type { SSEEvent } from '../../shared/types'
 
 const MAX_ROUNDS = 15
@@ -219,77 +220,38 @@ export class AgentDO extends DurableObject<Env> {
       const toolCalls: ToolCall[] = []
       const toolCallBuffers: Map<number, { id: string; name: string; args: string }> = new Map()
 
-      const reader = response.body!.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
+      await parseOpenAIStream(response, async (chunk: OpenAIChunk) => {
+        if (signal.aborted) return
 
-      while (true) {
-        if (signal.aborted) break
-        const { done, value } = await reader.read()
-        if (done) break
+        // Track usage from final chunk
+        if (chunk.usage) {
+          totalPromptTokens += chunk.usage.prompt_tokens || 0
+          totalCompletionTokens += chunk.usage.completion_tokens || 0
+        }
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+        const delta = chunk.choices?.[0]?.delta
+        if (!delta) return
 
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6).trim()
-          if (data === '[DONE]') continue
+        // Text content
+        if (delta.content) {
+          fullContent += delta.content
+          await sendSSE({ type: 'text_delta', delta: delta.content })
+        }
 
-          try {
-            const chunk = JSON.parse(data) as {
-              choices: Array<{
-                delta: {
-                  content?: string
-                  tool_calls?: Array<{
-                    index: number
-                    id?: string
-                    function?: { name?: string; arguments?: string }
-                  }>
-                }
-                finish_reason?: string | null
-              }>
-              usage?: {
-                prompt_tokens?: number
-                completion_tokens?: number
-                total_tokens?: number
-              }
+        // Tool calls (streamed incrementally)
+        if (delta.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            const idx = tc.index
+            if (!toolCallBuffers.has(idx)) {
+              toolCallBuffers.set(idx, { id: tc.id || '', name: '', args: '' })
             }
-
-            // Track usage from final chunk
-            if (chunk.usage) {
-              totalPromptTokens += chunk.usage.prompt_tokens || 0
-              totalCompletionTokens += chunk.usage.completion_tokens || 0
-            }
-
-            const delta = chunk.choices?.[0]?.delta
-            if (!delta) continue
-
-            // Text content
-            if (delta.content) {
-              fullContent += delta.content
-              await sendSSE({ type: 'text_delta', delta: delta.content })
-            }
-
-            // Tool calls (streamed incrementally)
-            if (delta.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index
-                if (!toolCallBuffers.has(idx)) {
-                  toolCallBuffers.set(idx, { id: tc.id || '', name: '', args: '' })
-                }
-                const buf = toolCallBuffers.get(idx)!
-                if (tc.id) buf.id = tc.id
-                if (tc.function?.name) buf.name += tc.function.name
-                if (tc.function?.arguments) buf.args += tc.function.arguments
-              }
-            }
-          } catch {
-            // Skip unparseable chunks
+            const buf = toolCallBuffers.get(idx)!
+            if (tc.id) buf.id = tc.id
+            if (tc.function?.name) buf.name += tc.function.name
+            if (tc.function?.arguments) buf.args += tc.function.arguments
           }
         }
-      }
+      })
 
       await sendSSE({ type: 'message_end', message_id: assistantMsgId })
 

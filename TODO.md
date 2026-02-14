@@ -237,3 +237,42 @@
 - [ ] SSE 連線中斷：前端自動重連、斷線期間訊息補回
 - [ ] 檔案上傳失敗：R2 寫入失敗回滾 D1 記錄、前端顯示具體錯誤原因
 - [ ] Token / 成本超限：接近上限時 Status Bar 警告、超限時阻止新的 Agent 請求
+
+---
+
+## Phase 3 — 健壯性提升（Robustness）
+
+> 目標：提升系統穩定度與可維護性，統一錯誤處理、加入驗證層、改善使用者回饋。
+
+### 3.1 Zod 驗證層
+
+- [ ] 安裝 zod + @hono/zod-validator
+- [ ] 為所有 API route 的 request body 加入 Zod schema 驗證
+  - [ ] `POST /api/cases` — title required, case_number optional string
+  - [ ] `PUT /api/cases/:id` — partial case fields
+  - [ ] `PUT /api/files/:id` — category enum, doc_type enum, doc_date optional
+  - [ ] `PUT /api/briefs/:id` — title string, content_structured object
+  - [ ] `POST /api/law/search` — query required string, limit optional number
+- [ ] Agent tool arguments 加入 runtime Zod 驗證（替代目前的 `as string` 強制型別轉換）
+- [ ] 統一錯誤回傳格式：`{ error: string, details?: ZodError['issues'] }`
+
+### 3.2 錯誤處理統一
+
+- [ ] 建立 `src/server/lib/errors.ts`：AppError class（statusCode + message + code）
+- [ ] Hono global error handler：捕獲 AppError → 回傳結構化錯誤 JSON
+- [ ] Agent tool 執行錯誤：統一用 toolError helper，加入 error code 分類
+- [ ] AI API 呼叫：加入 retry with exponential backoff（最多 3 次）
+- [ ] Queue Consumer：失敗時寫回 D1（status: error + error_message），支援手動重試
+
+### 3.3 前端 Toast 通知
+
+- [ ] 建立全域 Toast 系統（useToastStore 或輕量 context）
+- [ ] API 錯誤自動 toast（檔案上傳失敗、書狀儲存失敗、法條搜尋失敗等）
+- [ ] 成功操作 toast（書狀已儲存、檔案已刪除等）
+- [ ] SSE 連線中斷 toast + 自動重連提示
+
+### 3.4 配置清理
+
+- [ ] 將 AI model name、max rounds、file size limits 等硬編碼值抽到共用 config
+- [ ] 統一 AI prompt templates 到 `src/server/agent/prompts.ts`
+- [ ] 移除開發用 console.error，改為結構化 logging

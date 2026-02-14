@@ -1,26 +1,13 @@
 import { useState } from 'react'
-import { useBriefStore, type Damage } from '../../stores/useBriefStore'
-
-/** Strip emoji, U+FFFD replacement chars, and other non-text symbols */
-function cleanText(text: string): string {
-  return text
-    .replace(/\uFFFD/g, '')
-    .replace(/[\u{1F600}-\u{1F9FF}]/gu, '')
-    .replace(/[\u{2600}-\u{27BF}]/gu, '')
-    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
-    .replace(/[\u{1F000}-\u{1FAFF}]/gu, '')
-    .replace(/[\u{200D}]/gu, '')
-    .replace(/[\u{20E3}]/gu, '')
-    .replace(/[\u{E0020}-\u{E007F}]/gu, '')
-    .trim()
-}
+import { useAnalysisStore, type Damage } from '../../stores/useAnalysisStore'
+import { cleanText } from '../../lib/textUtils'
 
 function formatAmount(amount: number): string {
   return `NT$ ${amount.toLocaleString()}`
 }
 
 export function DamagesTab() {
-  const damages = useBriefStore((s) => s.damages)
+  const damages = useAnalysisStore((s) => s.damages)
 
   if (damages.length === 0) {
     return (

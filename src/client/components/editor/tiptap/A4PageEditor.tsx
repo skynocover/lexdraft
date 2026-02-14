@@ -3,6 +3,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import type { BriefEditorProps } from '../types'
 import { useBriefStore } from '../../../stores/useBriefStore'
+import { useAnalysisStore } from '../../../stores/useAnalysisStore'
 import { useUIStore } from '../../../stores/useUIStore'
 import { useAutoSave } from '../../../hooks/useAutoSave'
 import { CitationNode } from './extensions/CitationNode'
@@ -45,7 +46,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
     // Open bottom panel, switch to disputes tab, highlight the dispute card
     useUIStore.getState().setBottomPanelOpen(true)
     useUIStore.getState().setBottomPanelTab('disputes')
-    useBriefStore.getState().setHighlightDisputeId(disputeId)
+    useAnalysisStore.getState().setHighlightDisputeId(disputeId)
 
     // Scroll dispute card into view
     setTimeout(() => {

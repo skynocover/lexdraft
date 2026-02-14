@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { api } from '../lib/api'
 
+// Re-export analysis types for backward compatibility
+export type { Dispute, Damage, TimelineEvent, Party } from './useAnalysisStore'
+
 export interface Citation {
   id: string
   label: string
@@ -37,31 +40,6 @@ export interface Brief {
   updated_at: string
 }
 
-export interface Dispute {
-  id: string
-  case_id: string
-  brief_id: string | null
-  number: number
-  title: string | null
-  our_position: string | null
-  their_position: string | null
-  evidence: string[] | null
-  law_refs: string[] | null
-  priority: number
-}
-
-export interface Damage {
-  id: string
-  case_id: string
-  category: string
-  description: string | null
-  amount: number
-  basis: string | null
-  evidence_refs: string[]
-  dispute_id: string | null
-  created_at: string
-}
-
 export interface LawRef {
   id: string
   case_id: string
@@ -73,20 +51,6 @@ export interface LawRef {
   usage_count: number | null
 }
 
-export interface TimelineEvent {
-  date: string
-  title: string
-  description: string
-  source_file: string
-  is_critical: boolean
-}
-
-export interface Party {
-  role: 'plaintiff' | 'defendant'
-  name: string
-  description?: string
-}
-
 type ContentSnapshot = { paragraphs: Paragraph[] }
 
 const MAX_HISTORY = 50
@@ -94,40 +58,26 @@ const MAX_HISTORY = 50
 interface BriefState {
   currentBrief: Brief | null
   briefs: Brief[]
-  disputes: Dispute[]
-  damages: Damage[]
   lawRefs: LawRef[]
-  timeline: TimelineEvent[]
-  parties: Party[]
   rebuttalTargetFileIds: string[]
   dirty: boolean
   saving: boolean
   highlightCitationId: string | null
-  highlightDisputeId: string | null
   _history: ContentSnapshot[]
   _future: ContentSnapshot[]
 
   setCurrentBrief: (brief: Brief | null) => void
   setBriefs: (briefs: Brief[]) => void
-  setDisputes: (disputes: Dispute[]) => void
-  setDamages: (damages: Damage[]) => void
   setLawRefs: (lawRefs: LawRef[]) => void
-  setTimeline: (timeline: TimelineEvent[]) => void
-  setParties: (parties: Party[]) => void
   setRebuttalTargetFileIds: (ids: string[]) => void
   setDirty: (dirty: boolean) => void
   setHighlightCitationId: (id: string | null) => void
-  setHighlightDisputeId: (id: string | null) => void
   setContentStructured: (content: { paragraphs: Paragraph[] }) => void
   setTitle: (title: string) => void
 
   loadBriefs: (caseId: string) => Promise<void>
   loadBrief: (briefId: string) => Promise<void>
-  loadDisputes: (caseId: string) => Promise<void>
-  loadDamages: (caseId: string) => Promise<void>
   loadLawRefs: (caseId: string) => Promise<void>
-  loadTimeline: (caseId: string) => Promise<void>
-  loadParties: (caseId: string) => Promise<void>
   addParagraph: (paragraph: Paragraph) => void
   updateParagraph: (paragraphId: string, paragraph: Paragraph) => void
   removeParagraph: (paragraphId: string) => void
@@ -151,30 +101,20 @@ function cloneSnapshot(s: ContentSnapshot): ContentSnapshot {
 export const useBriefStore = create<BriefState>((set, get) => ({
   currentBrief: null,
   briefs: [],
-  disputes: [],
-  damages: [],
   lawRefs: [],
-  timeline: [],
-  parties: [],
   rebuttalTargetFileIds: [],
   dirty: false,
   saving: false,
   highlightCitationId: null,
-  highlightDisputeId: null,
   _history: [],
   _future: [],
 
   setCurrentBrief: (currentBrief) => set({ currentBrief, _history: [], _future: [] }),
   setBriefs: (briefs) => set({ briefs }),
-  setDisputes: (disputes) => set({ disputes }),
-  setDamages: (damages) => set({ damages }),
   setLawRefs: (lawRefs) => set({ lawRefs }),
-  setTimeline: (timeline) => set({ timeline }),
-  setParties: (parties) => set({ parties }),
   setRebuttalTargetFileIds: (rebuttalTargetFileIds) => set({ rebuttalTargetFileIds }),
   setDirty: (dirty) => set({ dirty }),
   setHighlightCitationId: (highlightCitationId) => set({ highlightCitationId }),
-  setHighlightDisputeId: (highlightDisputeId) => set({ highlightDisputeId }),
 
   setContentStructured: (content: { paragraphs: Paragraph[] }) => {
     const { currentBrief, _history } = get()
@@ -224,48 +164,12 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     }
   },
 
-  loadDisputes: async (caseId: string) => {
-    try {
-      const disputes = await api.get<Dispute[]>(`/cases/${caseId}/disputes`)
-      set({ disputes })
-    } catch (err) {
-      console.error('loadDisputes error:', err)
-    }
-  },
-
-  loadDamages: async (caseId: string) => {
-    try {
-      const damages = await api.get<Damage[]>(`/cases/${caseId}/damages`)
-      set({ damages })
-    } catch (err) {
-      console.error('loadDamages error:', err)
-    }
-  },
-
   loadLawRefs: async (caseId: string) => {
     try {
       const lawRefs = await api.get<LawRef[]>(`/cases/${caseId}/law-refs`)
       set({ lawRefs })
     } catch (err) {
       console.error('loadLawRefs error:', err)
-    }
-  },
-
-  loadTimeline: async (caseId: string) => {
-    try {
-      const timeline = await api.get<TimelineEvent[]>(`/cases/${caseId}/timeline`)
-      set({ timeline })
-    } catch (err) {
-      console.error('loadTimeline error:', err)
-    }
-  },
-
-  loadParties: async (caseId: string) => {
-    try {
-      const parties = await api.get<Party[]>(`/cases/${caseId}/parties`)
-      set({ parties })
-    } catch (err) {
-      console.error('loadParties error:', err)
     }
   },
 

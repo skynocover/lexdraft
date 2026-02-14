@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, memo, type KeyboardEvent } from 'react'
 import { useParams } from 'react-router'
 import Markdown from 'react-markdown'
 import { useChatStore, type ChatMessage } from '../../stores/useChatStore'
@@ -99,9 +99,19 @@ export function ChatPanel() {
           </div>
         )}
 
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} isStreaming={isStreaming} />
-        ))}
+        {messages.map((msg, idx) => {
+          const nextToolResult = msg.role === 'tool_call'
+            ? messages.slice(idx + 1).find((m) => m.role === 'tool_result')
+            : undefined
+          return (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              isStreaming={isStreaming}
+              nextToolResult={nextToolResult}
+            />
+          )
+        })}
 
         {/* Progress indicator */}
         {agentProgress && isStreaming && (
@@ -171,9 +181,16 @@ export function ChatPanel() {
 
 // --- Message Bubble ---
 
-function MessageBubble({ message, isStreaming }: { message: ChatMessage; isStreaming: boolean }) {
+const MessageBubble = memo(function MessageBubble({
+  message,
+  isStreaming,
+  nextToolResult,
+}: {
+  message: ChatMessage
+  isStreaming: boolean
+  nextToolResult?: ChatMessage
+}) {
   const [expanded, setExpanded] = useState(false)
-  const messages = useChatStore((s) => s.messages)
 
   if (message.role === 'user') {
     return (
@@ -211,18 +228,13 @@ function MessageBubble({ message, isStreaming }: { message: ChatMessage; isStrea
     const toolName = (meta.tool_name as string) || message.content
     const toolArgs = (meta.tool_args || meta.args) as Record<string, unknown> | undefined
 
-    // Find the matching tool_result message (next tool_result after this message)
-    const myIndex = messages.findIndex((m) => m.id === message.id)
-    const toolResult = myIndex >= 0
-      ? messages.slice(myIndex + 1).find((m) => m.role === 'tool_result')
-      : undefined
-    const fullResult = toolResult?.content
-    const resultMeta = toolResult?.metadata || {}
+    const fullResult = nextToolResult?.content
+    const resultMeta = nextToolResult?.metadata || {}
     const success = (meta.success ?? resultMeta.success) as boolean | undefined
 
     // Determine if completed: has tool_result or SSE marked done
-    const isDone = status === 'done' || !!toolResult
-    const isRunning = status === 'running' && !toolResult
+    const isDone = status === 'done' || !!nextToolResult
+    const isRunning = status === 'running' && !nextToolResult
 
     // Build label
     const label = getToolLabel(toolName, toolArgs, fullResult, isRunning ? 'running' : 'done')
@@ -296,7 +308,7 @@ function MessageBubble({ message, isStreaming }: { message: ChatMessage; isStrea
 
   // tool_result — skip rendering (merged into tool_call card)
   return null
-}
+})
 
 // --- Tool display helpers ---
 

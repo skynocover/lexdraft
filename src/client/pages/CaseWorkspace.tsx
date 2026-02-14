@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useParams } from 'react-router'
 import { useCaseStore, type Case, type CaseFile } from '../stores/useCaseStore'
 import { useBriefStore } from '../stores/useBriefStore'
+import { useAnalysisStore } from '../stores/useAnalysisStore'
 import { useChatStore } from '../stores/useChatStore'
 import { useTabStore } from '../stores/useTabStore'
 import { api } from '../lib/api'
@@ -22,11 +23,11 @@ export function CaseWorkspace() {
   const currentBrief = useBriefStore((s) => s.currentBrief)
   const setCurrentBrief = useBriefStore((s) => s.setCurrentBrief)
   const loadBriefs = useBriefStore((s) => s.loadBriefs)
-  const loadDisputes = useBriefStore((s) => s.loadDisputes)
-  const loadDamages = useBriefStore((s) => s.loadDamages)
   const loadLawRefs = useBriefStore((s) => s.loadLawRefs)
-  const loadTimeline = useBriefStore((s) => s.loadTimeline)
-  const loadParties = useBriefStore((s) => s.loadParties)
+  const loadDisputes = useAnalysisStore((s) => s.loadDisputes)
+  const loadDamages = useAnalysisStore((s) => s.loadDamages)
+  const loadTimeline = useAnalysisStore((s) => s.loadTimeline)
+  const loadParties = useAnalysisStore((s) => s.loadParties)
   const tabs = useTabStore((s) => s.tabs)
   const activeTabId = useTabStore((s) => s.activeTabId)
   const openBriefTab = useTabStore((s) => s.openBriefTab)
