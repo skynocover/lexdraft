@@ -13,6 +13,7 @@ import { RightSidebar } from "../components/layout/RightSidebar";
 import { TabBar } from "../components/layout/TabBar";
 import { BriefEditor } from "../components/editor";
 import { FileViewer } from "../components/editor/FileViewer";
+import { OutlinePanel } from "../components/editor/OutlinePanel";
 import { AnalysisPanel } from "../components/analysis/AnalysisPanel";
 
 export function CaseWorkspace() {
@@ -118,6 +119,7 @@ export function CaseWorkspace() {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* Editor / FileViewer — takes remaining space */}
             <div className="relative min-h-0 flex-1 flex flex-col overflow-hidden">
+              {activeTab?.data.type === "brief" && <OutlinePanel />}
               {activeTab?.data.type === "brief" ? (
                 <BriefEditor
                   content={currentBrief?.content_structured ?? null}

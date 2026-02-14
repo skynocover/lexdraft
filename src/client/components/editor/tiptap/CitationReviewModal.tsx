@@ -1,106 +1,119 @@
-import { useState, useEffect, useMemo } from 'react'
-import { useBriefStore, type Citation } from '../../../stores/useBriefStore'
+import { useState, useEffect, useMemo } from "react";
+import { useBriefStore, type Citation } from "../../../stores/useBriefStore";
 
 interface CitationReviewModalProps {
-  open: boolean
-  onClose: () => void
+  open: boolean;
+  onClose: () => void;
 }
 
 interface ReviewItem {
-  paragraphId: string
-  citation: Citation
-  paragraphPreview: string
+  paragraphId: string;
+  citation: Citation;
+  paragraphPreview: string;
 }
 
-export function CitationReviewModal({ open, onClose }: CitationReviewModalProps) {
-  const currentBrief = useBriefStore((s) => s.currentBrief)
-  const updateCitationStatus = useBriefStore((s) => s.updateCitationStatus)
-  const removeCitation = useBriefStore((s) => s.removeCitation)
-  const setHighlightCitationId = useBriefStore((s) => s.setHighlightCitationId)
+export function CitationReviewModal({
+  open,
+  onClose,
+}: CitationReviewModalProps) {
+  const currentBrief = useBriefStore((s) => s.currentBrief);
+  const updateCitationStatus = useBriefStore((s) => s.updateCitationStatus);
+  const removeCitation = useBriefStore((s) => s.removeCitation);
+  const setHighlightCitationId = useBriefStore((s) => s.setHighlightCitationId);
 
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [confirmedCount, setConfirmedCount] = useState(0)
-  const [removedCount, setRemovedCount] = useState(0)
-  const [finished, setFinished] = useState(false)
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [confirmedCount, setConfirmedCount] = useState(0);
+  const [removedCount, setRemovedCount] = useState(0);
+  const [finished, setFinished] = useState(false);
 
   // Collect all pending citations
   const pendingItems = useMemo<ReviewItem[]>(() => {
-    if (!currentBrief?.content_structured) return []
-    const items: ReviewItem[] = []
+    if (!currentBrief?.content_structured) return [];
+    const items: ReviewItem[] = [];
     for (const p of currentBrief.content_structured.paragraphs) {
-      const preview = p.content_md.slice(0, 80)
+      const preview = p.content_md.slice(0, 80);
       for (const c of p.citations) {
-        if (c.status === 'pending') {
-          items.push({ paragraphId: p.id, citation: c, paragraphPreview: preview })
+        if (c.status === "pending") {
+          items.push({
+            paragraphId: p.id,
+            citation: c,
+            paragraphPreview: preview,
+          });
         }
       }
       if (p.segments) {
         for (const seg of p.segments) {
           for (const c of seg.citations) {
-            if (c.status === 'pending') {
-              items.push({ paragraphId: p.id, citation: c, paragraphPreview: preview })
+            if (c.status === "pending") {
+              items.push({
+                paragraphId: p.id,
+                citation: c,
+                paragraphPreview: preview,
+              });
             }
           }
         }
       }
     }
-    return items
-  }, [open]) // Only recompute when modal opens
+    return items;
+  }, [open]); // Only recompute when modal opens
 
-  const total = pendingItems.length
-  const current = pendingItems[currentIndex]
+  const total = pendingItems.length;
+  const current = pendingItems[currentIndex];
 
   // Highlight current citation and scroll to paragraph
   useEffect(() => {
-    if (!open || !current) return
-    setHighlightCitationId(current.citation.id)
-    const el = document.querySelector(`[data-p="${current.paragraphId}"]`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [currentIndex, open, current])
+    if (!open || !current) return;
+    setHighlightCitationId(current.citation.id);
+    const el = document.querySelector(
+      `[data-paragraph-id="${current.paragraphId}"]`,
+    );
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [currentIndex, open, current]);
 
   // Reset state on open
   useEffect(() => {
     if (open) {
-      setCurrentIndex(0)
-      setConfirmedCount(0)
-      setRemovedCount(0)
-      setFinished(false)
+      setCurrentIndex(0);
+      setConfirmedCount(0);
+      setRemovedCount(0);
+      setFinished(false);
     }
-  }, [open])
+  }, [open]);
 
   const goNext = () => {
     if (currentIndex + 1 >= total) {
-      setFinished(true)
-      setHighlightCitationId(null)
+      setFinished(true);
+      setHighlightCitationId(null);
     } else {
-      setCurrentIndex(currentIndex + 1)
+      setCurrentIndex(currentIndex + 1);
     }
-  }
+  };
 
   const handleConfirm = () => {
-    if (!current) return
-    updateCitationStatus(current.paragraphId, current.citation.id, 'confirmed')
-    setConfirmedCount((n) => n + 1)
-    goNext()
-  }
+    if (!current) return;
+    updateCitationStatus(current.paragraphId, current.citation.id, "confirmed");
+    setConfirmedCount((n) => n + 1);
+    goNext();
+  };
 
   const handleRemove = () => {
-    if (!current) return
-    removeCitation(current.paragraphId, current.citation.id)
-    setRemovedCount((n) => n + 1)
-    goNext()
-  }
+    if (!current) return;
+    removeCitation(current.paragraphId, current.citation.id);
+    setRemovedCount((n) => n + 1);
+    goNext();
+  };
 
   const handleSkip = () => {
-    goNext()
-  }
+    goNext();
+  };
 
   const handleClose = () => {
-    setHighlightCitationId(null)
-    onClose()
-  }
+    setHighlightCitationId(null);
+    onClose();
+  };
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -112,9 +125,11 @@ export function CitationReviewModal({ open, onClose }: CitationReviewModalProps)
         {/* Header */}
         <div className="flex items-center justify-between border-b border-bd px-5 py-3">
           <span className="text-sm font-medium text-t1">
-            引用審查{' '}
+            引用審查{" "}
             {!finished && total > 0 && (
-              <span className="text-t3">({currentIndex + 1}/{total})</span>
+              <span className="text-t3">
+                ({currentIndex + 1}/{total})
+              </span>
             )}
           </span>
           <button
@@ -136,12 +151,14 @@ export function CitationReviewModal({ open, onClose }: CitationReviewModalProps)
               <p className="mb-2 text-sm font-medium text-t1">審查完成！</p>
               <p className="text-sm text-t2">
                 <span className="text-gr">{confirmedCount} 確認</span>
-                {' / '}
+                {" / "}
                 <span className="text-rd">{removedCount} 移除</span>
                 {total - confirmedCount - removedCount > 0 && (
                   <>
-                    {' / '}
-                    <span className="text-t3">{total - confirmedCount - removedCount} 跳過</span>
+                    {" / "}
+                    <span className="text-t3">
+                      {total - confirmedCount - removedCount} 跳過
+                    </span>
                   </>
                 )}
               </p>
@@ -156,13 +173,21 @@ export function CitationReviewModal({ open, onClose }: CitationReviewModalProps)
             <>
               {/* Citation info */}
               <div className="mb-3 flex items-center gap-2">
-                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                  current.citation.type === 'law' ? 'bg-pu/20 text-pu' : 'bg-ac/20 text-ac'
-                }`}>
-                  {current.citation.type === 'law' ? '法條' : '文件'}
+                <span
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    current.citation.type === "law"
+                      ? "bg-pu/20 text-pu"
+                      : "bg-ac/20 text-ac"
+                  }`}
+                >
+                  {current.citation.type === "law" ? "法條" : "文件"}
                 </span>
-                <span className="truncate text-sm font-medium text-t1">{current.citation.label}</span>
-                <span className="shrink-0 rounded bg-yl/20 px-1.5 py-0.5 text-[10px] text-yl">待確認</span>
+                <span className="truncate text-sm font-medium text-t1">
+                  {current.citation.label}
+                </span>
+                <span className="shrink-0 rounded bg-yl/20 px-1.5 py-0.5 text-[10px] text-yl">
+                  待確認
+                </span>
               </div>
 
               {/* Source quote */}
@@ -183,7 +208,7 @@ export function CitationReviewModal({ open, onClose }: CitationReviewModalProps)
                 <div className="rounded bg-bg-2 p-3">
                   <p className="text-xs leading-5 text-t2">
                     {current.paragraphPreview}
-                    {current.paragraphPreview.length >= 80 && '...'}
+                    {current.paragraphPreview.length >= 80 && "..."}
                   </p>
                 </div>
               </div>
@@ -214,5 +239,5 @@ export function CitationReviewModal({ open, onClose }: CitationReviewModalProps)
         </div>
       </div>
     </div>
-  )
+  );
 }

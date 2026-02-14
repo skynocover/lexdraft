@@ -13,11 +13,11 @@ import { LawSearchDialog } from "./sidebar/LawSearchDialog";
 
 type Category = "ours" | "theirs" | "court" | "evidence" | "other";
 
-const FILE_GROUPS: { key: Category; label: string; color: string }[] = [
-  { key: "ours", label: "我方書狀", color: "text-ac" },
-  { key: "theirs", label: "對方書狀", color: "text-or" },
-  { key: "court", label: "法院文件", color: "text-cy" },
-  { key: "evidence", label: "證據資料", color: "text-gr" },
+const FILE_GROUPS: { key: Category; label: string }[] = [
+  { key: "ours", label: "我方書狀" },
+  { key: "theirs", label: "對方書狀" },
+  { key: "court", label: "法院文件" },
+  { key: "evidence", label: "證據資料" },
 ];
 
 export function RightSidebar() {
@@ -56,7 +56,6 @@ export function RightSidebar() {
 
   // Two-tier law refs: cited in current brief vs manual pool
   const { citedLawRefs, availableLawRefs } = useMemo(() => {
-    // Scan current brief paragraphs for cited law labels
     const citedLabels = new Set<string>();
     if (currentBrief?.content_structured?.paragraphs) {
       for (const p of currentBrief.content_structured.paragraphs) {
@@ -81,7 +80,6 @@ export function RightSidebar() {
       } else if (ref.source === "manual") {
         available.push(ref);
       }
-      // source='search' — not displayed in sidebar
     }
     return { citedLawRefs: cited, availableLawRefs: available };
   }, [lawRefs, currentBrief]);
@@ -134,6 +132,10 @@ export function RightSidebar() {
     }
   };
 
+  const handleDropFile = async (fileId: string, newCategory: string) => {
+    await handleCategoryChange(fileId, newCategory);
+  };
+
   const handleDelete = async (fileId: string) => {
     try {
       await api.delete(`/files/${fileId}`);
@@ -153,7 +155,7 @@ export function RightSidebar() {
   };
 
   return (
-    <aside className="flex w-60 min-h-0 shrink-0 flex-col border-l border-bd bg-bg-1 overflow-y-auto">
+    <aside className="flex w-80 min-h-0 shrink-0 flex-col border-l border-bd bg-bg-1 overflow-y-auto">
       {confirmDelete && (
         <ConfirmDialog
           message={`確定要刪除「${confirmDelete.title}」嗎？此操作無法復原。`}
@@ -244,13 +246,49 @@ export function RightSidebar() {
 
       {/* 案件卷宗區塊 */}
       <div className="border-b border-bd">
-        <SectionHeader
-          label="案件卷宗"
-          count={totalFiles}
-          countUnit="個檔案"
-          open={filesOpen}
-          onToggle={() => setFilesOpen(!filesOpen)}
-        />
+        <div className="flex items-center">
+          <div className="flex-1">
+            <SectionHeader
+              label="案件卷宗"
+              count={totalFiles}
+              countUnit="個檔案"
+              open={filesOpen}
+              onToggle={() => setFilesOpen(!filesOpen)}
+            />
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            multiple
+            onChange={handleUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="mr-2 rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac disabled:opacity-50"
+            title="上傳檔案"
+          >
+            {uploading ? (
+              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ac border-t-transparent" />
+            ) : (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            )}
+          </button>
+        </div>
         {filesOpen && (
           <>
             {processingFiles > 0 && (
@@ -279,42 +317,30 @@ export function RightSidebar() {
               <FileGroup
                 key={g.key}
                 label={g.label}
-                color={g.color}
+                groupKey={g.key}
                 files={g.files}
                 rebuttalTargetIds={rebuttalTargetFileIds}
-                onCategoryChange={handleCategoryChange}
                 onDelete={handleDelete}
+                onDropFile={handleDropFile}
               />
             ))}
 
             {otherFiles.length > 0 && (
               <FileGroup
                 label="其他"
-                color="text-t3"
+                groupKey="other"
                 files={otherFiles}
                 rebuttalTargetIds={rebuttalTargetFileIds}
-                onCategoryChange={handleCategoryChange}
                 onDelete={handleDelete}
+                onDropFile={handleDropFile}
               />
             )}
 
-            <div className="px-3 pb-3 pt-1">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf"
-                multiple
-                onChange={handleUpload}
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="flex w-full items-center justify-center rounded border border-dashed border-bd py-4 text-xs text-t3 transition hover:border-ac hover:text-ac disabled:opacity-50"
-              >
-                {uploading ? "上傳中..." : "＋ 上傳（自動分類）"}
-              </button>
-            </div>
+            {caseFiles.length === 0 && (
+              <div className="px-3 pb-3">
+                <p className="text-center text-[11px] text-t3">尚無檔案</p>
+              </div>
+            )}
           </>
         )}
       </div>
