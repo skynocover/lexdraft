@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useBriefStore } from "../../stores/useBriefStore";
 import { useTabStore } from "../../stores/useTabStore";
 import { TabBar } from "../layout/TabBar";
@@ -14,6 +15,7 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
   const tabRegistry = useTabStore((s) => s.tabRegistry);
   const focusedPanelId = useTabStore((s) => s.focusedPanelId);
   const focusPanel = useTabStore((s) => s.focusPanel);
+  const setFileHighlight = useTabStore((s) => s.setFileHighlight);
   const currentBrief = useBriefStore((s) => s.currentBrief);
 
   const isFocused = focusedPanelId === panelId;
@@ -25,6 +27,12 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
       focusPanel(panelId);
     }
   };
+
+  const handleClearHighlight = useCallback(() => {
+    if (activeTab?.type === "file") {
+      setFileHighlight(activeTab.fileId, null);
+    }
+  }, [activeTab, setFileHighlight]);
 
   return (
     <div
@@ -47,6 +55,8 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
             filename={activeTab.filename}
             pdfUrl={activeTab.pdfUrl}
             loading={activeTab.loading}
+            highlightText={activeTab.highlightText}
+            onClearHighlight={handleClearHighlight}
           />
         ) : (
           <div className="flex h-full items-center justify-center">

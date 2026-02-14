@@ -2,6 +2,8 @@ import { useRef, useCallback, useState } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
 import { useBriefStore } from "../../../../stores/useBriefStore";
+import { useTabStore } from "../../../../stores/useTabStore";
+import { useCaseStore } from "../../../../stores/useCaseStore";
 
 const POPOVER_CLOSE_DELAY = 150;
 
@@ -35,12 +37,14 @@ export function CitationNodeView({ node }: NodeViewProps) {
     type,
     status,
     quotedText,
+    fileId,
     index,
     blockIndex,
     charStart,
     charEnd,
   } = node.attrs;
   const isLaw = type === "law";
+  const isFile = type === "file";
   const isPending = status === "pending";
   const isHighlighted = citationId === highlightCitationId;
 
@@ -61,6 +65,17 @@ export function CitationNodeView({ node }: NodeViewProps) {
       : charStart != null && charEnd != null && charEnd - charStart > 0
         ? `第 ${charStart + 1}–${charEnd + 1} 字`
         : null;
+
+  const handleOpenFile = useCallback(() => {
+    if (!isFile || !fileId) return;
+    const files = useCaseStore.getState().files;
+    const file = files.find((f) => f.id === fileId);
+    if (!file || file.status !== "ready") return;
+
+    const text = quotedText ? stripMarkdownHeaders(quotedText).trim() : null;
+    useTabStore.getState().openFileTabInOtherPanel(fileId, file.filename, text);
+    setShowPopover(false);
+  }, [isFile, fileId, quotedText]);
 
   return (
     <NodeViewWrapper
@@ -150,6 +165,52 @@ export function CitationNodeView({ node }: NodeViewProps) {
               </p>
             </div>
           )}
+
+          {/* Open file button for file citations */}
+          {isFile && fileId && (
+            <button
+              onClick={handleOpenFile}
+              style={{
+                marginTop: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "4px 8px",
+                borderRadius: 4,
+                fontSize: 11,
+                fontWeight: 500,
+                color: "#1d4ed8",
+                background: "rgba(59,130,246,0.08)",
+                border: "none",
+                cursor: "pointer",
+                width: "100%",
+                justifyContent: "center",
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = "rgba(59,130,246,0.18)";
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = "rgba(59,130,246,0.08)";
+              }}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+              開啟來源文件
+            </button>
+          )}
+
           <div className="citation-popover-arrow" />
         </div>
       )}

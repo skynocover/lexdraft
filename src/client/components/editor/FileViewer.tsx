@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -38,18 +38,142 @@ const writeZoom = (val: number) => {
   }
 };
 
+/** Normalize whitespace for fuzzy text matching */
+const normalizeText = (text: string): string =>
+  text.replace(/\s+/g, "").replace(/[\u200B-\u200D\uFEFF]/g, "");
+
+/**
+ * Find and highlight matching text in the PDF text layer.
+ * Walks all text layer spans, builds a combined string, finds the match range,
+ * then wraps matched characters with <mark> elements.
+ */
+const highlightTextInContainer = (
+  container: HTMLElement,
+  searchText: string,
+): HTMLElement | null => {
+  // Clear previous highlights
+  container.querySelectorAll("mark[data-citation-hl]").forEach((mark) => {
+    const parent = mark.parentNode;
+    if (parent) {
+      parent.replaceChild(
+        document.createTextNode(mark.textContent || ""),
+        mark,
+      );
+      parent.normalize();
+    }
+  });
+
+  if (!searchText) return null;
+
+  const textLayers = container.querySelectorAll(".textLayer");
+  const normalizedSearch = normalizeText(searchText);
+  // Use a shorter substring for matching (first 30 chars) to improve fuzzy hit rate
+  const searchSnippet =
+    normalizedSearch.length > 30
+      ? normalizedSearch.slice(0, 30)
+      : normalizedSearch;
+
+  let firstHighlight: HTMLElement | null = null;
+
+  textLayers.forEach((textLayer) => {
+    const spans = Array.from(textLayer.querySelectorAll("span"));
+    if (spans.length === 0) return;
+
+    // Build map: normalizedIndex → { spanIdx, charIdx }
+    type CharMap = { spanIdx: number; charIdx: number };
+    const charMap: CharMap[] = [];
+    let combined = "";
+
+    spans.forEach((span, spanIdx) => {
+      const text = span.textContent || "";
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        // Skip whitespace and zero-width chars in the normalized version
+        if (/\s/.test(ch) || /[\u200B-\u200D\uFEFF]/.test(ch)) continue;
+        charMap.push({ spanIdx, charIdx: i });
+        combined += ch;
+      }
+    });
+
+    const matchIdx = combined.indexOf(searchSnippet);
+    if (matchIdx === -1) return;
+
+    // Determine full match length (use full search if it fits, else snippet)
+    const fullMatchIdx = combined.indexOf(normalizedSearch);
+    const actualMatchStart = fullMatchIdx !== -1 ? fullMatchIdx : matchIdx;
+    const actualMatchLen =
+      fullMatchIdx !== -1 ? normalizedSearch.length : searchSnippet.length;
+
+    // Group matched char positions by span
+    const spanRanges = new Map<number, { start: number; end: number }[]>();
+    for (let i = actualMatchStart; i < actualMatchStart + actualMatchLen; i++) {
+      if (i >= charMap.length) break;
+      const { spanIdx, charIdx } = charMap[i];
+      if (!spanRanges.has(spanIdx)) {
+        spanRanges.set(spanIdx, []);
+      }
+      const ranges = spanRanges.get(spanIdx)!;
+      const last = ranges[ranges.length - 1];
+      if (last && last.end === charIdx) {
+        last.end = charIdx + 1;
+      } else {
+        ranges.push({ start: charIdx, end: charIdx + 1 });
+      }
+    }
+
+    // Apply highlights
+    spanRanges.forEach((ranges, spanIdx) => {
+      const span = spans[spanIdx];
+      const text = span.textContent || "";
+      const frag = document.createDocumentFragment();
+      let pos = 0;
+
+      ranges.forEach(({ start, end }) => {
+        if (start > pos) {
+          frag.appendChild(document.createTextNode(text.slice(pos, start)));
+        }
+        const mark = document.createElement("mark");
+        mark.setAttribute("data-citation-hl", "true");
+        mark.style.backgroundColor = "rgba(250, 204, 21, 0.4)";
+        mark.style.color = "inherit";
+        mark.style.borderRadius = "2px";
+        mark.style.padding = "0";
+        mark.textContent = text.slice(start, end);
+        frag.appendChild(mark);
+        if (!firstHighlight) firstHighlight = mark;
+        pos = end;
+      });
+
+      if (pos < text.length) {
+        frag.appendChild(document.createTextNode(text.slice(pos)));
+      }
+
+      span.textContent = "";
+      span.appendChild(frag);
+    });
+  });
+
+  return firstHighlight;
+};
+
 export function FileViewer({
   filename,
   pdfUrl,
   loading,
+  highlightText,
+  onClearHighlight,
 }: {
   filename: string;
   pdfUrl: string | null;
   loading: boolean;
+  highlightText?: string | null;
+  onClearHighlight?: () => void;
 }) {
   const [numPages, setNumPages] = useState<number>(0);
   const [error, setError] = useState(false);
   const [zoom, setZoomRaw] = useState(readZoom);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const highlightAppliedRef = useRef<string | null>(null);
 
   const setZoom = (val: number) => {
     setZoomRaw(val);
@@ -79,6 +203,35 @@ export function FileViewer({
     }
   };
 
+  // Apply highlight after pages render
+  useEffect(() => {
+    if (!highlightText || !containerRef.current || numPages === 0) return;
+    if (highlightAppliedRef.current === highlightText) return;
+
+    // Wait for text layers to render
+    const timer = setTimeout(() => {
+      if (!containerRef.current) return;
+      const firstMark = highlightTextInContainer(
+        containerRef.current,
+        highlightText,
+      );
+      highlightAppliedRef.current = highlightText;
+      if (firstMark) {
+        firstMark.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [highlightText, numPages]);
+
+  // Clear highlights when highlightText is removed
+  useEffect(() => {
+    if (!highlightText && highlightAppliedRef.current && containerRef.current) {
+      highlightTextInContainer(containerRef.current, "");
+      highlightAppliedRef.current = null;
+    }
+  }, [highlightText]);
+
   const pageWidth = Math.round(DEFAULT_BASE_WIDTH * (zoom / 100));
 
   return (
@@ -91,6 +244,24 @@ export function FileViewer({
         <span className="truncate text-xs font-medium text-t1">{filename}</span>
         {numPages > 0 && (
           <span className="text-[10px] text-t3">{numPages} 頁</span>
+        )}
+
+        {/* Highlight indicator */}
+        {highlightText && (
+          <div className="flex items-center gap-1.5">
+            <span className="rounded bg-yl/20 px-2 py-0.5 text-[10px] text-yl">
+              引用定位
+            </span>
+            {onClearHighlight && (
+              <button
+                onClick={onClearHighlight}
+                className="rounded p-0.5 text-t3 transition hover:bg-bg-3 hover:text-t1"
+                title="清除標記"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         )}
 
         {/* Zoom controls */}
@@ -146,7 +317,7 @@ export function FileViewer({
           <p className="text-sm text-t3">載入 PDF 中...</p>
         </div>
       ) : pdfUrl && !error ? (
-        <div className="flex-1 overflow-auto bg-[#525659]">
+        <div ref={containerRef} className="flex-1 overflow-auto bg-[#525659]">
           <Document
             file={pdfUrl}
             onLoadSuccess={onLoadSuccess}

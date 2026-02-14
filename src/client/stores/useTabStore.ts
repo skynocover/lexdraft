@@ -14,6 +14,7 @@ interface FileTab {
   filename: string;
   pdfUrl: string | null;
   loading: boolean;
+  highlightText: string | null;
 }
 
 export type TabData = BriefTab | FileTab;
@@ -31,6 +32,17 @@ interface TabState {
 
   openBriefTab: (briefId: string, title: string) => void;
   openFileTab: (fileId: string, filename: string) => void;
+  openFileTabWithHighlight: (
+    fileId: string,
+    filename: string,
+    highlightText: string,
+  ) => void;
+  openFileTabInOtherPanel: (
+    fileId: string,
+    filename: string,
+    highlightText?: string | null,
+  ) => void;
+  setFileHighlight: (fileId: string, highlightText: string | null) => void;
   closeTab: (tabId: string, panelId: string) => void;
   setActiveTab: (tabId: string, panelId: string) => void;
   focusPanel: (panelId: string) => void;
@@ -122,6 +134,7 @@ export const useTabStore = create<TabState>((set, get) => ({
         filename,
         pdfUrl: null,
         loading: true,
+        highlightText: null,
       },
     };
     set({
@@ -172,6 +185,70 @@ export const useTabStore = create<TabState>((set, get) => ({
           });
         }
       });
+  },
+
+  openFileTabWithHighlight: (fileId, filename, highlightText) => {
+    const { openFileTab, setFileHighlight } = get();
+    openFileTab(fileId, filename);
+    // Set highlight after tab is opened (may be existing or new)
+    setFileHighlight(fileId, highlightText);
+  },
+
+  openFileTabInOtherPanel: (fileId, filename, highlightText) => {
+    const { panels, focusedPanelId, tabRegistry, setFileHighlight } = get();
+    const tabId = `file:${fileId}`;
+
+    // If tab already exists in a non-focused panel, just activate it there
+    const existingPanel = findPanelWithTab(panels, tabId);
+    if (existingPanel && existingPanel.id !== focusedPanelId) {
+      set({
+        panels: panels.map((p) =>
+          p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p,
+        ),
+      });
+      if (highlightText) setFileHighlight(fileId, highlightText);
+      return;
+    }
+
+    // If tab exists in the focused panel, split it out to a new panel
+    if (existingPanel && existingPanel.id === focusedPanelId) {
+      get().splitPanel(tabId, focusedPanelId);
+      if (highlightText) setFileHighlight(fileId, highlightText);
+      return;
+    }
+
+    // Tab doesn't exist yet — find a non-focused panel or create one
+    const otherPanel = panels.find((p) => p.id !== focusedPanelId);
+    if (otherPanel) {
+      // Temporarily switch focus to the other panel, open file, then restore focus
+      const prevFocused = focusedPanelId;
+      set({ focusedPanelId: otherPanel.id });
+      get().openFileTab(fileId, filename);
+      if (highlightText) get().setFileHighlight(fileId, highlightText);
+      // Restore focus back to the original panel (where the brief is)
+      set({ focusedPanelId: prevFocused });
+    } else {
+      // Only one panel — open the file in it, then split it out
+      get().openFileTab(fileId, filename);
+      if (highlightText) get().setFileHighlight(fileId, highlightText);
+      get().splitPanel(tabId, focusedPanelId);
+      // After split, the new panel has focus — restore focus to the original
+      set({ focusedPanelId: focusedPanelId });
+    }
+  },
+
+  setFileHighlight: (fileId, highlightText) => {
+    const tabId = `file:${fileId}`;
+    const { tabRegistry } = get();
+    const tabData = tabRegistry[tabId];
+    if (tabData?.type === "file") {
+      set({
+        tabRegistry: {
+          ...tabRegistry,
+          [tabId]: { ...tabData, highlightText },
+        },
+      });
+    }
   },
 
   closeTab: (tabId, panelId) => {
