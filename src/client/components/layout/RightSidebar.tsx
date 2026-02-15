@@ -61,7 +61,7 @@ export function RightSidebar() {
     (f) => !f.category || !FILE_GROUPS.some((g) => g.key === f.category),
   );
 
-  // Two-tier law refs: cited in current brief vs manual pool
+  // Two-tier law refs: cited in current brief vs available pool
   const { citedLawRefs, availableLawRefs } = useMemo(() => {
     const citedLabels = new Set<string>();
     if (currentBrief?.content_structured?.paragraphs) {
@@ -82,9 +82,9 @@ export function RightSidebar() {
     const available: typeof lawRefs = [];
     for (const ref of lawRefs) {
       const label = `${ref.law_name} ${ref.article}`;
-      if (citedLabels.has(label) || ref.source === 'cited') {
+      if (citedLabels.has(label)) {
         cited.push(ref);
-      } else if (ref.source === 'manual') {
+      } else {
         available.push(ref);
       }
     }
@@ -391,7 +391,11 @@ export function RightSidebar() {
                       備用 ({availableLawRefs.length})
                     </p>
                     {availableLawRefs.map((ref) => (
-                      <LawRefCard key={ref.id} lawRef={ref} onRemove={removeLawRef} />
+                      <LawRefCard
+                        key={ref.id}
+                        lawRef={ref}
+                        onRemove={ref.source === 'manual' ? removeLawRef : undefined}
+                      />
                     ))}
                   </>
                 )}

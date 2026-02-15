@@ -38,9 +38,26 @@ export type SSEEvent =
         | 'set_parties';
       data: unknown;
     }
+  | { type: 'pipeline_progress'; steps: PipelineStep[] }
   | { type: 'suggested_actions'; actions: { label: string; prompt: string }[] }
   | { type: 'error'; message: string }
   | { type: 'done' };
+
+// Pipeline progress step (used by write_full_brief)
+export interface PipelineStepChild {
+  label: string;
+  detail?: string;
+  status: 'done' | 'running' | 'pending';
+  results?: string[];
+}
+
+export interface PipelineStep {
+  label: string;
+  detail?: string;
+  status: 'done' | 'running' | 'pending';
+  children?: PipelineStepChild[];
+  content?: Record<string, unknown>;
+}
 
 // Chat request body
 export interface ChatRequest {

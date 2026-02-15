@@ -22,7 +22,9 @@
 ### C. Agent 架構 & 自動化
 
 - [ ] 案件 Onboarding + AI 一鍵初始化：引導流程（填寫資料 → 上傳檔案 → AI 分析產生爭點/時間軸/當事人）
-- [ ] Sub Agent 架構：撰寫書狀時拆分為多個專門 agent（分析、撰寫、引用校驗等），評估是否優於單一 agent
+- [x] Sub Agent 架構：write_full_brief pipeline（Planner + Writer sub-agents），一次工具呼叫完成整份書狀
+- [x] Pipeline 進度優化：隱藏舊進度條、法條搜尋顯示逐筆查詢進度（可展開看結果）、自動去除重複標題
+- [x] 法條引用切換書狀時正確更新：改為僅依據當前書狀段落引用判斷已引用/備用
 - [ ] 用戶自定義指令：律師可建立常用 prompt 指令集
 
 ### D. 文件管理 & 模板

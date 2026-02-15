@@ -166,4 +166,30 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'write_full_brief',
+      description: `撰寫一份完整的法律書狀。內部自動執行完整 pipeline：載入案件資料 → 分析爭點（如尚未分析）→ 規劃書狀結構 → 平行搜尋法條 → 逐段撰寫（含引用）。
+
+使用時機：使用者明確要求撰寫一份完整書狀（如「幫我寫民事準備書狀」「撰寫答辯狀」「幫我寫書狀」）。
+不要用於：修改單段內容、補充法條引用、微調特定段落、回答法律問題。這些情境應使用 write_brief_section。`,
+      parameters: {
+        type: 'object',
+        properties: {
+          brief_type: {
+            type: 'string',
+            enum: ['complaint', 'defense', 'preparation', 'appeal'],
+            description:
+              '書狀類型：complaint 起訴狀、defense 答辯狀、preparation 準備書狀、appeal 上訴狀',
+          },
+          title: {
+            type: 'string',
+            description: '書狀標題（如「民事準備二狀」、「民事答辯狀」）',
+          },
+        },
+        required: ['brief_type', 'title'],
+      },
+    },
+  },
 ];

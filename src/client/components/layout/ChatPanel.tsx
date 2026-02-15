@@ -6,6 +6,8 @@ import { useChatStore, type ChatMessage } from '../../stores/useChatStore';
 import { useUIStore } from '../../stores/useUIStore';
 import { useRewindStore } from '../../stores/useRewindStore';
 import { QuickActionButtons } from '../chat/QuickActionButtons';
+import { PipelineStages } from '../chat/PipelineStages';
+import type { PipelineStep } from '../../../shared/types';
 
 export function ChatPanel() {
   const { caseId } = useParams();
@@ -22,12 +24,23 @@ export function ChatPanel() {
   const setPrefillInput = useChatStore((s) => s.setPrefillInput);
 
   // Find last assistant message id
-  const lastAssistantId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant') return messages[i].id;
-    }
-    return null;
-  }, [messages]);
+  const lastAssistantId = useMemo(
+    () => messages.findLast((m) => m.role === 'assistant')?.id ?? null,
+    [messages],
+  );
+
+  // Detect if a write_full_brief pipeline is actively running (has its own progress UI)
+  const hasPipelineRunning = useMemo(
+    () =>
+      messages.some(
+        (m) =>
+          m.role === 'tool_call' &&
+          m.metadata?.tool_name === 'write_full_brief' &&
+          m.metadata?.status === 'running' &&
+          Array.isArray(m.metadata?.pipeline_steps),
+      ),
+    [messages],
+  );
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -136,8 +149,8 @@ export function ChatPanel() {
           );
         })}
 
-        {/* Progress indicator */}
-        {agentProgress && isStreaming && (
+        {/* Progress indicator (hidden when pipeline has its own progress) */}
+        {agentProgress && isStreaming && !hasPipelineRunning && (
           <div className="flex items-center gap-2 px-2 py-1">
             <div className="h-1 flex-1 rounded-full bg-bg-3">
               <div
@@ -225,7 +238,7 @@ const MessageBubble = memo(function MessageBubble({
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-lg bg-ac/15 px-3 py-2 text-sm text-t1">
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p>
         </div>
       </div>
     );
@@ -279,6 +292,7 @@ const MessageBubble = memo(function MessageBubble({
     const status = meta.status as string | undefined;
     const toolName = (meta.tool_name as string) || message.content;
     const toolArgs = (meta.tool_args || meta.args) as Record<string, unknown> | undefined;
+    const pipelineSteps = meta.pipeline_steps as PipelineStep[] | undefined;
 
     const fullResult = nextToolResult?.content;
     const resultMeta = nextToolResult?.metadata || {};
@@ -287,6 +301,11 @@ const MessageBubble = memo(function MessageBubble({
     // Determine if completed: has tool_result or SSE marked done
     const isDone = status === 'done' || !!nextToolResult;
     const isRunning = status === 'running' && !nextToolResult;
+
+    // Special rendering for write_full_brief pipeline
+    if (toolName === 'write_full_brief' && pipelineSteps && pipelineSteps.length > 0) {
+      return <PipelineStages steps={pipelineSteps} />;
+    }
 
     // Build label
     const label = getToolLabel(toolName, toolArgs, fullResult, isRunning ? 'running' : 'done');
@@ -439,6 +458,15 @@ function getToolLabel(
   if (toolName === 'calculate_damages') {
     if (status === 'running') return '正在計算金額...';
     return '已計算金額';
+  }
+
+  if (toolName === 'write_full_brief') {
+    if (status === 'running') return '正在撰寫完整書狀...';
+    if (fullResult) {
+      const match = fullResult.match(/共 (\d+) 個段落/);
+      if (match) return `write_full_brief — 已完成 ${match[1]} 段`;
+    }
+    return 'write_full_brief';
   }
 
   if (toolName === 'generate_timeline') {

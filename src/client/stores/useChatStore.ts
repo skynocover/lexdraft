@@ -273,6 +273,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 break;
               }
 
+              case 'pipeline_progress': {
+                // Attach steps to the most recent running tool_call
+                const allMsgs = get().messages;
+                for (let i = allMsgs.length - 1; i >= 0; i--) {
+                  if (
+                    allMsgs[i].role === 'tool_call' &&
+                    allMsgs[i].metadata?.status === 'running'
+                  ) {
+                    updateMessage(allMsgs[i].id, {
+                      metadata: { ...allMsgs[i].metadata, pipeline_steps: event.steps },
+                    });
+                    break;
+                  }
+                }
+                break;
+              }
+
               case 'progress':
                 setAgentProgress({ current: event.current, total: event.total });
                 break;

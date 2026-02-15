@@ -1,14 +1,14 @@
-import type { Citation } from "../../client/stores/useBriefStore";
-import type { AIEnv } from "./aiClient";
-import { nanoid } from "nanoid";
+import type { Citation } from '../../client/stores/useBriefStore';
+import type { AIEnv } from './aiClient';
+import { nanoid } from 'nanoid';
 
 // ── Document block types ──
 
 interface CustomContentDocumentBlock {
-  type: "document";
+  type: 'document';
   source: {
-    type: "content";
-    content: Array<{ type: "text"; text: string }>;
+    type: 'content';
+    content: Array<{ type: 'text'; text: string }>;
   };
   title: string;
   context?: string;
@@ -16,14 +16,14 @@ interface CustomContentDocumentBlock {
 }
 
 interface TextBlock {
-  type: "text";
+  type: 'text';
   text: string;
 }
 
 // ── Response types ──
 
 interface ContentBlockCitation {
-  type: "content_block_location";
+  type: 'content_block_location';
   cited_text: string;
   document_index: number;
   document_title: string;
@@ -32,7 +32,7 @@ interface ContentBlockCitation {
 }
 
 interface CharLocationCitation {
-  type: "char_location";
+  type: 'char_location';
   cited_text: string;
   document_index: number;
   document_title: string;
@@ -42,7 +42,7 @@ interface CharLocationCitation {
 
 interface ClaudeResponse {
   content: Array<{
-    type: "text";
+    type: 'text';
     text: string;
     citations?: Array<ContentBlockCitation | CharLocationCitation>;
   }>;
@@ -56,7 +56,7 @@ export interface ClaudeDocument {
   title: string;
   content: string;
   file_id?: string;
-  doc_type?: "file" | "law";
+  doc_type?: 'file' | 'law';
 }
 
 export interface TextSegment {
@@ -64,10 +64,16 @@ export interface TextSegment {
   citations: Citation[];
 }
 
+export interface ClaudeUsage {
+  input_tokens: number;
+  output_tokens: number;
+}
+
 export interface ClaudeCitationResult {
   text: string;
   segments: TextSegment[];
   citations: Citation[];
+  usage: ClaudeUsage;
 }
 
 // ── Chunking ──
@@ -111,12 +117,12 @@ const chunkContent = (content: string): string[] => {
 const splitBySentence = (text: string): string[] => {
   const sentences = text.split(/(?<=。)/);
   const chunks: string[] = [];
-  let buffer = "";
+  let buffer = '';
 
   for (const sentence of sentences) {
     if (buffer.length + sentence.length > MAX_CHUNK_LENGTH && buffer) {
       chunks.push(buffer.trim());
-      buffer = "";
+      buffer = '';
     }
     buffer += sentence;
   }
@@ -152,10 +158,10 @@ export const callClaudeWithCitations = async (
     chunkMaps.push({ doc, chunks });
 
     contentBlocks.push({
-      type: "document",
+      type: 'document',
       source: {
-        type: "content",
-        content: chunks.map((text) => ({ type: "text" as const, text })),
+        type: 'content',
+        content: chunks.map((text) => ({ type: 'text' as const, text })),
       },
       title: doc.title,
       citations: { enabled: true },
@@ -163,16 +169,16 @@ export const callClaudeWithCitations = async (
   }
 
   contentBlocks.push({
-    type: "text",
+    type: 'text',
     text: instruction,
   });
 
   const body = {
-    model: "claude-haiku-4-5-20251001",
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 4096,
     messages: [
       {
-        role: "user",
+        role: 'user',
         content: contentBlocks,
       },
     ],
@@ -182,11 +188,11 @@ export const callClaudeWithCitations = async (
   const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/anthropic/v1/messages`;
 
   const response = await fetch(gatewayUrl, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      "cf-aig-authorization": `Bearer ${env.CF_AIG_TOKEN}`,
-      "anthropic-version": "2023-06-01",
+      'Content-Type': 'application/json',
+      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+      'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify(body),
   });
@@ -199,13 +205,15 @@ export const callClaudeWithCitations = async (
   const data = (await response.json()) as ClaudeResponse;
 
   // Parse response: extract text, segments, and citations
-  let fullText = "";
+  let fullText = '';
   const allCitations: Citation[] = [];
   const segments: TextSegment[] = [];
 
   for (const block of data.content) {
-    if (block.type === "text") {
-      fullText += block.text;
+    if (block.type === 'text') {
+      // Strip raw <cite> tags that Claude sometimes outputs in text
+      const cleanText = block.text.replace(/<cite\s+index="[^"]*">/g, '').replace(/<\/cite>/g, '');
+      fullText += cleanText;
       const blockCitations: Citation[] = [];
 
       if (block.citations) {
@@ -216,26 +224,66 @@ export const callClaudeWithCitations = async (
           const citation: Citation = {
             id: nanoid(),
             label: cite.document_title,
-            type: doc?.doc_type || (doc?.file_id ? "file" : "law"),
+            type: doc?.doc_type || (doc?.file_id ? 'file' : 'law'),
             file_id: doc?.file_id,
             location:
-              cite.type === "content_block_location"
+              cite.type === 'content_block_location'
                 ? { block_index: cite.start_block_index }
                 : {
                     char_start: cite.start_char_index,
                     char_end: cite.end_char_index,
                   },
             quoted_text: cite.cited_text,
-            status: "confirmed",
+            status: 'confirmed',
           };
           blockCitations.push(citation);
           allCitations.push(citation);
         }
       }
 
-      segments.push({ text: block.text, citations: blockCitations });
+      segments.push({ text: cleanText, citations: blockCitations });
     }
   }
 
-  return { text: fullText, segments, citations: allCitations };
+  const usage: ClaudeUsage = data.usage || { input_tokens: 0, output_tokens: 0 };
+
+  return { text: fullText, segments, citations: allCitations, usage };
+};
+
+/**
+ * Call Claude Haiku 4.5 without citations (for Planner sub-agent).
+ * Routed through Cloudflare AI Gateway.
+ */
+export const callClaude = async (
+  env: AIEnv,
+  systemPrompt: string,
+  userMessage: string,
+): Promise<{ content: string; usage: ClaudeUsage }> => {
+  const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/anthropic/v1/messages`;
+
+  const response = await fetch(gatewayUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Claude API error: ${response.status} - ${errText}`);
+  }
+
+  const data = (await response.json()) as ClaudeResponse;
+  const content = data.content.map((b) => b.text).join('');
+  const usage: ClaudeUsage = data.usage || { input_tokens: 0, output_tokens: 0 };
+
+  return { content, usage };
 };

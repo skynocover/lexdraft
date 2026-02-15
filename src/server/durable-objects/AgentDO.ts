@@ -36,9 +36,10 @@ const SYSTEM_PROMPT = `你是 LexDraft AI 助理，一位專業的台灣法律�
 - list_files：列出案件所有檔案
 - read_file：讀取指定檔案的全文
 - create_brief：建立新書狀（取得 brief_id）
+- write_full_brief：撰寫完整書狀（一次完成整份書狀，內部自動載入資料、分析爭點、規劃結構、搜尋法條、逐段撰寫）
+- write_brief_section：撰寫或修改書狀的單一段落（使用引用系統，從來源文件中提取精確引用）。提供 paragraph_id 時會修改既有段落，不提供則新增段落。
 - analyze_disputes：分析案件爭點（自動載入所有檔案摘要進行分析）
 - calculate_damages：計算各項請求金額明細（自動載入所有檔案摘要分析金額）
-- write_brief_section：撰寫或修改書狀段落（使用引用系統，從來源文件中提取精確引用）。提供 paragraph_id 時會修改既有段落，不提供則新增段落。
 - search_law：搜尋法規條文（支援法規名稱、條號、法律概念搜尋，結果自動寫入法條引用列表）
 - generate_timeline：分析時間軸（自動載入所有檔案摘要，產生時間軸事件列表）
 
@@ -59,19 +60,17 @@ const SYSTEM_PROMPT = `你是 LexDraft AI 助理，一位專業的台灣法律�
 - 結果會顯示在底部「時間軸」分頁中
 
 書狀撰寫流程（收到撰寫書狀指令後，直接執行，不要反問使用者）：
-1. 先用 list_files 確認可用的來源檔案
-2. 用 read_file 讀取關鍵檔案內容
-3. 用 analyze_disputes 分析爭點（如果尚未分析）
-4. 用 search_law 搜尋每個爭點相關的法條（加強書狀法律依據），記下回傳結果中方括號內的法條 ID
-5. 用 create_brief 建立新書狀 — 自行根據案件性質決定 brief_type 和 title（例如「民事準備書狀」「民事答辯狀」等），不需要詢問使用者
-6. 逐段使用 write_brief_section 撰寫書狀，將步驟 4 搜到的法條 ID 傳入 relevant_law_ids 參數，讓法條也能被正確引用
-7. 書狀結構參考模板：
-   - 壹、前言（案件背景、提出本狀目的）
-   - 貳、就被告各項抗辯之反駁（依爭點逐一反駁）
-   - 參、請求金額之計算（如適用）
-   - 肆、結論
+1. 使用 write_full_brief 工具一次完成整份書狀撰寫
+   - 自行根據案件性質決定 brief_type（complaint/defense/preparation/appeal）和 title（如「民事準備書狀」「民事答辯狀」等）
+   - 工具會自動完成：載入檔案 → 分析爭點 → 規劃結構 → 搜尋法條 → 逐段撰寫
+   - 只需要一次工具呼叫即可完成整份書狀
+2. 不需要事先呼叫 list_files、read_file、analyze_disputes 等，write_full_brief 會自動處理
 
-重要：當使用者要求撰寫書狀時，你應該主動完成整個流程，不要中途停下來詢問書狀類型或標題。根據案件卷宗自動判斷最適合的書狀類型和標題。
+重要：當使用者要求撰寫書狀時，直接使用 write_full_brief，不要反問使用者書狀類型或標題。
+
+單段修改流程（使用者要求修改既有段落時）：
+- 使用 write_brief_section 並傳入 paragraph_id
+- 不要使用 write_full_brief（它是用來撰寫完整新書狀的）
 
 段落修改規則：
 - 當使用者要求修改、改寫、精簡、加強某個既有段落時，必須使用 write_brief_section 並傳入該段落的 paragraph_id
@@ -430,6 +429,18 @@ ${paragraphList}
           tool_calls: toolCalls,
         });
 
+        // Wrap sendSSE to capture pipeline_progress for persistence
+        let lastPipelineSteps: unknown[] | null = null;
+        let lastPipelineToolMsgId: string | null = null;
+        let lastPipelineToolCallId: string | null = null;
+        let lastPipelineArgs: Record<string, unknown> | null = null;
+        const wrappedSendSSE = async (event: SSEEvent) => {
+          if (event.type === 'pipeline_progress') {
+            lastPipelineSteps = event.steps;
+          }
+          await sendSSE(event);
+        };
+
         // Execute each tool call
         for (const tc of toolCalls) {
           if (signal.aborted) break;
@@ -459,6 +470,12 @@ ${paragraphList}
             created_at: new Date().toISOString(),
           });
 
+          // Track which tool_call owns the pipeline steps
+          lastPipelineSteps = null;
+          lastPipelineToolMsgId = toolMsgId;
+          lastPipelineToolCallId = tc.id;
+          lastPipelineArgs = args;
+
           // Execute tool
           const { result, success } = await executeTool(
             tc.function.name,
@@ -466,11 +483,28 @@ ${paragraphList}
             caseId,
             this.env.DB,
             {
-              sendSSE,
+              sendSSE: wrappedSendSSE,
               aiEnv,
               mongoUrl: this.env.MONGO_URL,
+              signal,
             },
           );
+
+          // Persist final pipeline_steps to D1 so they survive page reload
+          if (lastPipelineSteps && lastPipelineToolMsgId) {
+            await db
+              .update(messages)
+              .set({
+                metadata: JSON.stringify({
+                  tool_call_id: lastPipelineToolCallId,
+                  args: lastPipelineArgs,
+                  tool_name: tc.function.name,
+                  status: 'done',
+                  pipeline_steps: lastPipelineSteps,
+                }),
+              })
+              .where(eq(messages.id, lastPipelineToolMsgId));
+          }
 
           // Truncate summary for SSE display
           const resultSummary = result.length > 200 ? result.slice(0, 200) + '...' : result;
