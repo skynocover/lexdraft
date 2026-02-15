@@ -8,7 +8,7 @@ import {
   type ClaudeDocument,
   type ClaudeUsage,
 } from './claudeClient';
-import { searchLaw } from '../lib/lawSearch';
+import { searchLaw, searchLawBatch } from '../lib/lawSearch';
 import { parseJsonField, loadReadyFiles, toolError, toolSuccess } from './toolHelpers';
 import { PLANNER_SYSTEM_PROMPT } from './prompts/plannerPrompt';
 import type { ToolResult } from './tools/types';
@@ -460,29 +460,33 @@ const searchLawsForPlan = async (
     await progress.setStepChildren(2, children);
   }
 
-  const results = await Promise.all(
-    queries.map(async (query, idx) => {
-      if (progress) {
-        await progress.updateStepChild(2, idx, { status: 'running' });
-      }
-      try {
-        const laws = await searchLaw(mongoUrl, { query, limit: 5 });
-        if (progress) {
-          await progress.updateStepChild(2, idx, {
-            status: 'done',
-            detail: `${laws.length} 條`,
-            results: laws.map((l) => `${l.law_name} ${l.article_no}`),
-          });
-        }
-        return { query, laws };
-      } catch {
-        if (progress) {
-          await progress.updateStepChild(2, idx, { status: 'done', detail: '失敗' });
-        }
-        return { query, laws: [] as Awaited<ReturnType<typeof searchLaw>> };
-      }
-    }),
+  // Mark all as running
+  if (progress) {
+    for (let i = 0; i < queries.length; i++) {
+      await progress.updateStepChild(2, i, { status: 'running' });
+    }
+  }
+
+  // Use searchLawBatch for single MongoClient connection
+  const batchResults = await searchLawBatch(
+    mongoUrl,
+    queries.map((q) => ({ query: q, limit: 5 })),
   );
+
+  // Update progress for each query result
+  const results: { query: string; laws: Awaited<ReturnType<typeof searchLaw>> }[] = [];
+  for (let idx = 0; idx < queries.length; idx++) {
+    const query = queries[idx];
+    const laws = batchResults.get(query) || [];
+    if (progress) {
+      await progress.updateStepChild(2, idx, {
+        status: 'done',
+        detail: `${laws.length} 條`,
+        results: laws.map((l) => `${l.law_name} ${l.article_no}`),
+      });
+    }
+    results.push({ query, laws });
+  }
 
   // Cache in D1
   for (const { laws } of results) {

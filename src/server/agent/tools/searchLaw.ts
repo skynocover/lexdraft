@@ -1,17 +1,31 @@
 import { searchLaw } from '../../lib/lawSearch';
+import { ALIAS_MAP } from '../../lib/lawConstants';
 import type { ToolHandler } from './types';
+
+/** Replace known aliases in a query string before sending to searchLaw */
+const preprocessQuery = (query: string): string => {
+  let processed = query;
+  for (const [alias, fullName] of Object.entries(ALIAS_MAP)) {
+    if (processed.includes(alias)) {
+      processed = processed.replace(alias, fullName);
+      break; // only replace the first match to avoid double-replacing
+    }
+  }
+  return processed;
+};
 
 export const handleSearchLaw: ToolHandler = async (args, _caseId, _db, _drizzle, ctx) => {
   if (!ctx) {
     return { result: 'Error: missing execution context', success: false };
   }
 
-  const query = args.query as string;
+  const rawQuery = args.query as string;
   const limit = (args.limit as number) || 10;
-  if (!query) {
+  if (!rawQuery) {
     return { result: 'Error: query is required', success: false };
   }
 
+  const query = preprocessQuery(rawQuery);
   const results = await searchLaw(ctx.mongoUrl, { query, limit });
 
   if (results.length === 0) {
