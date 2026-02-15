@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect, memo, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, memo, type KeyboardEvent } from 'react';
 import { useParams } from 'react-router';
 import Markdown from 'react-markdown';
 import { useChatStore, type ChatMessage } from '../../stores/useChatStore';
 import { useUIStore } from '../../stores/useUIStore';
+import { useRewindStore } from '../../stores/useRewindStore';
+import { QuickActionButtons } from '../chat/QuickActionButtons';
 
 export function ChatPanel() {
   const { caseId } = useParams();
@@ -17,6 +19,14 @@ export function ChatPanel() {
 
   const prefillInput = useChatStore((s) => s.prefillInput);
   const setPrefillInput = useChatStore((s) => s.setPrefillInput);
+
+  // Find last assistant message id
+  const lastAssistantId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant') return messages[i].id;
+    }
+    return null;
+  }, [messages]);
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -124,12 +134,15 @@ export function ChatPanel() {
             msg.role === 'tool_call'
               ? messages.slice(idx + 1).find((m) => m.role === 'tool_result')
               : undefined;
+          const isLastAssistant = msg.id === lastAssistantId;
           return (
             <MessageBubble
               key={msg.id}
               message={msg}
               isStreaming={isStreaming}
               nextToolResult={nextToolResult}
+              isLastAssistant={isLastAssistant}
+              caseId={caseId}
             />
           );
         })}
@@ -205,12 +218,19 @@ const MessageBubble = memo(function MessageBubble({
   message,
   isStreaming,
   nextToolResult,
+  isLastAssistant,
+  caseId,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
   nextToolResult?: ChatMessage;
+  isLastAssistant?: boolean;
+  caseId?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const snapshot = useRewindStore((s) =>
+    message.role === 'assistant' ? s.snapshots[message.id] : undefined,
+  );
 
   if (message.role === 'user') {
     return (
@@ -226,6 +246,21 @@ const MessageBubble = memo(function MessageBubble({
     // Hide empty assistant bubbles (happens when AI only calls tools)
     if (!message.content && !isStreaming) return null;
 
+    const handleQuickAction = (prompt: string) => {
+      if (caseId) useChatStore.getState().sendMessage(caseId, prompt);
+    };
+
+    const handleRewind = () => {
+      useRewindStore.getState().rewind(message.id);
+    };
+
+    const suggestedActions = (message.metadata?.suggested_actions ?? []) as {
+      label: string;
+      prompt: string;
+    }[];
+    const showRewind = !!snapshot?.hadChanges && !isStreaming;
+    const showSuggestions = isLastAssistant && !isStreaming;
+
     return (
       <div className="flex justify-start">
         <div className="chat-markdown max-w-[85%] rounded-lg bg-bg-3 px-3 py-2 text-sm text-t1">
@@ -236,6 +271,14 @@ const MessageBubble = memo(function MessageBubble({
             </>
           ) : (
             <span className="text-t3">...</span>
+          )}
+          {(showRewind || (showSuggestions && suggestedActions.length > 0)) && (
+            <QuickActionButtons
+              actions={showSuggestions ? suggestedActions : []}
+              onAction={handleQuickAction}
+              showRewind={showRewind}
+              onRewind={handleRewind}
+            />
           )}
         </div>
       </div>
