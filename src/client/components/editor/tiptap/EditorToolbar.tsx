@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/react';
+import { Undo2, Redo2 } from 'lucide-react';
 
 interface EditorToolbarProps {
   editor: Editor | null;
@@ -32,22 +33,7 @@ export const EditorToolbar = ({
         className="rounded p-1 text-t3 hover:text-t1 hover:bg-bg-3 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-t3"
         title="復原 (Ctrl+Z)"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-          <path
-            d="M3 7h7a3 3 0 0 1 0 6H8"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M6 4L3 7l3 3"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <Undo2 size={14} />
       </button>
       <button
         onClick={() => editor?.chain().focus().redo().run()}
@@ -55,22 +41,7 @@ export const EditorToolbar = ({
         className="rounded p-1 text-t3 hover:text-t1 hover:bg-bg-3 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-t3"
         title="重做 (Ctrl+Shift+Z)"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-          <path
-            d="M13 7H6a3 3 0 0 0 0 6h2"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M10 4l3 3-3 3"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <Redo2 size={14} />
       </button>
       <span className="mx-2 h-4 w-px bg-bd" />
 

@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback } from "react";
-import { api } from "../../../lib/api";
-import { useBriefStore, type LawRef } from "../../../stores/useBriefStore";
-import { useCaseStore } from "../../../stores/useCaseStore";
+import { useState, useRef, useCallback } from 'react';
+import { X, Search, Check } from 'lucide-react';
+import { api } from '../../../lib/api';
+import { useBriefStore, type LawRef } from '../../../stores/useBriefStore';
+import { useCaseStore } from '../../../stores/useCaseStore';
 
 interface SearchResult {
   _id: string;
@@ -19,7 +20,7 @@ interface LawSearchDialogProps {
 }
 
 export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -40,7 +41,7 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
     }
     setSearching(true);
     try {
-      const data = await api.post<{ results: SearchResult[] }>("/law/search", {
+      const data = await api.post<{ results: SearchResult[] }>('/law/search', {
         query: q,
         limit: 10,
       });
@@ -76,26 +77,21 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
     if (!currentCase || selected.size === 0) return;
     setAdding(true);
 
-    const toAdd = results.filter(
-      (r) => selected.has(r._id) && !existingIds.has(r._id),
-    );
+    const toAdd = results.filter((r) => selected.has(r._id) && !existingIds.has(r._id));
 
     try {
       // POST to backend — stores in D1 with source='manual'
-      const updatedRefs = await api.post<LawRef[]>(
-        `/cases/${currentCase.id}/law-refs`,
-        {
-          items: toAdd.map((r) => ({
-            id: r._id,
-            law_name: r.law_name,
-            article: r.article_no,
-            full_text: r.content,
-          })),
-        },
-      );
+      const updatedRefs = await api.post<LawRef[]>(`/cases/${currentCase.id}/law-refs`, {
+        items: toAdd.map((r) => ({
+          id: r._id,
+          law_name: r.law_name,
+          article: r.article_no,
+          full_text: r.content,
+        })),
+      });
       setLawRefs(updatedRefs);
     } catch (err) {
-      console.error("Add law refs failed:", err);
+      console.error('Add law refs failed:', err);
     }
 
     setAdding(false);
@@ -126,39 +122,14 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
             onClick={onClose}
             className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <X size={14} />
           </button>
         </div>
 
         {/* Search input */}
         <div className="border-b border-bd px-4 py-3">
           <div className="relative">
-            <svg
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-t3"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-t3" />
             <input
               ref={inputRef}
               type="text"
@@ -181,9 +152,7 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
           {results.length === 0 && query.trim() && !searching ? (
             <p className="py-8 text-center text-xs text-t3">未找到相關法條</p>
           ) : results.length === 0 && !query.trim() ? (
-            <p className="py-8 text-center text-xs text-t3">
-              輸入關鍵字開始搜尋
-            </p>
+            <p className="py-8 text-center text-xs text-t3">輸入關鍵字開始搜尋</p>
           ) : (
             <div className="space-y-1">
               {results.map((r) => {
@@ -197,10 +166,10 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
                     disabled={alreadyAdded}
                     className={`w-full rounded-md border px-3 py-2.5 text-left transition ${
                       alreadyAdded
-                        ? "border-bd/50 bg-bg-2/50 opacity-50 cursor-default"
+                        ? 'border-bd/50 bg-bg-2/50 opacity-50 cursor-default'
                         : isSelected
-                          ? "border-ac/40 bg-ac/5"
-                          : "border-bd bg-bg-2 hover:border-bd-l hover:bg-bg-3"
+                          ? 'border-ac/40 bg-ac/5'
+                          : 'border-bd bg-bg-2 hover:border-bd-l hover:bg-bg-3'
                     }`}
                   >
                     <div className="flex items-center gap-2">
@@ -208,25 +177,18 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
                       <div
                         className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                           alreadyAdded
-                            ? "border-t3/30 bg-bg-3"
+                            ? 'border-t3/30 bg-bg-3'
                             : isSelected
-                              ? "border-ac bg-ac"
-                              : "border-t3/50"
+                              ? 'border-ac bg-ac'
+                              : 'border-t3/50'
                         }`}
                       >
                         {(isSelected || alreadyAdded) && (
-                          <svg
-                            width="10"
-                            height="10"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke={alreadyAdded ? "#6c6f85" : "white"}
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
+                          <Check
+                            size={10}
+                            strokeWidth={3}
+                            color={alreadyAdded ? '#6c6f85' : 'white'}
+                          />
                         )}
                       </div>
 
@@ -239,13 +201,9 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
                           <span className="text-xs font-medium text-t1">
                             {r.law_name} {r.article_no}
                           </span>
-                          {alreadyAdded && (
-                            <span className="text-[9px] text-t3">已加入</span>
-                          )}
+                          {alreadyAdded && <span className="text-[9px] text-t3">已加入</span>}
                         </div>
-                        <p className="mt-1 text-[11px] leading-4 text-t2">
-                          {r.content}
-                        </p>
+                        <p className="mt-1 text-[11px] leading-4 text-t2">{r.content}</p>
                       </div>
                     </div>
                   </button>
@@ -258,19 +216,17 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
         {/* Footer */}
         {results.length > 0 && (
           <div className="flex items-center justify-between border-t border-bd px-4 py-3">
-            <span className="text-[11px] text-t3">
-              找到 {results.length} 條結果
-            </span>
+            <span className="text-[11px] text-t3">找到 {results.length} 條結果</span>
             <button
               onClick={handleAdd}
               disabled={selectableCount === 0 || adding}
               className="rounded-md bg-ac px-4 py-1.5 text-xs font-medium text-white transition hover:bg-ac/80 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {adding
-                ? "加入中..."
+                ? '加入中...'
                 : selectableCount > 0
                   ? `加入 ${selectableCount} 條法條`
-                  : "選擇法條"}
+                  : '選擇法條'}
             </button>
           </div>
         )}

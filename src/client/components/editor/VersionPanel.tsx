@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { ChevronRight, Eye, Undo2, Trash2, Plus } from 'lucide-react';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useTabStore } from '../../stores/useTabStore';
 
@@ -97,18 +98,7 @@ export function VersionPanel({ open, onClose }: VersionPanelProps) {
             onClick={onClose}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-t2 transition hover:bg-bg-h"
           >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
+            <ChevronRight size={12} />
             版本紀錄
           </button>
 
@@ -134,57 +124,21 @@ export function VersionPanel({ open, onClose }: VersionPanelProps) {
                       className="rounded p-1 text-t3 hover:bg-bg-3 hover:text-t1"
                       title="預覽"
                     >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
+                      <Eye size={12} />
                     </button>
                     <button
                       onClick={() => setConfirmRestore(v.id)}
                       className="rounded p-1 text-t3 hover:bg-bg-3 hover:text-ac"
                       title="還原"
                     >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="1 4 1 10 7 10" />
-                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                      </svg>
+                      <Undo2 size={12} />
                     </button>
                     <button
                       onClick={() => setConfirmDelete(v.id)}
                       className="rounded p-1 text-t3 hover:bg-bg-3 hover:text-rd"
                       title="刪除"
                     >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
+                      <Trash2 size={12} />
                     </button>
                   </div>
                 </div>
@@ -219,19 +173,7 @@ export function VersionPanel({ open, onClose }: VersionPanelProps) {
                 onClick={() => setCreating(true)}
                 className="flex w-full items-center justify-center gap-1 rounded py-1 text-xs text-t2 transition hover:bg-bg-h hover:text-t1"
               >
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
+                <Plus size={12} />
                 建立新版本
               </button>
             )}

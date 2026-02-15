@@ -1,30 +1,25 @@
-import { Fragment, useEffect, useRef } from "react";
-import { useParams } from "react-router";
-import {
-  DndContext,
-  type DragEndEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
+import { Fragment, useEffect, useRef } from 'react';
+import { useParams } from 'react-router';
+import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { PanelLeft, PanelRight } from 'lucide-react';
 import {
   Group as PanelGroup,
   Panel as ResizablePanel,
   Separator as PanelResizeHandle,
-} from "react-resizable-panels";
-import { useCaseStore, type Case, type CaseFile } from "../stores/useCaseStore";
-import { useBriefStore } from "../stores/useBriefStore";
-import { useAnalysisStore } from "../stores/useAnalysisStore";
-import { useChatStore } from "../stores/useChatStore";
-import { useTabStore } from "../stores/useTabStore";
-import { api } from "../lib/api";
-import { Header } from "../components/layout/Header";
-import { StatusBar } from "../components/layout/StatusBar";
-import { ChatPanel } from "../components/layout/ChatPanel";
-import { RightSidebar } from "../components/layout/RightSidebar";
-import { EditorPanel } from "../components/editor/EditorPanel";
-import { AnalysisPanel } from "../components/analysis/AnalysisPanel";
-import { useUIStore } from "../stores/useUIStore";
+} from 'react-resizable-panels';
+import { useCaseStore, type Case, type CaseFile } from '../stores/useCaseStore';
+import { useBriefStore } from '../stores/useBriefStore';
+import { useAnalysisStore } from '../stores/useAnalysisStore';
+import { useChatStore } from '../stores/useChatStore';
+import { useTabStore } from '../stores/useTabStore';
+import { api } from '../lib/api';
+import { Header } from '../components/layout/Header';
+import { StatusBar } from '../components/layout/StatusBar';
+import { ChatPanel } from '../components/layout/ChatPanel';
+import { RightSidebar } from '../components/layout/RightSidebar';
+import { EditorPanel } from '../components/editor/EditorPanel';
+import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
+import { useUIStore } from '../stores/useUIStore';
 
 export function CaseWorkspace() {
   const { caseId } = useParams();
@@ -59,12 +54,8 @@ export function CaseWorkspace() {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const activeData = active.data.current as
-      | { panelId: string; tabId: string }
-      | undefined;
-    const overData = over.data.current as
-      | { panelId: string; tabId: string }
-      | undefined;
+    const activeData = active.data.current as { panelId: string; tabId: string } | undefined;
+    const overData = over.data.current as { panelId: string; tabId: string } | undefined;
 
     if (!activeData || !overData) return;
 
@@ -93,10 +84,7 @@ export function CaseWorkspace() {
     api.get<Case>(`/cases/${caseId}`).then(setCurrentCase).catch(console.error);
 
     // 載入檔案列表
-    api
-      .get<CaseFile[]>(`/cases/${caseId}/files`)
-      .then(setFiles)
-      .catch(console.error);
+    api.get<CaseFile[]>(`/cases/${caseId}/files`).then(setFiles).catch(console.error);
 
     // 載入聊天歷史
     useChatStore.getState().loadHistory(caseId);
@@ -136,16 +124,11 @@ export function CaseWorkspace() {
 
   // Polling: 如果有 pending/processing 檔案，每 3 秒刷新
   useEffect(() => {
-    const hasPending = files.some(
-      (f) => f.status === "pending" || f.status === "processing",
-    );
+    const hasPending = files.some((f) => f.status === 'pending' || f.status === 'processing');
 
     if (hasPending && caseId) {
       pollingRef.current = setInterval(() => {
-        api
-          .get<CaseFile[]>(`/cases/${caseId}/files`)
-          .then(setFiles)
-          .catch(console.error);
+        api.get<CaseFile[]>(`/cases/${caseId}/files`).then(setFiles).catch(console.error);
       }, 3000);
     } else {
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -162,11 +145,7 @@ export function CaseWorkspace() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar: ChatPanel */}
-        {leftSidebarOpen ? (
-          <ChatPanel />
-        ) : (
-          <SidebarStrip side="left" onClick={toggleLeftSidebar} />
-        )}
+        {leftSidebarOpen ? <ChatPanel /> : <SidebarStrip side="left" onClick={toggleLeftSidebar} />}
 
         <main className="flex flex-1 flex-col overflow-hidden bg-bg-0">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -205,53 +184,23 @@ export function CaseWorkspace() {
   );
 }
 
-const SidebarStrip = ({
-  side,
-  onClick,
-}: {
-  side: "left" | "right";
-  onClick: () => void;
-}) => {
-  const isLeft = side === "left";
+const SidebarStrip = ({ side, onClick }: { side: 'left' | 'right'; onClick: () => void }) => {
+  const isLeft = side === 'left';
   return (
     <div
       className={`flex w-10 shrink-0 flex-col items-center border-bd bg-bg-1 ${
-        isLeft ? "border-r" : "border-l"
+        isLeft ? 'border-r' : 'border-l'
       }`}
     >
       <button
         onClick={onClick}
         className="mt-2 rounded p-1.5 text-t3 transition hover:bg-bg-h hover:text-t1"
-        title={isLeft ? "展開 AI 助理" : "展開側邊欄"}
+        title={isLeft ? '展開 AI 助理' : '展開側邊欄'}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {isLeft ? (
-            <>
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="9" y1="3" x2="9" y2="21" />
-            </>
-          ) : (
-            <>
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="15" y1="3" x2="15" y2="21" />
-            </>
-          )}
-        </svg>
+        {isLeft ? <PanelLeft size={16} /> : <PanelRight size={16} />}
       </button>
-      <span
-        className="mt-3 text-[10px] text-t3"
-        style={{ writingMode: "vertical-lr" }}
-      >
-        {isLeft ? "AI 助理" : "案件資料"}
+      <span className="mt-3 text-[10px] text-t3" style={{ writingMode: 'vertical-lr' }}>
+        {isLeft ? 'AI 助理' : '案件資料'}
       </span>
     </div>
   );

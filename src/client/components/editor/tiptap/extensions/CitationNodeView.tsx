@@ -1,15 +1,15 @@
-import { useRef, useCallback, useState } from "react";
-import { NodeViewWrapper } from "@tiptap/react";
-import type { NodeViewProps } from "@tiptap/react";
-import { useBriefStore } from "../../../../stores/useBriefStore";
-import { useTabStore } from "../../../../stores/useTabStore";
-import { useCaseStore } from "../../../../stores/useCaseStore";
+import { useRef, useCallback, useState } from 'react';
+import { NodeViewWrapper } from '@tiptap/react';
+import type { NodeViewProps } from '@tiptap/react';
+import { ExternalLink } from 'lucide-react';
+import { useBriefStore } from '../../../../stores/useBriefStore';
+import { useTabStore } from '../../../../stores/useTabStore';
+import { useCaseStore } from '../../../../stores/useCaseStore';
 
 const POPOVER_CLOSE_DELAY = 150;
 
 /** Strip markdown headers (## ###) from cited text for display */
-const stripMarkdownHeaders = (text: string): string =>
-  text.replace(/^#{1,3}\s+/gm, "");
+const stripMarkdownHeaders = (text: string): string => text.replace(/^#{1,3}\s+/gm, '');
 
 export function CitationNodeView({ node }: NodeViewProps) {
   const [showPopover, setShowPopover] = useState(false);
@@ -43,20 +43,14 @@ export function CitationNodeView({ node }: NodeViewProps) {
     charStart,
     charEnd,
   } = node.attrs;
-  const isLaw = type === "law";
-  const isFile = type === "file";
-  const isPending = status === "pending";
+  const isLaw = type === 'law';
+  const isFile = type === 'file';
+  const isPending = status === 'pending';
   const isHighlighted = citationId === highlightCitationId;
 
-  const typeClass = isPending
-    ? "citation-pending"
-    : isLaw
-      ? "citation-law"
-      : "citation-file";
+  const typeClass = isPending ? 'citation-pending' : isLaw ? 'citation-law' : 'citation-file';
 
-  const highlightClass = isHighlighted
-    ? " animate-pulse ring-2 ring-yellow-500"
-    : "";
+  const highlightClass = isHighlighted ? ' animate-pulse ring-2 ring-yellow-500' : '';
 
   // 來源位置標示
   const rangeLabel =
@@ -70,7 +64,7 @@ export function CitationNodeView({ node }: NodeViewProps) {
     if (!isFile || !fileId) return;
     const files = useCaseStore.getState().files;
     const file = files.find((f) => f.id === fileId);
-    if (!file || file.status !== "ready") return;
+    if (!file || file.status !== 'ready') return;
 
     const text = quotedText ? stripMarkdownHeaders(quotedText).trim() : null;
     useTabStore.getState().openFileTabInOtherPanel(fileId, file.filename, text);
@@ -95,42 +89,34 @@ export function CitationNodeView({ node }: NodeViewProps) {
           <div
             style={{
               marginBottom: 6,
-              display: "flex",
-              alignItems: "center",
+              display: 'flex',
+              alignItems: 'center',
               gap: 6,
-              flexWrap: "wrap",
+              flexWrap: 'wrap',
             }}
           >
             <span
               style={{
-                padding: "1px 6px",
+                padding: '1px 6px',
                 borderRadius: 3,
                 fontSize: 10,
                 fontWeight: 600,
-                background: isLaw
-                  ? "rgba(139,92,246,0.15)"
-                  : "rgba(59,130,246,0.15)",
-                color: isLaw ? "#6d28d9" : "#1d4ed8",
+                background: isLaw ? 'rgba(139,92,246,0.15)' : 'rgba(59,130,246,0.15)',
+                color: isLaw ? '#6d28d9' : '#1d4ed8',
               }}
             >
-              {isLaw ? "法條" : "文件"}
+              {isLaw ? '法條' : '文件'}
             </span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#111" }}>
-              {label}
-            </span>
-            {rangeLabel && (
-              <span style={{ fontSize: 9, color: "#9ca3af" }}>
-                {rangeLabel}
-              </span>
-            )}
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#111' }}>{label}</span>
+            {rangeLabel && <span style={{ fontSize: 9, color: '#9ca3af' }}>{rangeLabel}</span>}
             {isPending && (
               <span
                 style={{
-                  padding: "1px 4px",
+                  padding: '1px 4px',
                   borderRadius: 3,
                   fontSize: 9,
-                  background: "rgba(234,179,8,0.15)",
-                  color: "#a16207",
+                  background: 'rgba(234,179,8,0.15)',
+                  color: '#a16207',
                 }}
               >
                 待確認
@@ -142,20 +128,20 @@ export function CitationNodeView({ node }: NodeViewProps) {
           {quotedText && (
             <div
               style={{
-                background: "#f9fafb",
+                background: '#f9fafb',
                 borderRadius: 4,
                 padding: 8,
                 maxHeight: 200,
-                overflowY: "auto",
+                overflowY: 'auto',
               }}
             >
               <p
                 style={{
-                  whiteSpace: "pre-wrap",
+                  whiteSpace: 'pre-wrap',
                   fontSize: 11,
-                  lineHeight: "18px",
-                  color: "#374151",
-                  borderLeft: "2px solid #93c5fd",
+                  lineHeight: '18px',
+                  color: '#374151',
+                  borderLeft: '2px solid #93c5fd',
                   paddingLeft: 8,
                   margin: 0,
                   textIndent: 0,
@@ -172,41 +158,28 @@ export function CitationNodeView({ node }: NodeViewProps) {
               onClick={handleOpenFile}
               style={{
                 marginTop: 8,
-                display: "flex",
-                alignItems: "center",
+                display: 'flex',
+                alignItems: 'center',
                 gap: 4,
-                padding: "4px 8px",
+                padding: '4px 8px',
                 borderRadius: 4,
                 fontSize: 11,
                 fontWeight: 500,
-                color: "#1d4ed8",
-                background: "rgba(59,130,246,0.08)",
-                border: "none",
-                cursor: "pointer",
-                width: "100%",
-                justifyContent: "center",
+                color: '#1d4ed8',
+                background: 'rgba(59,130,246,0.08)',
+                border: 'none',
+                cursor: 'pointer',
+                width: '100%',
+                justifyContent: 'center',
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.background = "rgba(59,130,246,0.18)";
+                e.currentTarget.style.background = 'rgba(59,130,246,0.18)';
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.background = "rgba(59,130,246,0.08)";
+                e.currentTarget.style.background = 'rgba(59,130,246,0.08)';
               }}
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                <polyline points="15 3 21 3 21 9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
-              </svg>
+              <ExternalLink size={12} />
               開啟來源文件
             </button>
           )}

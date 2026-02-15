@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { Trash2 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useCaseStore, type Case } from '../stores/useCaseStore';
 import { api } from '../lib/api';
@@ -101,19 +102,7 @@ export function CaseList() {
                     className="shrink-0 rounded p-2 text-t3 opacity-0 transition hover:bg-bg-3 hover:text-rd group-hover:opacity-100"
                     title="刪除案件"
                   >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
+                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}

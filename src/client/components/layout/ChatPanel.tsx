@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo, memo, type KeyboardEvent } from 'react';
 import { useParams } from 'react-router';
 import Markdown from 'react-markdown';
+import { ChevronsLeft } from 'lucide-react';
 import { useChatStore, type ChatMessage } from '../../stores/useChatStore';
 import { useUIStore } from '../../stores/useUIStore';
 import { useRewindStore } from '../../stores/useRewindStore';
@@ -104,19 +105,7 @@ export function ChatPanel() {
             className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
             title="收合 AI 助理"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="11 17 6 12 11 7" />
-              <polyline points="18 17 13 12 18 7" />
-            </svg>
+            <ChevronsLeft size={14} />
           </button>
         </div>
       </div>

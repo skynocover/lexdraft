@@ -30,6 +30,7 @@ LexDraft is a legal document drafting platform for Taiwanese lawyers. Full-stack
 **API Routes** (`src/server/routes/`): `cases`, `files`, `chat`, `briefs`, `damages`, `law`
 
 **Agent System** (`src/server/agent/`):
+
 - `AgentDO` (Durable Object) runs an agentic tool-calling loop via Gemini 2.5 Flash through Cloudflare AI Gateway
 - `tools/` — registry-based tool executor with 8 tools: `list_files`, `read_file`, `create_brief`, `write_brief_section`, `analyze_disputes`, `calculate_damages`, `search_law`, `generate_timeline`
 - `tools/types.ts` defines `ToolHandler` and `ToolContext` interfaces; `tools/index.ts` is the executor entry point
@@ -85,6 +86,7 @@ The `optimizeDeps.esbuildOptions.plugins` entry fixes `mongodb → whatwg-url �
 
 ### ✅ DO
 
+- 使用 `lucide-react` 作為圖示庫，不要使用 inline SVG
 - Tailwind 寬高值使用 spacing scale（如 `w-120`）而非任意值（如 `w-[480px]`）
 - 使用 TypeScript，不要使用 `any` 類型
 - 為每個函數定義參數和返回類型

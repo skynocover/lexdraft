@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { Loader2 } from 'lucide-react';
 
 interface SelectionToolbarProps {
   isVisible: boolean;
@@ -61,24 +62,7 @@ export const SelectionToolbar = ({
             disabled={isLoading}
             className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs text-t2 transition hover:bg-bg-3 hover:text-t1 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-t2"
           >
-            {isLoading && activeOp === op.key && (
-              <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  opacity="0.25"
-                />
-                <path
-                  d="M12 2a10 10 0 0 1 10 10"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-            )}
+            {isLoading && activeOp === op.key && <Loader2 className="h-3 w-3 animate-spin" />}
             {op.label}
           </button>
         ))}

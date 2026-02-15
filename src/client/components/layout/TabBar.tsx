@@ -1,10 +1,7 @@
-import {
-  useSortable,
-  SortableContext,
-  horizontalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { useTabStore, type TabData } from "../../stores/useTabStore";
+import { useSortable, SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Columns2 } from 'lucide-react';
+import { useTabStore, type TabData } from '../../stores/useTabStore';
 
 interface TabBarProps {
   panelId: string;
@@ -23,14 +20,7 @@ const SortableTab = ({
 }) => {
   const setActiveTab = useTabStore((s) => s.setActiveTab);
   const closeTab = useTabStore((s) => s.closeTab);
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: tabId,
     data: { panelId, tabId },
   });
@@ -41,21 +31,21 @@ const SortableTab = ({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const isBrief = tabData.type === "brief";
-  const isVersion = tabData.type === "version-preview";
+  const isBrief = tabData.type === 'brief';
+  const isVersion = tabData.type === 'version-preview';
   const label =
-    tabData.type === "brief"
-      ? tabData.title || "書狀"
-      : tabData.type === "version-preview"
+    tabData.type === 'brief'
+      ? tabData.title || '書狀'
+      : tabData.type === 'version-preview'
         ? tabData.label
         : tabData.filename;
 
   const badgeClass = isBrief
-    ? "bg-ac/20 text-ac"
+    ? 'bg-ac/20 text-ac'
     : isVersion
-      ? "bg-pp/20 text-pp"
-      : "bg-rd/20 text-rd";
-  const badgeText = isBrief ? "DOC" : isVersion ? "VER" : "PDF";
+      ? 'bg-pp/20 text-pp'
+      : 'bg-rd/20 text-rd';
+  const badgeText = isBrief ? 'DOC' : isVersion ? 'VER' : 'PDF';
 
   return (
     <button
@@ -65,14 +55,10 @@ const SortableTab = ({
       {...listeners}
       onClick={() => setActiveTab(tabId, panelId)}
       className={`group flex h-full max-w-45 items-center gap-1.5 border-r border-bd px-3 text-xs transition ${
-        isActive
-          ? "border-b-2 border-b-ac bg-bg-0 text-t1"
-          : "text-t3 hover:bg-bg-h hover:text-t2"
+        isActive ? 'border-b-2 border-b-ac bg-bg-0 text-t1' : 'text-t3 hover:bg-bg-h hover:text-t2'
       }`}
     >
-      <span
-        className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${badgeClass}`}
-      >
+      <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${badgeClass}`}>
         {badgeText}
       </span>
       <span className="truncate">{label}</span>
@@ -98,10 +84,7 @@ export const TabBar = ({ panelId }: TabBarProps) => {
 
   return (
     <div className="flex h-9 shrink-0 items-end overflow-x-auto border-b border-bd bg-bg-2">
-      <SortableContext
-        items={panel.tabIds}
-        strategy={horizontalListSortingStrategy}
-      >
+      <SortableContext items={panel.tabIds} strategy={horizontalListSortingStrategy}>
         {panel.tabIds.map((tabId) => {
           const tabData = tabRegistry[tabId];
           if (!tabData) return null;
@@ -127,19 +110,7 @@ export const TabBar = ({ panelId }: TabBarProps) => {
           className="ml-auto shrink-0 px-2 py-1.5 text-t3 transition hover:bg-bg-h hover:text-t1"
           title="分割面板"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="12" y1="3" x2="12" y2="21" />
-          </svg>
+          <Columns2 size={14} />
         </button>
       )}
     </div>

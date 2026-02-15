@@ -1,24 +1,25 @@
-import { useRef, useState, useMemo } from "react";
-import { useCaseStore, type CaseFile } from "../../stores/useCaseStore";
-import { useBriefStore } from "../../stores/useBriefStore";
-import { useTabStore } from "../../stores/useTabStore";
-import { useUIStore } from "../../stores/useUIStore";
-import { api } from "../../lib/api";
-import { useAuthStore } from "../../stores/useAuthStore";
+import { useRef, useState, useMemo } from 'react';
+import { ChevronsRight, Trash2, Plus, Search } from 'lucide-react';
+import { useCaseStore, type CaseFile } from '../../stores/useCaseStore';
+import { useBriefStore } from '../../stores/useBriefStore';
+import { useTabStore } from '../../stores/useTabStore';
+import { useUIStore } from '../../stores/useUIStore';
+import { api } from '../../lib/api';
+import { useAuthStore } from '../../stores/useAuthStore';
 
-import { SectionHeader } from "./sidebar/SectionHeader";
-import { ConfirmDialog } from "./sidebar/ConfirmDialog";
-import { FileGroup } from "./sidebar/FileGroup";
-import { LawRefCard } from "./sidebar/LawRefCard";
-import { LawSearchDialog } from "./sidebar/LawSearchDialog";
+import { SectionHeader } from './sidebar/SectionHeader';
+import { ConfirmDialog } from './sidebar/ConfirmDialog';
+import { FileGroup } from './sidebar/FileGroup';
+import { LawRefCard } from './sidebar/LawRefCard';
+import { LawSearchDialog } from './sidebar/LawSearchDialog';
 
-type Category = "ours" | "theirs" | "court" | "evidence" | "other";
+type Category = 'ours' | 'theirs' | 'court' | 'evidence' | 'other';
 
 const FILE_GROUPS: { key: Category; label: string }[] = [
-  { key: "ours", label: "我方書狀" },
-  { key: "theirs", label: "對方書狀" },
-  { key: "court", label: "法院文件" },
-  { key: "evidence", label: "證據資料" },
+  { key: 'ours', label: '我方書狀' },
+  { key: 'theirs', label: '對方書狀' },
+  { key: 'court', label: '法院文件' },
+  { key: 'evidence', label: '證據資料' },
 ];
 
 export function RightSidebar() {
@@ -66,12 +67,12 @@ export function RightSidebar() {
     if (currentBrief?.content_structured?.paragraphs) {
       for (const p of currentBrief.content_structured.paragraphs) {
         for (const c of p.citations) {
-          if (c.type === "law") citedLabels.add(c.label);
+          if (c.type === 'law') citedLabels.add(c.label);
         }
         if (p.segments) {
           for (const seg of p.segments) {
             for (const c of seg.citations) {
-              if (c.type === "law") citedLabels.add(c.label);
+              if (c.type === 'law') citedLabels.add(c.label);
             }
           }
         }
@@ -81,9 +82,9 @@ export function RightSidebar() {
     const available: typeof lawRefs = [];
     for (const ref of lawRefs) {
       const label = `${ref.law_name} ${ref.article}`;
-      if (citedLabels.has(label) || ref.source === "cited") {
+      if (citedLabels.has(label) || ref.source === 'cited') {
         cited.push(ref);
-      } else if (ref.source === "manual") {
+      } else if (ref.source === 'manual') {
         available.push(ref);
       }
     }
@@ -91,9 +92,9 @@ export function RightSidebar() {
   }, [lawRefs, currentBrief]);
 
   const totalFiles = caseFiles.length;
-  const readyFiles = caseFiles.filter((f) => f.status === "ready").length;
+  const readyFiles = caseFiles.filter((f) => f.status === 'ready').length;
   const processingFiles = caseFiles.filter(
-    (f) => f.status === "pending" || f.status === "processing",
+    (f) => f.status === 'pending' || f.status === 'processing',
   ).length;
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,16 +103,16 @@ export function RightSidebar() {
 
     setUploading(true);
     for (const file of Array.from(fileList)) {
-      if (file.type !== "application/pdf") continue;
+      if (file.type !== 'application/pdf') continue;
       if (file.size > 20 * 1024 * 1024) continue;
 
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append('file', file);
 
       const token = useAuthStore.getState().token;
       try {
         const res = await fetch(`/api/cases/${currentCase.id}/files`, {
-          method: "POST",
+          method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
@@ -120,21 +121,19 @@ export function RightSidebar() {
           setFiles([...useCaseStore.getState().files, newFile]);
         }
       } catch (err) {
-        console.error("Upload failed:", err);
+        console.error('Upload failed:', err);
       }
     }
     setUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleCategoryChange = async (fileId: string, category: string) => {
     try {
       const updated = await api.put<CaseFile>(`/files/${fileId}`, { category });
-      setFiles(
-        caseFiles.map((f) => (f.id === fileId ? { ...f, ...updated } : f)),
-      );
+      setFiles(caseFiles.map((f) => (f.id === fileId ? { ...f, ...updated } : f)));
     } catch (err) {
-      console.error("Category update failed:", err);
+      console.error('Category update failed:', err);
     }
   };
 
@@ -147,7 +146,7 @@ export function RightSidebar() {
       await api.delete(`/files/${fileId}`);
       setFiles(caseFiles.filter((f) => f.id !== fileId));
     } catch (err) {
-      console.error("Delete failed:", err);
+      console.error('Delete failed:', err);
     }
   };
 
@@ -178,19 +177,7 @@ export function RightSidebar() {
           className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
           title="收合側邊欄"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="13 17 18 12 13 7" />
-            <polyline points="6 17 11 12 6 7" />
-          </svg>
+          <ChevronsRight size={14} />
         </button>
       </div>
 
@@ -226,30 +213,28 @@ export function RightSidebar() {
                   <div
                     key={b.id}
                     className={`group flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition ${
-                      isActive ? "bg-ac/10 text-ac" : "hover:bg-bg-h"
+                      isActive ? 'bg-ac/10 text-ac' : 'hover:bg-bg-h'
                     }`}
                   >
                     <button
                       onClick={() => openBriefTab(b.id, title)}
                       className="flex flex-1 items-start gap-2 min-w-0"
                     >
-                      <span
-                        className={`mt-0.5 text-[11px] ${isActive ? "text-ac" : "text-ac/60"}`}
-                      >
+                      <span className={`mt-0.5 text-[11px] ${isActive ? 'text-ac' : 'text-ac/60'}`}>
                         DOC
                       </span>
                       <div className="flex-1 min-w-0">
                         <p
-                          className={`truncate text-xs ${isActive ? "text-ac font-medium" : "text-t1"}`}
+                          className={`truncate text-xs ${isActive ? 'text-ac font-medium' : 'text-t1'}`}
                         >
-                          {b.title || "書狀"}
+                          {b.title || '書狀'}
                         </p>
                         <span className="text-[10px] text-t3">
                           {{
-                            complaint: "起訴狀",
-                            defense: "答辯狀",
-                            preparation: "準備書狀",
-                            appeal: "上訴狀",
+                            complaint: '起訴狀',
+                            defense: '答辯狀',
+                            preparation: '準備書狀',
+                            appeal: '上訴狀',
                           }[b.brief_type] || b.brief_type}
                         </span>
                       </div>
@@ -259,21 +244,7 @@ export function RightSidebar() {
                       className="mt-0.5 shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
                       title="刪除書狀"
                     >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        <line x1="10" y1="11" x2="10" y2="17" />
-                        <line x1="14" y1="11" x2="14" y2="17" />
-                      </svg>
+                      <Trash2 size={12} />
                     </button>
                   </div>
                 );
@@ -311,19 +282,7 @@ export function RightSidebar() {
             {uploading ? (
               <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ac border-t-transparent" />
             ) : (
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
+              <Plus size={14} />
             )}
           </button>
         </div>
@@ -341,10 +300,7 @@ export function RightSidebar() {
                   <div
                     className="h-1 rounded-full bg-ac transition-all"
                     style={{
-                      width:
-                        totalFiles > 0
-                          ? `${(readyFiles / totalFiles) * 100}%`
-                          : "0%",
+                      width: totalFiles > 0 ? `${(readyFiles / totalFiles) * 100}%` : '0%',
                     }}
                   />
                 </div>
@@ -400,19 +356,7 @@ export function RightSidebar() {
             className="mr-2 rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac"
             title="搜尋法條"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
+            <Search size={14} />
           </button>
         </div>
         {lawRefsOpen && (
@@ -447,11 +391,7 @@ export function RightSidebar() {
                       備用 ({availableLawRefs.length})
                     </p>
                     {availableLawRefs.map((ref) => (
-                      <LawRefCard
-                        key={ref.id}
-                        lawRef={ref}
-                        onRemove={removeLawRef}
-                      />
+                      <LawRefCard key={ref.id} lawRef={ref} onRemove={removeLawRef} />
                     ))}
                   </>
                 )}
@@ -461,10 +401,7 @@ export function RightSidebar() {
         )}
       </div>
 
-      <LawSearchDialog
-        open={lawSearchOpen}
-        onClose={() => setLawSearchOpen(false)}
-      />
+      <LawSearchDialog open={lawSearchOpen} onClose={() => setLawSearchOpen(false)} />
     </aside>
   );
 }

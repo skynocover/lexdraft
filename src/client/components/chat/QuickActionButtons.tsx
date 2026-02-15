@@ -1,3 +1,5 @@
+import { Undo2 } from 'lucide-react';
+
 interface SuggestedAction {
   label: string;
   prompt: string;
@@ -25,19 +27,7 @@ export const QuickActionButtons = ({
           onClick={onRewind}
           className="flex items-center gap-1 rounded-full border border-rd/30 bg-rd/10 px-3 py-1 text-xs text-rd transition hover:bg-rd/20"
         >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-          </svg>
+          <Undo2 size={12} />
           回復變更
         </button>
       )}
