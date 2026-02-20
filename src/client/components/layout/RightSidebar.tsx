@@ -166,11 +166,11 @@ const AnalysisSidebarContent = () => {
     <div className="flex flex-1 flex-col overflow-y-auto">
       <Accordion type="multiple" value={analysisAccordion} onValueChange={setAnalysisAccordion}>
         <AccordionItem value="disputes" className="border-bd px-3">
-          <AccordionTrigger className="py-3 text-xs font-medium text-t2 hover:no-underline">
+          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
             <div className="flex items-center gap-2">
               <span>爭點分析</span>
               {disputes.length > 0 && (
-                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[10px] text-t3">
+                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[11px] text-t3">
                   {disputes.length}
                 </span>
               )}
@@ -182,11 +182,11 @@ const AnalysisSidebarContent = () => {
         </AccordionItem>
 
         <AccordionItem value="claims" className="border-bd px-3">
-          <AccordionTrigger className="py-3 text-xs font-medium text-t2 hover:no-underline">
+          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
             <div className="flex items-center gap-2">
               <span>主張圖譜</span>
               {claims.length > 0 && (
-                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[10px] text-t3">
+                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[11px] text-t3">
                   {claims.length}
                 </span>
               )}
@@ -198,11 +198,11 @@ const AnalysisSidebarContent = () => {
         </AccordionItem>
 
         <AccordionItem value="damages" className="border-bd px-3">
-          <AccordionTrigger className="py-3 text-xs font-medium text-t2 hover:no-underline">
+          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
             <div className="flex items-center gap-2">
               <span>金額計算</span>
               {totalDamages > 0 && (
-                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[10px] text-t3">
+                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[11px] text-t3">
                   NT$ {totalDamages.toLocaleString()}
                 </span>
               )}
@@ -214,11 +214,11 @@ const AnalysisSidebarContent = () => {
         </AccordionItem>
 
         <AccordionItem value="timeline" className="border-bd px-3">
-          <AccordionTrigger className="py-3 text-xs font-medium text-t2 hover:no-underline">
+          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
             <div className="flex items-center gap-2">
               <span>時間軸</span>
               {timeline.length > 0 && (
-                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[10px] text-t3">
+                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[11px] text-t3">
                   {timeline.length}
                 </span>
               )}
@@ -230,7 +230,7 @@ const AnalysisSidebarContent = () => {
         </AccordionItem>
 
         <AccordionItem value="evidence" className="border-bd px-3">
-          <AccordionTrigger className="py-3 text-xs font-medium text-t2 hover:no-underline">
+          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
             主張與舉證
           </AccordionTrigger>
           <AccordionContent className="pb-2">
@@ -239,7 +239,7 @@ const AnalysisSidebarContent = () => {
         </AccordionItem>
 
         <AccordionItem value="parties" className="border-bd px-3">
-          <AccordionTrigger className="py-3 text-xs font-medium text-t2 hover:no-underline">
+          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
             當事人
           </AccordionTrigger>
           <AccordionContent className="pb-2">

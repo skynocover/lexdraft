@@ -13,18 +13,18 @@ const ClaimCard = ({ claim, allClaims }: { claim: ClaimGraph; allClaims: ClaimGr
   const target = claim.responds_to ? allClaims.find((c) => c.id === claim.responds_to) : null;
 
   return (
-    <div className="rounded-lg border border-bd bg-bg-2 px-3 py-2">
+    <div className="rounded-lg border border-bd bg-bg-2 px-3 py-2.5">
       <div className="flex items-start gap-2">
         <span
-          className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium ${badge.cls}`}
+          className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${badge.cls}`}
         >
           {badge.label}
         </span>
-        <p className="flex-1 text-xs leading-relaxed text-t1">{claim.statement}</p>
+        <p className="flex-1 text-sm leading-relaxed text-t1">{claim.statement}</p>
       </div>
       {target && (
-        <div className="mt-1.5 flex items-center gap-1 pl-7 text-[11px] text-t3">
-          <ArrowRight size={10} className="shrink-0" />
+        <div className="mt-1.5 flex items-center gap-1 pl-7 text-xs text-t3">
+          <ArrowRight size={12} className="shrink-0" />
           <span className="truncate">
             回應：{target.id}「{target.statement.slice(0, 50)}」
           </span>
@@ -93,7 +93,7 @@ export const ClaimsTab = () => {
   return (
     <div className="space-y-3">
       {/* Summary */}
-      <div className="flex items-center gap-3 text-[11px] text-t3">
+      <div className="flex items-center gap-3 text-xs text-t3">
         <span>我方 {ourTotal}</span>
         <span>對方 {theirTotal}</span>
         <span>反駁 {rebuttalTotal}</span>
@@ -108,7 +108,7 @@ export const ClaimsTab = () => {
           <div key={key} className="rounded-lg border border-bd bg-bg-1">
             <button
               onClick={() => toggleGroup(key)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
             >
               <ChevronDown
                 size={14}
@@ -116,8 +116,8 @@ export const ClaimsTab = () => {
                   isExpanded ? '' : '-rotate-90'
                 }`}
               />
-              <span className="flex-1 text-xs font-medium text-t1">{group.disputeTitle}</span>
-              <span className="text-[11px] text-t3">
+              <span className="flex-1 text-sm font-medium text-t1">{group.disputeTitle}</span>
+              <span className="text-xs text-t3">
                 {group.ourClaims.length + group.theirClaims.length} 項
               </span>
             </button>
@@ -126,24 +126,24 @@ export const ClaimsTab = () => {
               <div className="flex flex-col gap-2 px-3 pb-3">
                 {/* Ours */}
                 <div className="space-y-1.5">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-t3">我方</p>
+                  <p className="text-xs font-medium uppercase tracking-wider text-t3">我方</p>
                   {group.ourClaims.length > 0 ? (
                     group.ourClaims.map((c) => (
                       <ClaimCard key={c.id} claim={c} allClaims={claims} />
                     ))
                   ) : (
-                    <p className="text-[11px] text-t3/50">（無）</p>
+                    <p className="text-xs text-t3/50">（無）</p>
                   )}
                 </div>
                 {/* Theirs */}
                 <div className="space-y-1.5">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-t3">對方</p>
+                  <p className="text-xs font-medium uppercase tracking-wider text-t3">對方</p>
                   {group.theirClaims.length > 0 ? (
                     group.theirClaims.map((c) => (
                       <ClaimCard key={c.id} claim={c} allClaims={claims} />
                     ))
                   ) : (
-                    <p className="text-[11px] text-t3/50">（無）</p>
+                    <p className="text-xs text-t3/50">（無）</p>
                   )}
                 </div>
               </div>

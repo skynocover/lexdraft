@@ -56,17 +56,15 @@ export function EvidenceTab() {
       {rows.map((row, i) => {
         const style = STATUS_STYLE[row.status];
         return (
-          <div key={i} className="rounded border border-bd bg-bg-2 px-3 py-2">
+          <div key={i} className="rounded border border-bd bg-bg-2 px-3 py-2.5">
             <div className="flex items-start justify-between gap-2">
-              <p className="flex-1 text-xs text-t1">{row.claim}</p>
-              <span
-                className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${style.cls}`}
-              >
+              <p className="flex-1 text-sm text-t1">{row.claim}</p>
+              <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${style.cls}`}>
                 {style.label}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-t2">證據：{row.evidence}</p>
-            <p className="text-[11px] text-t3">來源：{row.source}</p>
+            <p className="mt-1 text-xs text-t2">證據：{row.evidence}</p>
+            <p className="text-xs text-t3">來源：{row.source}</p>
           </div>
         );
       })}

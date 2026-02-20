@@ -27,22 +27,22 @@ export function TimelineTab() {
             />
 
             {/* Content */}
-            <div className="rounded border border-bd bg-bg-2 px-3 py-2">
+            <div className="rounded border border-bd bg-bg-2 px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${
                     event.is_critical ? 'bg-rd/20 text-rd' : 'bg-ac/20 text-ac'
                   }`}
                 >
                   {event.date}
                 </span>
-                <span className="flex-1 truncate text-xs font-medium text-t1">{event.title}</span>
+                <span className="flex-1 truncate text-sm font-medium text-t1">{event.title}</span>
               </div>
               {event.description && (
-                <p className="mt-1 text-[11px] leading-4 text-t2">{event.description}</p>
+                <p className="mt-1 text-sm leading-relaxed text-t2">{event.description}</p>
               )}
               {event.source_file && (
-                <p className="mt-1 text-[11px] text-t3">來源：{event.source_file}</p>
+                <p className="mt-1 text-xs text-t3">來源：{event.source_file}</p>
               )}
             </div>
           </div>

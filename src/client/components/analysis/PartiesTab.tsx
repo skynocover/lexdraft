@@ -27,13 +27,11 @@ export function PartiesTab() {
       {currentCase.plaintiff && (
         <div className="flex-1 rounded border border-ac/30 bg-ac/5 p-3">
           <div className="mb-2 flex items-center gap-2">
-            <span className="rounded bg-ac/20 px-1.5 py-0.5 text-[11px] font-medium text-ac">
-              原告
-            </span>
+            <span className="rounded bg-ac/20 px-1.5 py-0.5 text-xs font-medium text-ac">原告</span>
           </div>
           <p className="text-sm font-medium text-t1">{currentCase.plaintiff}</p>
           {currentCase.case_type && (
-            <p className="mt-1 text-[11px] text-t3">案件類型：{currentCase.case_type}</p>
+            <p className="mt-1 text-xs text-t3">案件類型：{currentCase.case_type}</p>
           )}
         </div>
       )}
@@ -42,13 +40,11 @@ export function PartiesTab() {
       {currentCase.defendant && (
         <div className="flex-1 rounded border border-or/30 bg-or/5 p-3">
           <div className="mb-2 flex items-center gap-2">
-            <span className="rounded bg-or/20 px-1.5 py-0.5 text-[11px] font-medium text-or">
-              被告
-            </span>
+            <span className="rounded bg-or/20 px-1.5 py-0.5 text-xs font-medium text-or">被告</span>
           </div>
           <p className="text-sm font-medium text-t1">{currentCase.defendant}</p>
           {currentCase.court && (
-            <p className="mt-1 text-[11px] text-t3">管轄法院：{currentCase.court}</p>
+            <p className="mt-1 text-xs text-t3">管轄法院：{currentCase.court}</p>
           )}
         </div>
       )}
