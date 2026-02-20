@@ -1,6 +1,7 @@
-import { searchLaw } from './lawSearch';
+import { batchLookupLawsByIds } from './lawSearch';
+import { resolveAlias, normalizeArticleNo, buildArticleId } from './lawConstants';
 import { hasReplacementChars, buildLawTextMap, repairLawCitations } from './textSanitize';
-import { readLawRefs, upsertLawRef, hasLawRefByNameArticle } from './lawRefsJson';
+import { readLawRefs, upsertManyLawRefs, hasLawRefByNameArticle } from './lawRefsJson';
 import type { LawRefItem } from './lawRefsJson';
 import type { getDB } from '../db';
 
@@ -38,35 +39,36 @@ export const loadLawDocsByIds = async (
     }
   }
 
-  // Phase 2: fetch missing from MongoDB
+  // Phase 2: batch fetch missing from MongoDB (single $in query)
   const stillMissing = lawIds.filter((id) => !loadedIds.has(id));
   if (stillMissing.length && mongoUrl) {
-    for (const lawId of stillMissing) {
-      try {
-        const results = await searchLaw(mongoUrl, { query: lawId, limit: 1 });
-        if (results.length > 0) {
-          const r = results[0];
-          if (hasReplacementChars(r.content)) {
-            console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
-            continue;
-          }
-          await upsertLawRef(drizzle, caseId, {
-            id: r._id,
-            law_name: r.law_name,
-            article: r.article_no,
-            full_text: r.content,
-            is_manual: false,
-          });
-          loaded.push({
-            id: r._id,
-            title: `${r.law_name} ${r.article_no}`,
-            content: r.content,
-          });
-          loadedIds.add(r._id);
+    try {
+      const results = await batchLookupLawsByIds(mongoUrl, stillMissing);
+      const toCache: LawRefItem[] = [];
+      for (const r of results) {
+        if (hasReplacementChars(r.content)) {
+          console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
+          continue;
         }
-      } catch {
-        /* skip on error */
+        loaded.push({
+          id: r._id,
+          title: `${r.law_name} ${r.article_no}`,
+          content: r.content,
+        });
+        loadedIds.add(r._id);
+        toCache.push({
+          id: r._id,
+          law_name: r.law_name,
+          article: r.article_no,
+          full_text: r.content,
+          is_manual: false,
+        });
       }
+      if (toCache.length) {
+        await upsertManyLawRefs(drizzle, caseId, toCache);
+      }
+    } catch {
+      /* skip on error */
     }
   }
 
@@ -99,31 +101,43 @@ export const fetchAndCacheUncitedMentions = async (
   if (uncitedLaws.length > 0 && mongoUrl) {
     const currentRefs = await readLawRefs(drizzle, caseId);
 
-    for (const law of uncitedLaws) {
-      try {
-        const alreadyCached = hasLawRefByNameArticle(currentRefs, law.lawName, law.article);
-        if (alreadyCached) continue;
+    // Filter out already-cached laws, then build _id list for batch lookup
+    const toBatch = uncitedLaws.filter(
+      (law) => !hasLawRefByNameArticle(currentRefs, law.lawName, law.article),
+    );
 
-        const results = await searchLaw(mongoUrl, {
-          query: `${law.lawName} ${law.article}`,
-          limit: 1,
-        });
-        if (results.length > 0) {
-          const r = results[0];
-          if (hasReplacementChars(r.content)) {
-            console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
-            continue;
+    if (toBatch.length) {
+      const idsToFetch: string[] = [];
+      for (const law of toBatch) {
+        const resolved = resolveAlias(law.lawName);
+        const normalized = normalizeArticleNo(law.article);
+        const articleId = buildArticleId(resolved, normalized);
+        if (articleId) idsToFetch.push(articleId);
+      }
+
+      if (idsToFetch.length) {
+        try {
+          const results = await batchLookupLawsByIds(mongoUrl, idsToFetch);
+          const toCache: LawRefItem[] = [];
+          for (const r of results) {
+            if (hasReplacementChars(r.content)) {
+              console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
+              continue;
+            }
+            toCache.push({
+              id: r._id,
+              law_name: r.law_name,
+              article: r.article_no,
+              full_text: r.content,
+              is_manual: false,
+            });
           }
-          await upsertLawRef(drizzle, caseId, {
-            id: r._id,
-            law_name: r.law_name,
-            article: r.article_no,
-            full_text: r.content,
-            is_manual: false,
-          });
+          if (toCache.length) {
+            await upsertManyLawRefs(drizzle, caseId, toCache);
+          }
+        } catch {
+          /* skip on error */
         }
-      } catch {
-        /* skip */
       }
     }
   }

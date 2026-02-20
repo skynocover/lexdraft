@@ -41,22 +41,6 @@ const writeLawRefs = async (
     .where(eq(cases.id, caseId));
 };
 
-export const upsertLawRef = async (
-  drizzle: Drizzle,
-  caseId: string,
-  ref: LawRefItem,
-): Promise<LawRefItem[]> => {
-  const existing = await readLawRefs(drizzle, caseId);
-  const idx = existing.findIndex((r) => r.id === ref.id);
-  if (idx >= 0) {
-    existing[idx] = ref;
-  } else {
-    existing.push(ref);
-  }
-  await writeLawRefs(drizzle, caseId, existing);
-  return existing;
-};
-
 export const upsertManyLawRefs = async (
   drizzle: Drizzle,
   caseId: string,

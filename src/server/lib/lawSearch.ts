@@ -271,12 +271,51 @@ export const searchLaw = async (
 };
 
 /**
+ * One-shot batch lookup: find multiple articles by _id using $in.
+ * Creates a MongoClient, queries, then closes.
+ */
+export const batchLookupLawsByIds = async (
+  mongoUrl: string,
+  ids: string[],
+): Promise<LawArticle[]> => {
+  if (!mongoUrl || !ids.length) return [];
+
+  const client = new MongoClient(mongoUrl, MONGO_OPTS);
+  try {
+    const coll = client.db('lawdb').collection('articles');
+    const docs = await coll
+      .find({ _id: { $in: ids } as unknown as Record<string, unknown> })
+      .project({
+        _id: 1,
+        pcode: 1,
+        law_name: 1,
+        nature: 1,
+        category: 1,
+        chapter: 1,
+        article_no: 1,
+        content: 1,
+        aliases: 1,
+        last_update: 1,
+      })
+      .toArray();
+    return docs.map((d) => ({
+      ...d,
+      url: buildUrl(d.pcode as string),
+      score: 1,
+    })) as unknown as LawArticle[];
+  } finally {
+    await client.close().catch(() => {});
+  }
+};
+
+/**
  * Create a reusable LawSearch session.
  * Use within a single pipeline run to avoid creating multiple MongoClient instances.
  * MUST call close() when done.
  */
 export interface LawSearchSession {
   search: (query: string, limit?: number) => Promise<LawArticle[]>;
+  batchLookupByIds: (ids: string[]) => Promise<LawArticle[]>;
   close: () => Promise<void>;
 }
 
@@ -310,6 +349,31 @@ export const createLawSearchSession = (mongoUrl: string): LawSearchSession => {
       await ensureConnected();
       const coll = client.db('lawdb').collection('articles');
       return searchWithCollection(coll, query, { limit: limit || 5 });
+    },
+    batchLookupByIds: async (ids: string[]): Promise<LawArticle[]> => {
+      if (!mongoUrl || !ids.length) return [];
+      await ensureConnected();
+      const coll = client.db('lawdb').collection('articles');
+      const docs = await coll
+        .find({ _id: { $in: ids } as unknown as Record<string, unknown> })
+        .project({
+          _id: 1,
+          pcode: 1,
+          law_name: 1,
+          nature: 1,
+          category: 1,
+          chapter: 1,
+          article_no: 1,
+          content: 1,
+          aliases: 1,
+          last_update: 1,
+        })
+        .toArray();
+      return docs.map((d) => ({
+        ...d,
+        url: buildUrl(d.pcode as string),
+        score: 1,
+      })) as unknown as LawArticle[];
     },
     close: async () => {
       await client.close().catch(() => {});

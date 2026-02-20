@@ -210,17 +210,19 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     if (orchestratorOutput && orchestratorOutput.legalIssues.length >= existingDisputes.length) {
       // Delete old disputes and insert new ones
       await ctx.drizzle.delete(disputes).where(eq(disputes.case_id, ctx.caseId));
-      for (const issue of orchestratorOutput.legalIssues) {
-        await ctx.drizzle.insert(disputes).values({
-          id: issue.id,
-          case_id: ctx.caseId,
-          number: 0,
-          title: issue.title,
-          our_position: issue.our_position,
-          their_position: issue.their_position,
-          evidence: issue.key_evidence.length > 0 ? JSON.stringify(issue.key_evidence) : null,
-          law_refs: issue.mentioned_laws.length > 0 ? JSON.stringify(issue.mentioned_laws) : null,
-        });
+      if (orchestratorOutput.legalIssues.length) {
+        await ctx.drizzle.insert(disputes).values(
+          orchestratorOutput.legalIssues.map((issue) => ({
+            id: issue.id,
+            case_id: ctx.caseId,
+            number: 0,
+            title: issue.title,
+            our_position: issue.our_position,
+            their_position: issue.their_position,
+            evidence: issue.key_evidence.length > 0 ? JSON.stringify(issue.key_evidence) : null,
+            law_refs: issue.mentioned_laws.length > 0 ? JSON.stringify(issue.mentioned_laws) : null,
+          })),
+        );
       }
 
       // Send SSE updates

@@ -3,6 +3,7 @@
  * Used by both collectStreamText (tool execution) and AgentDO (agent loop).
  */
 import { stripReplacementChars } from '../lib/textSanitize';
+import type { ToolCall } from './aiClient';
 
 export interface OpenAIChunk {
   choices?: Array<{
@@ -76,3 +77,59 @@ export async function collectStreamText(response: Response): Promise<string> {
   });
   return stripReplacementChars(text);
 }
+
+// ── Stream with Tool Calls ──
+
+export interface StreamParseResult {
+  content: string;
+  toolCalls: ToolCall[];
+}
+
+/**
+ * Parse an OpenAI streaming response, collecting text content and tool calls.
+ * Used by agent loops (orchestrator, research) that need both content and tool calls.
+ */
+export const collectStreamWithToolCalls = async (
+  response: Response,
+  roundIndex: number,
+): Promise<StreamParseResult> => {
+  let content = '';
+  const toolCallBuffers: Map<number, { id: string; name: string; args: string }> = new Map();
+
+  await parseOpenAIStream(response, (chunk: OpenAIChunk) => {
+    const delta = chunk.choices?.[0]?.delta;
+    if (!delta) return;
+
+    if (delta.content) {
+      content += delta.content;
+    }
+
+    if (delta.tool_calls) {
+      for (const tc of delta.tool_calls) {
+        const idx = tc.index;
+        if (!toolCallBuffers.has(idx)) {
+          toolCallBuffers.set(idx, { id: tc.id || '', name: '', args: '' });
+        }
+        const buf = toolCallBuffers.get(idx)!;
+        if (tc.id) buf.id = tc.id;
+        if (tc.function?.name) buf.name = tc.function.name;
+        if (tc.function?.arguments) {
+          buf.args += tc.function.arguments;
+        }
+      }
+    }
+  });
+
+  const toolCalls: ToolCall[] = [];
+  for (const [, buf] of toolCallBuffers) {
+    if (buf.name) {
+      toolCalls.push({
+        id: buf.id || `call_${roundIndex}_${toolCalls.length}`,
+        type: 'function',
+        function: { name: buf.name, arguments: buf.args || '{}' },
+      });
+    }
+  }
+
+  return { content, toolCalls };
+};

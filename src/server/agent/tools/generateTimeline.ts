@@ -1,28 +1,37 @@
-import { eq } from 'drizzle-orm'
-import { nanoid } from 'nanoid'
-import { timelineEvents as timelineEventsTable } from '../../db/schema'
-import { callAIStreaming } from '../aiClient'
-import { collectStreamText } from '../sseParser'
-import { toolError, parseJsonField, loadReadyFiles } from '../toolHelpers'
-import type { ToolHandler } from './types'
+import { eq } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
+import { timelineEvents as timelineEventsTable } from '../../db/schema';
+import {
+  toolError,
+  loadReadyFiles,
+  buildFileContext,
+  callAnalysisAI,
+  parseLLMJsonArray,
+} from '../toolHelpers';
+import type { ToolHandler } from './types';
+
+interface TimelineItem {
+  date: string;
+  title: string;
+  description: string;
+  source_file: string;
+  is_critical: boolean;
+}
 
 export const handleGenerateTimeline: ToolHandler = async (_args, caseId, db, drizzle, ctx) => {
   if (!ctx) {
-    return toolError('Error: missing execution context')
+    return toolError('Error: missing execution context');
   }
 
   // Load all ready files with summaries
-  let timelineReadyFiles
+  let timelineReadyFiles;
   try {
-    timelineReadyFiles = await loadReadyFiles(db, caseId)
+    timelineReadyFiles = await loadReadyFiles(db, caseId);
   } catch (e) {
-    return e as { result: string; success: false }
+    return e as { result: string; success: false };
   }
 
-  const fileContext = timelineReadyFiles.map((f) => {
-    const summary = parseJsonField<Record<string, unknown>>(f.summary, {})
-    return `【${f.filename}】(${f.category})\n日期：${f.doc_date || '不明'}\n摘要：${summary.summary || '無'}`
-  }).join('\n\n')
+  const fileContext = buildFileContext(timelineReadyFiles, { includeDocDate: true });
 
   const timelinePrompt = `你是專業的台灣法律分析助手。請根據以下案件文件摘要，產生時間軸事件列表。
 
@@ -44,55 +53,40 @@ ${fileContext}
 - is_critical 為布林值，標記關鍵事件（如起訴、判決、簽約、違約等）
 - 按日期從早到晚排序
 - 重要：絕對不要使用 emoji 或特殊符號
-- 只回傳 JSON 陣列，不要其他文字。`
+- 只回傳 JSON 陣列，不要其他文字。`;
 
-  const timelineAiResponse = await callAIStreaming(ctx.aiEnv, {
-    messages: [
-      { role: 'system', content: '你是專業的台灣法律分析助手。' },
-      { role: 'user', content: timelinePrompt },
-    ],
-  })
+  const timelineResponseText = await callAnalysisAI(ctx.aiEnv, timelinePrompt);
 
-  const timelineResponseText = await collectStreamText(timelineAiResponse)
-
-  let timelineEvents: Array<{
-    date: string
-    title: string
-    description: string
-    source_file: string
-    is_critical: boolean
-  }> = []
-
+  let timelineEvents: TimelineItem[] = [];
   try {
-    const jsonMatch = timelineResponseText.match(/\[[\s\S]*\]/)
-    if (jsonMatch) {
-      timelineEvents = JSON.parse(jsonMatch[0])
-    }
+    timelineEvents = parseLLMJsonArray<TimelineItem>(timelineResponseText, '無法解析時間軸結果');
   } catch {
-    return { result: 'Error: 無法解析時間軸結果', success: false }
+    return toolError('無法解析時間軸結果');
   }
 
   if (!timelineEvents.length) {
-    return { result: '未能從檔案中識別出時間軸事件。', success: false }
+    return { result: '未能從檔案中識別出時間軸事件。', success: false };
   }
 
   // Sort by date
-  timelineEvents.sort((a, b) => a.date.localeCompare(b.date))
+  timelineEvents.sort((a, b) => a.date.localeCompare(b.date));
 
   // Persist to D1 — delete old events for this case, then insert new ones
-  await drizzle.delete(timelineEventsTable).where(eq(timelineEventsTable.case_id, caseId))
-  const now = new Date().toISOString()
-  for (const evt of timelineEvents) {
-    await drizzle.insert(timelineEventsTable).values({
-      id: nanoid(),
-      case_id: caseId,
-      date: evt.date,
-      title: evt.title,
-      description: evt.description || '',
-      source_file: evt.source_file || '',
-      is_critical: evt.is_critical || false,
-      created_at: now,
-    })
+  await drizzle.delete(timelineEventsTable).where(eq(timelineEventsTable.case_id, caseId));
+  const now = new Date().toISOString();
+  if (timelineEvents.length) {
+    await drizzle.insert(timelineEventsTable).values(
+      timelineEvents.map((evt) => ({
+        id: nanoid(),
+        case_id: caseId,
+        date: evt.date,
+        title: evt.title,
+        description: evt.description || '',
+        source_file: evt.source_file || '',
+        is_critical: evt.is_critical || false,
+        created_at: now,
+      })),
+    );
   }
 
   // Send via SSE
@@ -101,14 +95,14 @@ ${fileContext}
     brief_id: '',
     action: 'set_timeline',
     data: timelineEvents,
-  })
+  });
 
   const timelineSummary = timelineEvents
     .map((e) => `${e.date} ${e.title}${e.is_critical ? ' (關鍵)' : ''}`)
-    .join('\n')
+    .join('\n');
 
   return {
     result: `已產生 ${timelineEvents.length} 個時間軸事件：\n${timelineSummary}`,
     success: true,
-  }
-}
+  };
+};

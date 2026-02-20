@@ -1,6 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { getDB } from '../db';
 import { files } from '../db/schema';
+import { callAIStreaming, type AIEnv } from './aiClient';
+import { collectStreamText } from './sseParser';
 
 /** Standard error return for tool execution */
 export function toolError(message: string): { result: string; success: false } {
@@ -123,6 +125,31 @@ export const parseLLMJsonResponse = <T>(content: string, errorLabel: string): T 
   }
 };
 
+/**
+ * Extract and parse a JSON array from LLM response text.
+ * Like parseLLMJsonResponse but for array output (matches outermost [...]).
+ */
+export const parseLLMJsonArray = <T>(content: string, errorLabel: string): T[] => {
+  const match = content.match(/\[[\s\S]*\]/);
+  if (!match) {
+    throw new Error(`${errorLabel}（無法找到 JSON 陣列）`);
+  }
+
+  try {
+    return JSON.parse(match[0]) as T[];
+  } catch {
+    const cleaned = cleanLLMJson(match[0]);
+    try {
+      return JSON.parse(cleaned) as T[];
+    } catch {
+      console.error(
+        `[parseLLMJsonArray] Failed to parse (first 500 chars): ${match[0].slice(0, 500)}`,
+      );
+      throw new Error(`${errorLabel}（JSON 格式錯誤）`);
+    }
+  }
+};
+
 /** Fields selected when loading ready files for analysis tools */
 const READY_FILE_SELECT = {
   id: files.id,
@@ -159,3 +186,62 @@ export async function loadReadyFiles(db: D1Database, caseId: string): Promise<Re
   }
   return readyFiles;
 }
+
+// ── File Context Builder ──
+
+export interface FileContextOptions {
+  includeClaims?: boolean;
+  includeKeyAmounts?: boolean;
+  includeDocDate?: boolean;
+}
+
+/**
+ * Build a text context string from ready files for analysis tool prompts.
+ * Field order: filename → 日期(optional) → 摘要 → 金額(optional) → 主張(optional)
+ */
+export const buildFileContext = (
+  readyFiles: ReadyFile[],
+  options: FileContextOptions = {},
+): string => {
+  return readyFiles
+    .map((f) => {
+      const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
+      const lines: string[] = [`【${f.filename}】(${f.category})`];
+
+      if (options.includeDocDate) {
+        lines.push(`日期：${f.doc_date || '不明'}`);
+      }
+
+      lines.push(`摘要：${summary.summary || '無'}`);
+
+      if (options.includeKeyAmounts) {
+        lines.push(`金額：${summary.key_amounts ? JSON.stringify(summary.key_amounts) : '無'}`);
+      }
+
+      if (options.includeClaims) {
+        const claims = parseJsonField<string[]>(f.extracted_claims, []);
+        lines.push(`主張：${claims.length > 0 ? claims.join('；') : '無'}`);
+      }
+
+      return lines.join('\n');
+    })
+    .join('\n\n');
+};
+
+// ── Analysis AI Caller ──
+
+const ANALYSIS_SYSTEM_PROMPT = '你是專業的台灣法律分析助手。';
+
+/**
+ * Call AI with the standard analysis system prompt and collect full text response.
+ * Used by analysis tools (disputes, damages, timeline).
+ */
+export const callAnalysisAI = async (aiEnv: AIEnv, prompt: string): Promise<string> => {
+  const response = await callAIStreaming(aiEnv, {
+    messages: [
+      { role: 'system', content: ANALYSIS_SYSTEM_PROMPT },
+      { role: 'user', content: prompt },
+    ],
+  });
+  return collectStreamText(response);
+};

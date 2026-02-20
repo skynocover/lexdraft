@@ -5,7 +5,7 @@
 import { nanoid } from 'nanoid';
 import { eq } from 'drizzle-orm';
 import { callAIStreaming, type AIEnv, type ChatMessage, type ToolCall } from './aiClient';
-import { parseOpenAIStream, type OpenAIChunk } from './sseParser';
+import { collectStreamWithToolCalls } from './sseParser';
 import { files } from '../db/schema';
 import { getDB } from '../db';
 import type { LegalIssue, InformationGap, StructuredFact } from './pipeline/types';
@@ -119,45 +119,8 @@ export const runOrchestratorAgent = async (
         signal: combinedSignal,
       });
 
-      // Parse stream
-      let fullContent = '';
-      const toolCallBuffers: Map<number, { id: string; name: string; args: string }> = new Map();
-
-      await parseOpenAIStream(response, (chunk: OpenAIChunk) => {
-        const delta = chunk.choices?.[0]?.delta;
-        if (!delta) return;
-
-        if (delta.content) {
-          fullContent += delta.content;
-        }
-
-        if (delta.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index;
-            if (!toolCallBuffers.has(idx)) {
-              toolCallBuffers.set(idx, { id: tc.id || '', name: '', args: '' });
-            }
-            const buf = toolCallBuffers.get(idx)!;
-            if (tc.id) buf.id = tc.id;
-            if (tc.function?.name) buf.name = tc.function.name;
-            if (tc.function?.arguments) {
-              buf.args += tc.function.arguments;
-            }
-          }
-        }
-      });
-
-      // Assemble tool calls
-      const toolCalls: ToolCall[] = [];
-      for (const [, buf] of toolCallBuffers) {
-        if (buf.name) {
-          toolCalls.push({
-            id: buf.id || `call_${round}_${toolCalls.length}`,
-            type: 'function',
-            function: { name: buf.name, arguments: buf.args || '{}' },
-          });
-        }
-      }
+      // Parse stream and collect tool calls
+      const { content: fullContent, toolCalls } = await collectStreamWithToolCalls(response, round);
 
       // No tool calls → agent is done, parse final output
       if (toolCalls.length === 0) {

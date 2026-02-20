@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { files, briefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
@@ -62,7 +62,7 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
     : null;
 
   // 2. Load file contents for document blocks (prefer content_md for citation chunking)
-  const fileRows = await drizzle
+  const relevantFiles = await drizzle
     .select({
       id: files.id,
       filename: files.filename,
@@ -70,9 +70,8 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
       content_md: files.content_md,
     })
     .from(files)
-    .where(eq(files.case_id, caseId));
+    .where(inArray(files.id, relevantFileIds));
 
-  const relevantFiles = fileRows.filter((f) => relevantFileIds.includes(f.id));
   if (!relevantFiles.length) {
     return { result: 'Error: no matching files found', success: false };
   }
