@@ -8,6 +8,7 @@ import {
   type Damage,
   type TimelineEvent,
   type Party,
+  type ClaimGraph,
 } from './useAnalysisStore';
 import { useTabStore } from './useTabStore';
 import { useRewindStore } from './useRewindStore';
@@ -338,6 +339,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   analysisStore.setTimeline(event.data as TimelineEvent[]);
                 } else if (event.action === 'set_parties') {
                   analysisStore.setParties(event.data as Party[]);
+                } else if (event.action === 'set_claims') {
+                  analysisStore.setClaims(event.data as ClaimGraph[]);
                 }
                 break;
               }

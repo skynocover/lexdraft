@@ -11,6 +11,7 @@ import { handleCalculateDamages } from './calculateDamages';
 import { handleSearchLaw } from './searchLaw';
 import { handleGenerateTimeline } from './generateTimeline';
 import { handleWriteFullBrief } from './writeFullBrief';
+import { handleQualityReview } from './qualityReview';
 
 const handlers: Record<string, ToolHandler> = {
   list_files: handleListFiles,
@@ -22,6 +23,7 @@ const handlers: Record<string, ToolHandler> = {
   search_law: handleSearchLaw,
   generate_timeline: handleGenerateTimeline,
   write_full_brief: handleWriteFullBrief,
+  review_brief: handleQualityReview,
 };
 
 export async function executeTool(

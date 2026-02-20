@@ -30,6 +30,8 @@ const MONGO_OPTS = {
   minPoolSize: 0,
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 10000,
+  maxIdleTimeMS: 3000,
+  waitQueueTimeoutMS: 5000,
 };
 
 export const searchLaw = async (
@@ -243,6 +245,244 @@ export const searchLaw = async (
   } finally {
     await client.close().catch(() => {});
   }
+};
+
+/**
+ * Create a reusable LawSearch session.
+ * Use within a single pipeline run to avoid creating multiple MongoClient instances.
+ * MUST call close() when done.
+ */
+export interface LawSearchSession {
+  search: (query: string, limit?: number) => Promise<LawArticle[]>;
+  close: () => Promise<void>;
+}
+
+export const createLawSearchSession = (mongoUrl: string): LawSearchSession => {
+  const client = new MongoClient(mongoUrl, MONGO_OPTS);
+  let connected = false;
+
+  const ensureConnected = async () => {
+    if (!connected) {
+      await client.connect();
+      connected = true;
+      // Suppress EventEmitter warnings on internal topology/pool emitters
+      try {
+        const topology = (client as unknown as Record<string, unknown>).topology;
+        if (
+          topology &&
+          typeof (topology as { setMaxListeners?: (n: number) => void }).setMaxListeners ===
+            'function'
+        ) {
+          (topology as { setMaxListeners: (n: number) => void }).setMaxListeners(30);
+        }
+      } catch {
+        /* ignore if internal API differs */
+      }
+    }
+  };
+
+  return {
+    search: async (query: string, limit?: number): Promise<LawArticle[]> => {
+      if (!mongoUrl) return [];
+      await ensureConnected();
+      const coll = client.db('lawdb').collection('articles');
+      return searchLawWithCollection(coll, query, limit || 5);
+    },
+    close: async () => {
+      await client.close().catch(() => {});
+    },
+  };
+};
+
+/**
+ * Internal: search with an existing collection handle.
+ */
+const searchLawWithCollection = async (
+  coll: ReturnType<ReturnType<MongoClient['db']>['collection']>,
+  query: string,
+  limit: number,
+): Promise<LawArticle[]> => {
+  const safeLimit = Math.min(Math.max(limit, 1), 50);
+  const articleMatch = query.match(ARTICLE_REGEX);
+  const lawConceptMatch = !articleMatch ? query.match(LAW_CONCEPT_REGEX) : null;
+
+  // Strategy 0: Direct _id Lookup
+  if (articleMatch) {
+    const rawLawName = articleMatch[1].trim();
+    const rawArticle = articleMatch[2].trim();
+    const resolvedName = resolveAlias(rawLawName);
+    const normalizedArticle = normalizeArticleNo(rawArticle);
+    const articleId = buildArticleId(resolvedName, normalizedArticle);
+
+    if (articleId) {
+      const doc = await coll.findOne({ _id: articleId } as Record<string, unknown>);
+      if (doc) {
+        return [
+          {
+            ...doc,
+            url: buildUrl(doc.pcode as string),
+            score: 1,
+          } as unknown as LawArticle,
+        ];
+      }
+    }
+  }
+
+  // Strategy 1: Exact article with regex
+  if (articleMatch) {
+    const rawLawName = articleMatch[1].trim();
+    const articleQuery = articleMatch[2].trim();
+    const resolvedName = resolveAlias(rawLawName);
+    const numMatch = articleQuery.match(/第\s*(\d+)\s*(條.*)/);
+    if (numMatch) {
+      const articleNum = numMatch[1];
+      const suffix = numMatch[2].replace(/條|\s+/g, '');
+      const articleRegex = suffix
+        ? new RegExp(`第\\s*${articleNum}[-\\s]*${suffix.replace(/之/g, '[-之]\\s*')}\\s*條`)
+        : new RegExp(`第\\s*${articleNum}\\s*條(?!\\s*之)(?!.*-)`);
+      const directResults = await coll
+        .find({
+          $or: [{ law_name: resolvedName }, { aliases: { $regex: resolvedName } }],
+          article_no: { $regex: articleRegex },
+        })
+        .limit(safeLimit)
+        .toArray();
+
+      if (directResults.length > 0) {
+        return directResults.map((r) => ({
+          ...r,
+          url: buildUrl(r.pcode as string),
+          score: 1,
+        })) as unknown as LawArticle[];
+      }
+    }
+  }
+
+  // Atlas Search compound query
+  let compound: Record<string, unknown>;
+
+  if (articleMatch) {
+    const rawLawName = articleMatch[1].trim();
+    const articleQuery = articleMatch[2].trim();
+    const resolvedName = resolveAlias(rawLawName);
+    compound = {
+      must: [
+        {
+          text: {
+            query: resolvedName,
+            path: ['law_name', 'aliases'],
+            synonyms: 'law_synonyms',
+          },
+        },
+      ],
+      should: [{ text: { query: articleQuery, path: 'article_no' } }],
+    };
+  } else if (lawConceptMatch) {
+    const rawLawName = lawConceptMatch[1];
+    const resolvedName = resolveAlias(rawLawName);
+    const concept = lawConceptMatch[2];
+    compound = {
+      must: [
+        {
+          text: {
+            query: resolvedName,
+            path: ['law_name', 'aliases'],
+            synonyms: 'law_synonyms',
+          },
+        },
+      ],
+      should: [
+        {
+          text: {
+            query: concept,
+            path: 'chapter',
+            synonyms: 'law_synonyms',
+            score: { boost: { value: 5 } },
+          },
+        },
+        {
+          text: {
+            query: concept,
+            path: 'content',
+            synonyms: 'law_synonyms',
+            score: { boost: { value: 3 } },
+          },
+        },
+        {
+          text: {
+            query: concept,
+            path: 'category',
+            synonyms: 'law_synonyms',
+          },
+        },
+      ],
+      minimumShouldMatch: 1,
+    };
+  } else {
+    compound = {
+      should: [
+        {
+          text: {
+            query,
+            path: ['law_name', 'aliases'],
+            synonyms: 'law_synonyms',
+            score: { boost: { value: 5 } },
+          },
+        },
+        {
+          text: {
+            query,
+            path: 'chapter',
+            synonyms: 'law_synonyms',
+            score: { boost: { value: 3 } },
+          },
+        },
+        {
+          text: {
+            query,
+            path: 'content',
+            synonyms: 'law_synonyms',
+          },
+        },
+        {
+          text: {
+            query,
+            path: 'category',
+            synonyms: 'law_synonyms',
+            score: { boost: { value: 0.5 } },
+          },
+        },
+      ],
+      minimumShouldMatch: 1,
+    };
+  }
+
+  const results = await coll
+    .aggregate([
+      { $search: { index: 'law_search', compound } },
+      { $limit: safeLimit },
+      {
+        $project: {
+          _id: 1,
+          pcode: 1,
+          law_name: 1,
+          nature: 1,
+          category: 1,
+          chapter: 1,
+          article_no: 1,
+          content: 1,
+          aliases: 1,
+          last_update: 1,
+          url: {
+            $concat: ['https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=', '$pcode'],
+          },
+          score: { $meta: 'searchScore' },
+        },
+      },
+    ])
+    .toArray();
+
+  return results as unknown as LawArticle[];
 };
 
 /**

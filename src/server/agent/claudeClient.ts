@@ -258,6 +258,7 @@ export const callClaude = async (
   env: AIEnv,
   systemPrompt: string,
   userMessage: string,
+  maxTokens = 4096,
 ): Promise<{ content: string; usage: ClaudeUsage }> => {
   const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/anthropic/v1/messages`;
 
@@ -270,7 +271,7 @@ export const callClaude = async (
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
     }),

@@ -63,7 +63,8 @@ export interface LawRef {
   full_text: string | null;
   highlight_ranges: string | null;
   usage_count: number | null;
-  source: 'search' | 'manual' | 'cited' | null;
+  source?: string | null;
+  is_manual?: boolean;
 }
 
 type ContentSnapshot = { paragraphs: Paragraph[] };

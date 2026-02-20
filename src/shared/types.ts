@@ -35,7 +35,8 @@ export type SSEEvent =
         | 'set_damages'
         | 'set_law_refs'
         | 'set_timeline'
-        | 'set_parties';
+        | 'set_parties'
+        | 'set_claims';
       data: unknown;
     }
   | { type: 'pipeline_progress'; steps: PipelineStep[] }

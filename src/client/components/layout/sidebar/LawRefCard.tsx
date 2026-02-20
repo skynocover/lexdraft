@@ -17,19 +17,17 @@ export function LawRefCard({ lawRef, cited, onRemove }: LawRefCardProps) {
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-start gap-2 px-2 py-1.5 text-left transition hover:bg-bg-h"
       >
-        <span
-          className={`mt-0.5 shrink-0 rounded px-1 py-0.5 text-[9px] font-medium ${
-            cited ? 'bg-pu/20 text-pu' : 'bg-bg-3 text-t3'
-          }`}
-        >
-          {cited ? '引用' : '備用'}
-        </span>
+        {cited && (
+          <span className="mt-0.5 shrink-0 rounded bg-pu/20 px-1 py-0.5 text-[9px] font-medium text-pu">
+            引用
+          </span>
+        )}
         <div className="flex-1 min-w-0">
           <p className={`truncate text-xs ${cited ? 'text-t1' : 'text-t2'}`}>
             {lawRef.law_name} {lawRef.article}
           </p>
         </div>
-        {!cited && onRemove && (
+        {onRemove && (
           <button
             onClick={(e) => {
               e.stopPropagation();

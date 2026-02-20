@@ -1,6 +1,6 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 
-type AnalysisTab = "disputes" | "damages" | "timeline" | "evidence" | "parties";
+type AnalysisTab = 'disputes' | 'damages' | 'timeline' | 'evidence' | 'parties' | 'claims';
 
 interface UIState {
   bottomPanelOpen: boolean;
@@ -23,22 +23,18 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   bottomPanelOpen: false,
   bottomPanelHeight: 200,
-  bottomPanelTab: "disputes",
+  bottomPanelTab: 'disputes',
   rightFilesOpen: true,
   rightLawRefsOpen: true,
   leftSidebarOpen: true,
   rightSidebarOpen: true,
-  toggleBottomPanel: () =>
-    set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
+  toggleBottomPanel: () => set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
   setBottomPanelOpen: (open) => set({ bottomPanelOpen: open }),
   setBottomPanelHeight: (height) =>
     set({ bottomPanelHeight: Math.min(500, Math.max(100, height)) }),
   setBottomPanelTab: (tab) => set({ bottomPanelTab: tab }),
   toggleRightFiles: () => set((s) => ({ rightFilesOpen: !s.rightFilesOpen })),
-  toggleRightLawRefs: () =>
-    set((s) => ({ rightLawRefsOpen: !s.rightLawRefsOpen })),
-  toggleLeftSidebar: () =>
-    set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
-  toggleRightSidebar: () =>
-    set((s) => ({ rightSidebarOpen: !s.rightSidebarOpen })),
+  toggleRightLawRefs: () => set((s) => ({ rightLawRefsOpen: !s.rightLawRefsOpen })),
+  toggleLeftSidebar: () => set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
+  toggleRightSidebar: () => set((s) => ({ rightSidebarOpen: !s.rightSidebarOpen })),
 }));

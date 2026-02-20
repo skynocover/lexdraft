@@ -200,4 +200,23 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'review_brief',
+      description: `審查書狀品質。對案件最新的書狀進行全面品質審查，包含：
+1. 結構檢查：主張覆蓋、爭點對應、段落完整性
+2. 法律論證完整性：法律依據是否充分、構成要件是否涵蓋
+3. 事實與證據：主張是否有事實佐證、引用是否具體
+4. 邏輯結構：段落順序、銜接流暢度、有無重複矛盾
+5. 格式與用語：法律文書用語、人稱一致性、法條引用格式
+
+使用時機：使用者要求審查書狀品質、檢查書狀、品質審查時呼叫此工具。`,
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
 ];

@@ -30,6 +30,7 @@ interface CallAIOptions {
   messages: ChatMessage[];
   tools?: ToolDef[];
   signal?: AbortSignal;
+  maxTokens?: number;
 }
 
 const MODEL = 'google-ai-studio/gemini-2.5-flash';
@@ -47,7 +48,7 @@ export async function callAIStreaming(env: AIEnv, opts: CallAIOptions): Promise<
     model: MODEL,
     messages: opts.messages,
     stream: true,
-    max_tokens: 4096,
+    max_tokens: opts.maxTokens || 8192,
   };
   if (opts.tools?.length) {
     body.tools = opts.tools;

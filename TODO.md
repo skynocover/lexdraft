@@ -15,7 +15,7 @@
 
 - [ ] 金額與書狀雙向同步：互動式金額表格，修改金額自動連動訴之聲明段落
 - [ ] 爭點可點擊跳轉到對應書狀段落（手動或自動標記）
-- [ ] 列出爭執與非爭執事項
+- [x] 列出爭執與非爭執事項
 - [ ] 時間軸獨立放置（待確定形式：獨立 tab 或其他）
 - [ ] 版本比對模式：左右雙欄 diff view，語意層級段落比對
 
@@ -23,6 +23,12 @@
 
 - [ ] 案件 Onboarding + AI 一鍵初始化：引導流程（填寫資料 → 上傳檔案 → AI 分析產生爭點/時間軸/當事人）
 - [x] Sub Agent 架構：write_full_brief pipeline（Planner + Writer sub-agents），一次工具呼叫完成整份書狀
+- [x] Pipeline v3 Phase 1a：論證策略 Step + Writer Context 改善（ContextStore、Claim Graph、3層 Writer Context、策略驗證 + Retry）
+- [x] Pipeline v3 Phase 1b：前端進度 UI 調整（ReviewContent、攻/防/參 badges、step children、策略 renderer）
+- [x] Pipeline v3 Phase 2：法律研究 Agent（批次展開 + MongoDB 搜尋迴圈）
+- [x] Pipeline v3 Phase 3a：Orchestrator Agent 取代 Step 1（案件分析、當事人、爭點、資訊缺口）
+- [x] Pipeline v3 Phase 3b：事實爭議管理 + 完整 Claim Graph
+- [x] Pipeline v3 Phase 4：品質審查（結構化前檢 + LLM 審查）
 - [x] Pipeline 進度優化：隱藏舊進度條、法條搜尋顯示逐筆查詢進度（可展開看結果）、自動去除重複標題
 - [x] 法條引用切換書狀時正確更新：改為僅依據當前書狀段落引用判斷已引用/備用
 - [x] 法條搜尋優化：PCode 直接查表、別名解析（消保法→消費者保護法）、條號格式標準化、searchLawBatch 減少連線數
@@ -33,7 +39,7 @@
 
 - [ ] 畫面重新規劃：以書狀 + 卷宗為核心重新設計佈局
 - [ ] 模板系統：預設書狀模板（民事起訴狀、準備書狀、上訴狀等）
-- [ ] 法條引用區重新設計
+- [x] 法條引用區重新設計（is_manual 區分手動/AI、引用區=被引用、備用區=手動未引用、AI未引用自動清理）
 - [ ] 全文搜尋：搜尋 PDF、書狀草稿、法條等所有內容
 
 ### E. 匯出

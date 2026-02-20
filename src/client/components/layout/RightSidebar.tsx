@@ -61,35 +61,42 @@ export function RightSidebar() {
     (f) => !f.category || !FILE_GROUPS.some((g) => g.key === f.category),
   );
 
-  // Two-tier law refs: cited in current brief vs available pool
-  const { citedLawRefs, availableLawRefs } = useMemo(() => {
-    const citedLabels = new Set<string>();
-    if (currentBrief?.content_structured?.paragraphs) {
-      for (const p of currentBrief.content_structured.paragraphs) {
-        for (const c of p.citations) {
-          if (c.type === 'law') citedLabels.add(c.label);
-        }
-        if (p.segments) {
-          for (const seg of p.segments) {
-            for (const c of seg.citations) {
-              if (c.type === 'law') citedLabels.add(c.label);
-            }
+  // Cited law labels — only recalculates when brief content changes
+  const citedLabels = useMemo(() => {
+    const labels = new Set<string>();
+    if (!currentBrief?.content_structured?.paragraphs) return labels;
+    for (const p of currentBrief.content_structured.paragraphs) {
+      for (const c of p.citations) {
+        if (c.type === 'law') labels.add(c.label);
+      }
+      if (p.segments) {
+        for (const seg of p.segments) {
+          for (const c of seg.citations) {
+            if (c.type === 'law') labels.add(c.label);
           }
         }
       }
     }
+    return labels;
+  }, [currentBrief]);
+
+  // Two-tier law refs:
+  // 引用區 = all cited laws (regardless of source)
+  // 備用區 = is_manual && not cited (lawyer's picks waiting to be used)
+  // Hidden = not is_manual && not cited (AI-found, cleaned up after pipeline)
+  const { citedLawRefs, availableLawRefs } = useMemo(() => {
     const cited: typeof lawRefs = [];
     const available: typeof lawRefs = [];
     for (const ref of lawRefs) {
       const label = `${ref.law_name} ${ref.article}`;
       if (citedLabels.has(label)) {
         cited.push(ref);
-      } else {
+      } else if (ref.is_manual) {
         available.push(ref);
       }
     }
     return { citedLawRefs: cited, availableLawRefs: available };
-  }, [lawRefs, currentBrief]);
+  }, [lawRefs, citedLabels]);
 
   const totalFiles = caseFiles.length;
   const readyFiles = caseFiles.filter((f) => f.status === 'ready').length;
@@ -380,7 +387,7 @@ export function RightSidebar() {
                       已引用 ({citedLawRefs.length})
                     </p>
                     {citedLawRefs.map((ref) => (
-                      <LawRefCard key={ref.id} lawRef={ref} cited />
+                      <LawRefCard key={ref.id} lawRef={ref} cited onRemove={removeLawRef} />
                     ))}
                   </>
                 )}
@@ -391,11 +398,7 @@ export function RightSidebar() {
                       備用 ({availableLawRefs.length})
                     </p>
                     {availableLawRefs.map((ref) => (
-                      <LawRefCard
-                        key={ref.id}
-                        lawRef={ref}
-                        onRemove={ref.source === 'manual' ? removeLawRef : undefined}
-                      />
+                      <LawRefCard key={ref.id} lawRef={ref} onRemove={removeLawRef} />
                     ))}
                   </>
                 )}

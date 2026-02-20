@@ -83,25 +83,8 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
     doc_type: 'file' as const,
   }));
 
-  // 3a. Load manual law refs (lawyer's curated picks) — always included
-  const manualLawRows = await drizzle
-    .select()
-    .from(lawRefs)
-    .where(and(eq(lawRefs.case_id, caseId), eq(lawRefs.source, 'manual')));
-
+  // 3. Load law refs specified by relevant_law_ids: D1 cache first, fallback to MongoDB
   const loadedLawIds = new Set<string>();
-  for (const ref of manualLawRows) {
-    if (ref.full_text) {
-      documents.push({
-        title: `${ref.law_name} ${ref.article}`,
-        content: ref.full_text,
-        doc_type: 'law' as const,
-      });
-      loadedLawIds.add(ref.id);
-    }
-  }
-
-  // 3b. Load agent-specified law refs (relevant_law_ids): D1 cache first, fallback to MongoDB
   if (relevantLawIds.length) {
     const uncachedIds = relevantLawIds.filter((id) => !loadedLawIds.has(id));
 
@@ -144,7 +127,7 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
                   title: `${r.law_name} ${r.article_no}`,
                   full_text: r.content,
                   usage_count: 1,
-                  source: 'search',
+                  is_manual: false,
                 })
                 .onConflictDoUpdate({
                   target: lawRefs.id,
@@ -216,19 +199,8 @@ ${existingParagraph.content_md}
     claudeInstruction,
   );
 
-  // 6. Post-processing: store cited laws in D1 (source='cited'), detect uncited mentions
+  // 6. Post-processing: detect uncited law mentions in text and cache in D1
   const citedLawLabels = new Set(citations.filter((c) => c.type === 'law').map((c) => c.label));
-
-  // Mark cited laws in D1 as source='cited'
-  for (const label of citedLawLabels) {
-    const matchingManual = manualLawRows.find((r) => `${r.law_name} ${r.article}` === label);
-    if (matchingManual) {
-      await drizzle
-        .update(lawRefs)
-        .set({ source: 'cited' })
-        .where(eq(lawRefs.id, matchingManual.id));
-    }
-  }
 
   // Deduplicate: use Set to avoid redundant MongoDB queries for same law
   const mentionedLawKeys = new Set<string>();
@@ -263,12 +235,11 @@ ${existingParagraph.content_md}
               title: `${r.law_name} ${r.article_no}`,
               full_text: r.content,
               usage_count: 1,
-              source: 'cited',
+              is_manual: false,
             })
             .onConflictDoUpdate({
               target: lawRefs.id,
               set: {
-                source: 'cited',
                 usage_count: sql`coalesce(${lawRefs.usage_count}, 0) + 1`,
               },
             });
@@ -279,11 +250,8 @@ ${existingParagraph.content_md}
     }
   }
 
-  // Send updated law refs (manual + cited only) to frontend
-  const displayRefs = await drizzle
-    .select()
-    .from(lawRefs)
-    .where(and(eq(lawRefs.case_id, caseId), inArray(lawRefs.source, ['manual', 'cited'])));
+  // Send updated law refs to frontend
+  const displayRefs = await drizzle.select().from(lawRefs).where(eq(lawRefs.case_id, caseId));
 
   await ctx.sendSSE({
     type: 'brief_update',
