@@ -1,40 +1,71 @@
 import { create } from 'zustand';
 
-type AnalysisTab = 'disputes' | 'damages' | 'timeline' | 'evidence' | 'parties' | 'claims';
+export type SidebarTab = 'case-materials' | 'analysis';
 
 interface UIState {
-  bottomPanelOpen: boolean;
-  bottomPanelHeight: number;
-  bottomPanelTab: AnalysisTab;
+  // 左側 Chat（保留現有）
+  leftSidebarOpen: boolean;
+
+  // 右側 Sidebar
+  sidebarOpen: boolean;
+  sidebarTab: SidebarTab;
+  analysisAccordion: string[];
+
+  // 案件資料 Tab 內的收合狀態
+  caseMaterialSections: {
+    briefs: boolean;
+    files: boolean;
+    lawRefs: boolean;
+  };
+
+  // FileGroup 二級展開狀態（保留）
   rightFilesOpen: boolean;
   rightLawRefsOpen: boolean;
-  leftSidebarOpen: boolean;
-  rightSidebarOpen: boolean;
-  toggleBottomPanel: () => void;
-  setBottomPanelOpen: (open: boolean) => void;
-  setBottomPanelHeight: (height: number) => void;
-  setBottomPanelTab: (tab: AnalysisTab) => void;
+
+  // Actions
+  toggleLeftSidebar: () => void;
+  toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
+  setSidebarTab: (tab: SidebarTab) => void;
+  toggleSidebarTab: (tab: SidebarTab) => void;
+  setAnalysisAccordion: (items: string[]) => void;
+  setCaseMaterialSection: (section: keyof UIState['caseMaterialSections'], open: boolean) => void;
   toggleRightFiles: () => void;
   toggleRightLawRefs: () => void;
-  toggleLeftSidebar: () => void;
-  toggleRightSidebar: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  bottomPanelOpen: false,
-  bottomPanelHeight: 200,
-  bottomPanelTab: 'disputes',
+  leftSidebarOpen: true,
+
+  sidebarOpen: true,
+  sidebarTab: 'case-materials',
+  analysisAccordion: [],
+
+  caseMaterialSections: {
+    briefs: true,
+    files: true,
+    lawRefs: false,
+  },
+
   rightFilesOpen: true,
   rightLawRefsOpen: true,
-  leftSidebarOpen: true,
-  rightSidebarOpen: true,
-  toggleBottomPanel: () => set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
-  setBottomPanelOpen: (open) => set({ bottomPanelOpen: open }),
-  setBottomPanelHeight: (height) =>
-    set({ bottomPanelHeight: Math.min(500, Math.max(100, height)) }),
-  setBottomPanelTab: (tab) => set({ bottomPanelTab: tab }),
+
+  toggleLeftSidebar: () => set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
+  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  setSidebarTab: (tab) => set({ sidebarTab: tab, sidebarOpen: true }),
+  toggleSidebarTab: (tab) =>
+    set((s) => {
+      if (s.sidebarOpen && s.sidebarTab === tab) {
+        return { sidebarOpen: false };
+      }
+      return { sidebarTab: tab, sidebarOpen: true };
+    }),
+  setAnalysisAccordion: (items) => set({ analysisAccordion: items }),
+  setCaseMaterialSection: (section, open) =>
+    set((s) => ({
+      caseMaterialSections: { ...s.caseMaterialSections, [section]: open },
+    })),
   toggleRightFiles: () => set((s) => ({ rightFilesOpen: !s.rightFilesOpen })),
   toggleRightLawRefs: () => set((s) => ({ rightLawRefsOpen: !s.rightLawRefsOpen })),
-  toggleLeftSidebar: () => set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
-  toggleRightSidebar: () => set((s) => ({ rightSidebarOpen: !s.rightSidebarOpen })),
 }));

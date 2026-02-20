@@ -12,7 +12,7 @@ export function DamagesTab() {
   if (damages.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-t3">尚未計算金額，請在聊天面板輸入「計算請求金額」</p>
+        <p className="text-xs text-t3">尚未計算金額，透過 AI 助理計算</p>
       </div>
     );
   }

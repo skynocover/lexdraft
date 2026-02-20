@@ -6,7 +6,7 @@ export function PartiesTab() {
   if (!currentCase) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-t3">尚未載入案件資料</p>
+        <p className="text-xs text-t3">尚未載入案件資料</p>
       </div>
     );
   }
@@ -16,13 +16,13 @@ export function PartiesTab() {
   if (!hasParties) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-t3">案件尚未設定當事人資料</p>
+        <p className="text-xs text-t3">案件尚未設定當事人資料</p>
       </div>
     );
   }
 
   return (
-    <div className="flex gap-3">
+    <div className="flex flex-col gap-2">
       {/* Plaintiff */}
       {currentCase.plaintiff && (
         <div className="flex-1 rounded border border-ac/30 bg-ac/5 p-3">

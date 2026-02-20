@@ -46,38 +46,30 @@ export function EvidenceTab() {
   if (rows.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-t3">尚無主張與舉證資料，請先分析爭點或計算金額</p>
+        <p className="text-xs text-t3">尚無主張與舉證資料，透過 AI 助理分析爭點或計算金額</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b border-bd text-left">
-            <th className="px-2 py-1.5 font-medium text-t3">主張</th>
-            <th className="px-2 py-1.5 font-medium text-t3">對應證據</th>
-            <th className="px-2 py-1.5 font-medium text-t3 w-16">狀態</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => {
-            const style = STATUS_STYLE[row.status];
-            return (
-              <tr key={i} className="border-b border-bd/50">
-                <td className="px-2 py-1.5 text-t1">{row.claim}</td>
-                <td className="px-2 py-1.5 text-t2">{row.evidence}</td>
-                <td className="px-2 py-1.5">
-                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${style.cls}`}>
-                    {style.label}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="space-y-1.5">
+      {rows.map((row, i) => {
+        const style = STATUS_STYLE[row.status];
+        return (
+          <div key={i} className="rounded border border-bd bg-bg-2 px-3 py-2">
+            <div className="flex items-start justify-between gap-2">
+              <p className="flex-1 text-xs text-t1">{row.claim}</p>
+              <span
+                className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${style.cls}`}
+              >
+                {style.label}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-t2">證據：{row.evidence}</p>
+            <p className="text-[11px] text-t3">來源：{row.source}</p>
+          </div>
+        );
+      })}
     </div>
   );
 }

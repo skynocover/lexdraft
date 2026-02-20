@@ -99,7 +99,7 @@ export function ChatPanel() {
   };
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-r border-bd bg-bg-1">
+    <aside className="flex min-h-0 w-80 shrink-0 flex-1 flex-col border-r border-bd bg-bg-1">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-bd px-3 py-2">
         <span className="text-[13px] font-medium text-t2">AI 助理</span>

@@ -1,4 +1,8 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
 
 /*
  * LexDraft Dark Theme — TASKS.md §9
@@ -29,6 +33,82 @@
   --color-or: #f0983c;
   --color-pu: #b09cff;
   --color-cy: #5cc8e0;
+
+  /* shadcn — mapped to LexDraft tokens */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+/* shadcn base vars — dark theme (app default) */
+:root {
+  --radius: 0.625rem;
+  --background: #1a1b20;
+  --foreground: #ecedf2;
+  --card: #1e2025;
+  --card-foreground: #ecedf2;
+  --popover: #25272d;
+  --popover-foreground: #ecedf2;
+  --primary: #7c9aff;
+  --primary-foreground: #1a1b20;
+  --secondary: #2d2f37;
+  --secondary-foreground: #ecedf2;
+  --muted: #2d2f37;
+  --muted-foreground: #8b8ea3;
+  --accent: #2d2f37;
+  --accent-foreground: #ecedf2;
+  --destructive: #f07068;
+  --border: #383b4a;
+  --input: #383b4a;
+  --ring: #7c9aff;
+  --chart-1: #7c9aff;
+  --chart-2: #5ce0a0;
+  --chart-3: #f0c850;
+  --chart-4: #b09cff;
+  --chart-5: #5cc8e0;
+  --sidebar: #1e2025;
+  --sidebar-foreground: #ecedf2;
+  --sidebar-primary: #7c9aff;
+  --sidebar-primary-foreground: #1a1b20;
+  --sidebar-accent: #2d2f37;
+  --sidebar-accent-foreground: #ecedf2;
+  --sidebar-border: #383b4a;
+  --sidebar-ring: #7c9aff;
 }
 
 /* Base styles */
@@ -48,6 +128,13 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* shadcn base layer — border + outline defaults */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
 }
 
 /* Scrollbar styling */
@@ -166,6 +253,26 @@ body {
   --color-or: #c87a28;
   --color-pu: #7c5cbf;
   --color-cy: #1d8ea8;
+
+  /* shadcn vars for light scope */
+  --background: #ffffff;
+  --foreground: #1a1c22;
+  --card: #f9fafb;
+  --card-foreground: #1a1c22;
+  --popover: #ffffff;
+  --popover-foreground: #1a1c22;
+  --primary: #4a7cff;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #1a1c22;
+  --muted: #f3f4f6;
+  --muted-foreground: #9ca0af;
+  --accent: #f3f4f6;
+  --accent-foreground: #1a1c22;
+  --destructive: #e04040;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #4a7cff;
 }
 
 .theme-light ::-webkit-scrollbar-thumb {

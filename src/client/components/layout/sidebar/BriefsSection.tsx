@@ -37,7 +37,7 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
   };
 
   return (
-    <div className="border-b border-bd">
+    <div>
       {confirmDelete && (
         <ConfirmDialog
           message={`確定要刪除「${confirmDelete.title}」嗎？此操作無法復原。`}
@@ -46,15 +46,12 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
         />
       )}
 
-      <div className="px-4 pt-4 pb-2">
-        <span className="text-sm font-semibold text-t2">書狀草稿</span>
-      </div>
       {briefs.length === 0 ? (
-        <div className="px-4 pb-4">
-          <p className="text-sm text-t3">尚無書狀</p>
+        <div className="px-4 py-3">
+          <p className="text-xs text-t3">尚無書狀</p>
         </div>
       ) : (
-        <div className="px-3 pb-3 space-y-1">
+        <div className="px-3 py-2 space-y-1">
           {briefs.map((b) => {
             const tabId = `brief:${b.id}`;
             const isActive = activeTabId === tabId;

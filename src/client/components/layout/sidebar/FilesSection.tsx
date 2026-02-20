@@ -92,34 +92,28 @@ export const FilesSection = () => {
   };
 
   return (
-    <div className="border-b border-bd">
-      <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-t2">案件卷宗</span>
-          {totalFiles > 0 && <span className="text-xs text-t3">{totalFiles} 個檔案</span>}
-        </div>
-        <div className="flex items-center gap-1">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/pdf"
-            multiple
-            onChange={handleUpload}
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac disabled:opacity-50"
-            title="上傳檔案"
-          >
-            {uploading ? (
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-ac border-t-transparent" />
-            ) : (
-              <Plus size={16} />
-            )}
-          </button>
-        </div>
+    <div>
+      <div className="flex items-center justify-end px-3 pt-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          multiple
+          onChange={handleUpload}
+          className="hidden"
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac disabled:opacity-50"
+          title="上傳檔案"
+        >
+          {uploading ? (
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-ac border-t-transparent" />
+          ) : (
+            <Plus size={16} />
+          )}
+        </button>
       </div>
 
       {processingFiles > 0 && (
@@ -163,8 +157,8 @@ export const FilesSection = () => {
       />
 
       {caseFiles.length === 0 && (
-        <div className="px-4 pb-4">
-          <p className="text-sm text-t3">尚無檔案</p>
+        <div className="px-4 py-3">
+          <p className="text-xs text-t3">尚無檔案</p>
         </div>
       )}
     </div>

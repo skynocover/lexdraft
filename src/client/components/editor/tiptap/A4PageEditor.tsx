@@ -49,8 +49,12 @@ export function A4PageEditor({ content }: BriefEditorProps) {
     const disputeId = paragraphEl.getAttribute('data-dispute-id');
     if (!disputeId) return;
 
-    useUIStore.getState().setBottomPanelOpen(true);
-    useUIStore.getState().setBottomPanelTab('disputes');
+    useUIStore.getState().setSidebarTab('analysis');
+    useUIStore.getState().setSidebarOpen(true);
+    const acc = useUIStore.getState().analysisAccordion;
+    if (!acc.includes('disputes')) {
+      useUIStore.getState().setAnalysisAccordion([...acc, 'disputes']);
+    }
     useAnalysisStore.getState().setHighlightDisputeId(disputeId);
 
     setTimeout(() => {

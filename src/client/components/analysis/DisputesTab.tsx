@@ -10,7 +10,7 @@ export function DisputesTab() {
   if (disputes.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-t3">尚未分析爭點，請在聊天面板輸入「分析爭點」</p>
+        <p className="text-xs text-t3">尚未分析爭點，透過 AI 助理分析</p>
       </div>
     );
   }

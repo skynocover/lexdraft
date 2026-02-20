@@ -1,20 +1,11 @@
 import { useNavigate } from 'react-router';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useCaseStore } from '../../stores/useCaseStore';
-import { useBriefStore } from '../../stores/useBriefStore';
-import { exportBriefToDocx } from '../editor/tiptap/exportDocx';
 
 export function Header() {
   const clearToken = useAuthStore((s) => s.clearToken);
   const currentCase = useCaseStore((s) => s.currentCase);
-  const currentBrief = useBriefStore((s) => s.currentBrief);
   const navigate = useNavigate();
-
-  const handleDownloadWord = async () => {
-    if (!currentBrief?.content_structured) return;
-    const title = currentBrief.title || '書狀';
-    await exportBriefToDocx(currentBrief.content_structured.paragraphs, title);
-  };
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-bd bg-bg-1 px-4">
@@ -38,14 +29,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        {currentBrief?.content_structured && (
-          <button
-            onClick={handleDownloadWord}
-            className="rounded border border-bd bg-bg-3 px-3 py-1 text-xs text-t2 transition hover:border-bd-l hover:text-t1"
-          >
-            下載 Word
-          </button>
-        )}
         <button
           onClick={() => {
             clearToken();

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Editor } from '@tiptap/react';
 import { api } from '../lib/api';
 import { useChatStore } from '../stores/useChatStore';
+import { useUIStore } from '../stores/useUIStore';
 
 interface SavedRange {
   from: number;
@@ -90,6 +91,10 @@ export const useSelectionToolbar = (editor: Editor | null) => {
     if (!savedRange.current) return;
 
     const text = savedRange.current.text;
+    // 自動展開左側 Chat
+    if (!useUIStore.getState().leftSidebarOpen) {
+      useUIStore.getState().toggleLeftSidebar();
+    }
     useChatStore.getState().setPrefillInput(`針對以下段落進行討論：\n\n「${text}」\n\n`);
     dismiss();
   }, [dismiss]);

@@ -18,7 +18,6 @@ import { StatusBar } from '../components/layout/StatusBar';
 import { ChatPanel } from '../components/layout/ChatPanel';
 import { RightSidebar } from '../components/layout/RightSidebar';
 import { EditorPanel } from '../components/editor/EditorPanel';
-import { AnalysisPanel } from '../components/analysis/AnalysisPanel';
 import { useUIStore } from '../stores/useUIStore';
 
 export function CaseWorkspace() {
@@ -39,9 +38,8 @@ export function CaseWorkspace() {
   const reorderTab = useTabStore((s) => s.reorderTab);
   const moveTab = useTabStore((s) => s.moveTab);
   const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen);
-  const rightSidebarOpen = useUIStore((s) => s.rightSidebarOpen);
   const toggleLeftSidebar = useUIStore((s) => s.toggleLeftSidebar);
-  const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const pollingRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const sensors = useSensors(
@@ -143,49 +141,52 @@ export function CaseWorkspace() {
     <div className="flex h-screen flex-col bg-bg-0">
       <Header />
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar: ChatPanel */}
-        {leftSidebarOpen ? <ChatPanel /> : <SidebarStrip side="left" onClick={toggleLeftSidebar} />}
-
-        <main className="flex flex-1 flex-col overflow-hidden bg-bg-0">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {/* Editor panels area */}
-            <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-              <div className="relative min-h-0 flex-1 flex flex-col overflow-hidden">
-                <PanelGroup orientation="horizontal">
-                  {panels.map((panel, i) => (
-                    <Fragment key={panel.id}>
-                      {i > 0 && (
-                        <PanelResizeHandle className="w-1 bg-bg-3 transition-colors hover:bg-ac cursor-col-resize" />
-                      )}
-                      <ResizablePanel minSize={20}>
-                        <EditorPanel panelId={panel.id} />
-                      </ResizablePanel>
-                    </Fragment>
-                  ))}
-                </PanelGroup>
-              </div>
-            </DndContext>
-            {/* Analysis Panel — shrink-0, below editor */}
-            <AnalysisPanel />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Left sidebar: ChatPanel + StatusBar */}
+        {leftSidebarOpen ? (
+          <div className="flex min-h-0 shrink-0 flex-col">
+            <ChatPanel />
+            <StatusBar />
           </div>
+        ) : (
+          <SidebarStrip side="left" onClick={toggleLeftSidebar} />
+        )}
+
+        {/* Center: Editor — full height, no bottom panel */}
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-0">
+          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+              <PanelGroup orientation="horizontal">
+                {panels.map((panel, i) => (
+                  <Fragment key={panel.id}>
+                    {i > 0 && (
+                      <PanelResizeHandle className="w-1 bg-bg-3 transition-colors hover:bg-ac cursor-col-resize" />
+                    )}
+                    <ResizablePanel minSize={20}>
+                      <EditorPanel panelId={panel.id} />
+                    </ResizablePanel>
+                  </Fragment>
+                ))}
+              </PanelGroup>
+            </div>
+          </DndContext>
         </main>
 
-        {/* Right sidebar: RightSidebar */}
-        {rightSidebarOpen ? (
+        {/* Right sidebar: 2-tab sidebar */}
+        {sidebarOpen ? (
           <RightSidebar />
         ) : (
-          <SidebarStrip side="right" onClick={toggleRightSidebar} />
+          <SidebarStrip side="right" onClick={() => useUIStore.getState().setSidebarOpen(true)} />
         )}
       </div>
-
-      <StatusBar />
     </div>
   );
 }
 
 const SidebarStrip = ({ side, onClick }: { side: 'left' | 'right'; onClick: () => void }) => {
   const isLeft = side === 'left';
+  const Icon = isLeft ? PanelLeft : PanelRight;
+  const label = isLeft ? 'AI 助理' : '側邊欄';
   return (
     <div
       className={`flex w-10 shrink-0 flex-col items-center border-bd bg-bg-1 ${
@@ -197,10 +198,10 @@ const SidebarStrip = ({ side, onClick }: { side: 'left' | 'right'; onClick: () =
         className="mt-2 rounded p-1.5 text-t3 transition hover:bg-bg-h hover:text-t1"
         title={isLeft ? '展開 AI 助理' : '展開側邊欄'}
       >
-        {isLeft ? <PanelLeft size={16} /> : <PanelRight size={16} />}
+        <Icon size={16} />
       </button>
       <span className="mt-3 text-[11px] text-t3" style={{ writingMode: 'vertical-lr' }}>
-        {isLeft ? 'AI 助理' : '案件資料'}
+        {label}
       </span>
     </div>
   );

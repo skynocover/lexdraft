@@ -1,5 +1,24 @@
+import { useMemo } from 'react';
 import type { Editor } from '@tiptap/react';
 import { Undo2, Redo2 } from 'lucide-react';
+import { useBriefStore } from '../../../stores/useBriefStore';
+import { exportBriefToDocx } from './exportDocx';
+
+const countChars = (
+  paragraphs: { content_md: string; segments?: { text: string }[] }[],
+): number => {
+  let total = 0;
+  for (const p of paragraphs) {
+    if (p.segments?.length) {
+      for (const seg of p.segments) {
+        total += seg.text.replace(/\s/g, '').length;
+      }
+    } else {
+      total += p.content_md.replace(/\s/g, '').length;
+    }
+  }
+  return total;
+};
 
 interface EditorToolbarProps {
   editor: Editor | null;
@@ -24,6 +43,19 @@ export const EditorToolbar = ({
   onPrintPreview,
   onToggleVersionPanel,
 }: EditorToolbarProps) => {
+  const currentBrief = useBriefStore((s) => s.currentBrief);
+
+  const charCount = useMemo(() => {
+    if (!currentBrief?.content_structured?.paragraphs) return 0;
+    return countChars(currentBrief.content_structured.paragraphs);
+  }, [currentBrief?.content_structured]);
+
+  const handleDownloadWord = async () => {
+    if (!currentBrief?.content_structured) return;
+    const title = currentBrief.title || '書狀';
+    await exportBriefToDocx(currentBrief.content_structured.paragraphs, title);
+  };
+
   return (
     <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-bd bg-bg-1 px-4 py-2">
       {/* Undo / Redo */}
@@ -45,11 +77,11 @@ export const EditorToolbar = ({
       </button>
       <span className="mx-2 h-4 w-px bg-bd" />
 
-      {/* Citation stats / review button */}
+      {/* Content status: Citation + Char count */}
       {stats.confirmed > 0 || stats.pending > 0 ? (
         <button
           onClick={() => stats.pending > 0 && onCitationReview()}
-          className={`text-xs ${stats.pending > 0 ? 'hover:text-t1 cursor-pointer' : ''} text-t3`}
+          className={`text-xs ${stats.pending > 0 ? 'cursor-pointer hover:text-t1' : ''} text-t3`}
         >
           引用：<span className="text-gr">{stats.confirmed} 確認</span>
           {stats.pending > 0 && (
@@ -62,32 +94,43 @@ export const EditorToolbar = ({
       ) : (
         <span className="text-xs text-t3">引用審查</span>
       )}
+      {charCount > 0 && (
+        <>
+          <span className="text-xs text-t3">·</span>
+          <span className="text-xs text-t3">{charCount.toLocaleString()} 字</span>
+        </>
+      )}
 
-      <span className="mx-2 h-4 w-px bg-bd" />
-
-      {/* Print preview button */}
-      <button
-        onClick={onPrintPreview}
-        className="rounded px-3 py-1 text-xs text-t3 hover:text-t1 hover:bg-bg-3"
-      >
-        列印預覽
-      </button>
-
-      {/* Version history button */}
-      <button
-        onClick={onToggleVersionPanel}
-        className={`rounded px-3 py-1 text-xs transition ${versionPanelOpen ? 'bg-bg-3 text-t1' : 'text-t3 hover:text-t1 hover:bg-bg-3'}`}
-      >
-        版本紀錄
-      </button>
-
-      {/* Save status (right side) */}
-      <div className="ml-auto text-xs">
-        {saving ? (
-          <span className="text-t3">儲存中...</span>
-        ) : hasContent && !dirty ? (
-          <span className="text-gr">&#10003; 已儲存</span>
-        ) : null}
+      {/* Document actions (right side) */}
+      <div className="ml-auto flex items-center gap-1">
+        <button
+          onClick={onToggleVersionPanel}
+          className={`rounded px-3 py-1 text-xs transition ${versionPanelOpen ? 'bg-bg-3 text-t1' : 'text-t3 hover:bg-bg-3 hover:text-t1'}`}
+        >
+          版本紀錄
+        </button>
+        <button
+          onClick={onPrintPreview}
+          className="rounded px-3 py-1 text-xs text-t3 hover:bg-bg-3 hover:text-t1"
+        >
+          列印預覽
+        </button>
+        {currentBrief?.content_structured && (
+          <button
+            onClick={handleDownloadWord}
+            className="rounded px-3 py-1 text-xs text-t3 hover:bg-bg-3 hover:text-t1"
+          >
+            下載 Word
+          </button>
+        )}
+        <span className="mx-1 h-4 w-px bg-bd" />
+        <div className="text-xs">
+          {saving ? (
+            <span className="text-t3">儲存中...</span>
+          ) : hasContent && !dirty ? (
+            <span className="text-gr">&#10003; 已儲存</span>
+          ) : null}
+        </div>
       </div>
     </div>
   );

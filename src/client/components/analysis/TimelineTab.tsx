@@ -6,7 +6,7 @@ export function TimelineTab() {
   if (timeline.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-t3">尚未產生時間軸，請在聊天面板輸入「分析時間軸」</p>
+        <p className="text-xs text-t3">尚未產生時間軸，透過 AI 助理分析</p>
       </div>
     );
   }

@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { useBriefStore, type Brief, type Paragraph, type LawRef } from './useBriefStore';
 import {
   useAnalysisStore,
@@ -170,6 +171,7 @@ export const handleSSEEvent = (
 
     case 'error':
       actions.setError(event.message);
+      toast.error('發生錯誤', { description: event.message });
       break;
 
     case 'done':
@@ -189,6 +191,7 @@ const handleBriefUpdate = (event: Extract<SSEEvent, { type: 'brief_update' }>) =
       briefStore.setBriefs([...briefStore.briefs, newBrief]);
       briefStore.setCurrentBrief(newBrief);
       useTabStore.getState().openBriefTab(newBrief.id, newBrief.title || newBrief.brief_type);
+      toast.success('書狀已建立', { description: newBrief.title || newBrief.brief_type });
       break;
     }
     case 'add_paragraph': {
@@ -205,23 +208,41 @@ const handleBriefUpdate = (event: Extract<SSEEvent, { type: 'brief_update' }>) =
       }
       break;
     }
-    case 'set_disputes':
-      analysisStore.setDisputes(event.data as Dispute[]);
+    case 'set_disputes': {
+      const disputes = event.data as Dispute[];
+      analysisStore.setDisputes(disputes);
+      if (disputes.length > 0)
+        toast.success('爭點分析完成', { description: `${disputes.length} 個爭點` });
       break;
-    case 'set_damages':
-      analysisStore.setDamages(event.data as Damage[]);
+    }
+    case 'set_damages': {
+      const damages = event.data as Damage[];
+      analysisStore.setDamages(damages);
+      if (damages.length > 0) {
+        const total = damages.reduce((s, d) => s + d.amount, 0);
+        toast.success('金額計算完成', { description: `NT$ ${total.toLocaleString()}` });
+      }
       break;
+    }
     case 'set_law_refs':
       briefStore.setLawRefs(event.data as LawRef[]);
       break;
-    case 'set_timeline':
-      analysisStore.setTimeline(event.data as TimelineEvent[]);
+    case 'set_timeline': {
+      const timeline = event.data as TimelineEvent[];
+      analysisStore.setTimeline(timeline);
+      if (timeline.length > 0)
+        toast.success('時間軸已產生', { description: `${timeline.length} 個事件` });
       break;
+    }
     case 'set_parties':
       analysisStore.setParties(event.data as Party[]);
       break;
-    case 'set_claims':
-      analysisStore.setClaims(event.data as ClaimGraph[]);
+    case 'set_claims': {
+      const claims = event.data as ClaimGraph[];
+      analysisStore.setClaims(claims);
+      if (claims.length > 0)
+        toast.success('主張圖譜已產生', { description: `${claims.length} 項主張` });
       break;
+    }
   }
 };

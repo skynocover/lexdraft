@@ -81,7 +81,7 @@ export const ClaimsTab = () => {
   if (claims.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-xs text-t3">尚無主張資料。執行書狀撰寫後會自動產生。</p>
+        <p className="text-xs text-t3">尚無主張資料，透過 AI 助理撰寫書狀後自動產生</p>
       </div>
     );
   }
@@ -123,8 +123,8 @@ export const ClaimsTab = () => {
             </button>
 
             {isExpanded && (
-              <div className="grid grid-cols-2 gap-2 px-3 pb-3">
-                {/* Left: ours */}
+              <div className="flex flex-col gap-2 px-3 pb-3">
+                {/* Ours */}
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-medium uppercase tracking-wider text-t3">我方</p>
                   {group.ourClaims.length > 0 ? (
@@ -135,7 +135,7 @@ export const ClaimsTab = () => {
                     <p className="text-[11px] text-t3/50">（無）</p>
                   )}
                 </div>
-                {/* Right: theirs */}
+                {/* Theirs */}
                 <div className="space-y-1.5">
                   <p className="text-[11px] font-medium uppercase tracking-wider text-t3">對方</p>
                   {group.theirClaims.length > 0 ? (
