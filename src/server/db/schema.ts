@@ -22,6 +22,7 @@ export const cases = sqliteTable('cases', {
   case_type: text('case_type'),
   plaintiff: text('plaintiff'),
   defendant: text('defendant'),
+  law_refs: text('law_refs'),
   created_at: text('created_at'),
   updated_at: text('updated_at'),
 });
@@ -107,22 +108,6 @@ export const damages = sqliteTable('damages', {
   evidence_refs: text('evidence_refs'), // JSON array — 引用的證據檔案
   dispute_id: text('dispute_id').references(() => disputes.id), // 可選：關聯爭點
   created_at: text('created_at'),
-});
-
-// 3.6 law_refs — 法條引用
-export const lawRefs = sqliteTable('law_refs', {
-  id: text('id').primaryKey(),
-  case_id: text('case_id')
-    .notNull()
-    .references(() => cases.id),
-  law_name: text('law_name'),
-  article: text('article'),
-  title: text('title'),
-  full_text: text('full_text'),
-  highlight_ranges: text('highlight_ranges'), // JSON
-  usage_count: integer('usage_count').default(0),
-  source: text('source').default('search'), // legacy, no longer used
-  is_manual: integer('is_manual', { mode: 'boolean' }).default(false),
 });
 
 // 3.7 timeline_events — 時間軸事件

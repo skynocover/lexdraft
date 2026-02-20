@@ -1,13 +1,21 @@
 import { Scale, ExternalLink } from 'lucide-react';
 
 interface LawViewerProps {
+  lawRefId: string;
   lawName: string;
   article: string;
   fullText: string | null;
-  pcode?: string | null;
 }
 
-export const LawViewer = ({ lawName, article, fullText, pcode }: LawViewerProps) => {
+/** Extract pcode from MongoDB _id format: "{pcode}-{條號}" */
+const extractPcode = (lawRefId: string): string | null => {
+  const dashIdx = lawRefId.indexOf('-');
+  if (dashIdx <= 0) return null;
+  return lawRefId.slice(0, dashIdx);
+};
+
+export const LawViewer = ({ lawRefId, lawName, article, fullText }: LawViewerProps) => {
+  const pcode = extractPcode(lawRefId);
   const lawUrl = pcode ? `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${pcode}` : null;
 
   return (

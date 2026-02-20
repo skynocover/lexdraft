@@ -1,6 +1,6 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { files, briefs, cases, disputes, damages, lawRefs, briefVersions } from '../db/schema';
+import { files, briefs, cases, disputes, damages, briefVersions } from '../db/schema';
 import { getDB } from '../db';
 import {
   callClaude,
@@ -10,6 +10,14 @@ import {
 } from './claudeClient';
 import { searchLaw } from '../lib/lawSearch';
 import { hasReplacementChars, buildLawTextMap, repairLawCitations } from '../lib/textSanitize';
+import {
+  readLawRefs,
+  upsertLawRef,
+  upsertManyLawRefs,
+  hasLawRefByNameArticle,
+  removeLawRefsWhere,
+} from '../lib/lawRefsJson';
+import type { LawRefItem } from '../lib/lawRefsJson';
 import { runResearchAgent, type ResearchProgressCallback } from './researchAgent';
 import {
   runOrchestratorAgent,
@@ -308,10 +316,7 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     const fileContentMap = new Map(allFiles.map((f) => [f.id, f]));
 
     // Load all existing law refs (user-added ones will be passed to Strategist)
-    const allLawRefRows = await ctx.drizzle
-      .select()
-      .from(lawRefs)
-      .where(eq(lawRefs.case_id, ctx.caseId));
+    const allLawRefRows = await readLawRefs(ctx.drizzle, ctx.caseId);
 
     // Build step content
     const criticalGaps = orchestratorOutput
@@ -394,32 +399,23 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     // Set research results directly in ContextStore
     store.research = researchResult.research;
 
-    // Cache found laws in D1 lawRefs
+    // Cache found laws in JSON column
     const allResearchLaws = researchResult.research.flatMap((r) => r.found_laws);
     const seenLawIds = new Set<string>();
+    const lawRefsToCache: LawRefItem[] = [];
     for (const law of allResearchLaws) {
       if (seenLawIds.has(law.id)) continue;
       seenLawIds.add(law.id);
-      try {
-        await ctx.drizzle
-          .insert(lawRefs)
-          .values({
-            id: law.id,
-            case_id: ctx.caseId,
-            law_name: law.law_name,
-            article: law.article_no,
-            title: `${law.law_name} ${law.article_no}`,
-            full_text: law.content,
-            usage_count: 1,
-            is_manual: false,
-          })
-          .onConflictDoUpdate({
-            target: lawRefs.id,
-            set: { usage_count: sql`coalesce(${lawRefs.usage_count}, 0) + 1` },
-          });
-      } catch {
-        /* skip */
-      }
+      lawRefsToCache.push({
+        id: law.id,
+        law_name: law.law_name,
+        article: law.article_no,
+        full_text: law.content,
+        is_manual: false,
+      });
+    }
+    if (lawRefsToCache.length) {
+      await upsertManyLawRefs(ctx.drizzle, ctx.caseId, lawRefsToCache);
     }
 
     const totalLawCount = seenLawIds.size;
@@ -451,9 +447,9 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       .filter((r) => r.is_manual && r.full_text)
       .map((r) => ({
         id: r.id,
-        law_name: r.law_name || '',
-        article_no: r.article || '',
-        content: r.full_text || '',
+        law_name: r.law_name,
+        article_no: r.article,
+        content: r.full_text,
       }));
 
     const strategyOutput = await callStrategist(
@@ -1148,14 +1144,11 @@ ${completedText}`;
     strategySection.subsection,
   );
 
-  // Post-processing: detect uncited law mentions and cache them in D1
+  // Post-processing: detect uncited law mentions and cache them in JSON
   await postProcessLawCitations(ctx, text, citations);
 
-  // Repair corrupted quoted_text in law citations using D1 data
-  const currentRefs = await ctx.drizzle
-    .select()
-    .from(lawRefs)
-    .where(eq(lawRefs.case_id, ctx.caseId));
+  // Repair corrupted quoted_text in law citations using JSON data
+  const currentRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
   const lawTextMap = buildLawTextMap(currentRefs);
   const allCitationRefs = [...citations, ...segments.flatMap((s) => s.citations)];
   repairLawCitations(allCitationRefs, lawTextMap);
@@ -1207,7 +1200,7 @@ const postProcessLawCitations = async (
 ) => {
   const citedLawLabels = new Set(citations.filter((c) => c.type === 'law').map((c) => c.label));
 
-  // Detect law mentions in text that aren't already in DB — cache them
+  // Detect law mentions in text that aren't already cached — cache them
   const mentionedLawKeys = new Set<string>();
   for (const match of text.matchAll(LAW_ARTICLE_REGEX)) {
     mentionedLawKeys.add(`${match[1]}|第${match[2]}`);
@@ -1220,20 +1213,13 @@ const postProcessLawCitations = async (
     })
     .filter((m) => !citedLawLabels.has(`${m.lawName} ${m.article}`));
 
+  const currentRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
+
   for (const law of uncitedLaws) {
     try {
-      const existing = await ctx.drizzle
-        .select({ id: lawRefs.id })
-        .from(lawRefs)
-        .where(
-          and(
-            eq(lawRefs.case_id, ctx.caseId),
-            eq(lawRefs.law_name, law.lawName),
-            eq(lawRefs.article, law.article),
-          ),
-        );
+      const alreadyCached = hasLawRefByNameArticle(currentRefs, law.lawName, law.article);
 
-      if (existing.length === 0 && ctx.mongoUrl) {
+      if (!alreadyCached && ctx.mongoUrl) {
         const results = await searchLaw(ctx.mongoUrl, {
           query: `${law.lawName} ${law.article}`,
           limit: 1,
@@ -1244,22 +1230,13 @@ const postProcessLawCitations = async (
             console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
             continue;
           }
-          await ctx.drizzle
-            .insert(lawRefs)
-            .values({
-              id: r._id,
-              case_id: ctx.caseId,
-              law_name: r.law_name,
-              article: r.article_no,
-              title: `${r.law_name} ${r.article_no}`,
-              full_text: r.content,
-              usage_count: 1,
-              is_manual: false,
-            })
-            .onConflictDoUpdate({
-              target: lawRefs.id,
-              set: { usage_count: sql`coalesce(${lawRefs.usage_count}, 0) + 1` },
-            });
+          await upsertLawRef(ctx.drizzle, ctx.caseId, {
+            id: r._id,
+            law_name: r.law_name,
+            article: r.article_no,
+            full_text: r.content,
+            is_manual: false,
+          });
         }
       }
     } catch {
@@ -1268,7 +1245,7 @@ const postProcessLawCitations = async (
   }
 
   // Send all law refs to frontend
-  const allRefs = await ctx.drizzle.select().from(lawRefs).where(eq(lawRefs.case_id, ctx.caseId));
+  const allRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
 
   await ctx.sendSSE({
     type: 'brief_update',
@@ -1296,27 +1273,26 @@ const cleanupUncitedLaws = async (ctx: PipelineContext, paragraphs: Paragraph[])
     }
   }
 
-  // Load all law refs, delete non-manual ones that aren't cited
-  const allRefs = await ctx.drizzle.select().from(lawRefs).where(eq(lawRefs.case_id, ctx.caseId));
-
-  const toDelete = allRefs.filter((ref) => {
+  // Remove non-manual law refs that aren't cited
+  const beforeRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
+  const hasUncited = beforeRefs.some((ref) => {
     if (ref.is_manual) return false;
     const label = `${ref.law_name} ${ref.article}`;
     return !citedLabels.has(label);
   });
 
-  for (const ref of toDelete) {
-    await ctx.drizzle.delete(lawRefs).where(eq(lawRefs.id, ref.id));
-  }
+  if (hasUncited) {
+    const remaining = await removeLawRefsWhere(ctx.drizzle, ctx.caseId, (ref) => {
+      if (ref.is_manual) return false;
+      const label = `${ref.law_name} ${ref.article}`;
+      return !citedLabels.has(label);
+    });
 
-  // Send cleaned law refs to frontend
-  if (toDelete.length > 0) {
-    const remainingRefs = allRefs.filter((r) => !toDelete.some((d) => d.id === r.id));
     await ctx.sendSSE({
       type: 'brief_update',
       brief_id: '',
       action: 'set_law_refs',
-      data: remainingRefs,
+      data: remaining,
     });
   }
 };

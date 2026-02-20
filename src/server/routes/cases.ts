@@ -11,7 +11,6 @@ import {
   briefVersions,
   disputes,
   damages,
-  lawRefs,
   timelineEvents,
   messages,
 } from '../db/schema';
@@ -146,7 +145,6 @@ casesRouter.delete('/:id', async (c) => {
   // 刪除其餘關聯資料
   await db.delete(disputes).where(eq(disputes.case_id, id));
   await db.delete(damages).where(eq(damages.case_id, id));
-  await db.delete(lawRefs).where(eq(lawRefs.case_id, id));
   await db.delete(timelineEvents).where(eq(timelineEvents.case_id, id));
   await db.delete(messages).where(eq(messages.case_id, id));
   await db.delete(briefs).where(eq(briefs.case_id, id));

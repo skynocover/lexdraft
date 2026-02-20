@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import { useCaseStore } from './useCaseStore';
 
 // Re-export analysis types for backward compatibility
 export type { Dispute, Damage, TimelineEvent, Party } from './useAnalysisStore';
@@ -56,15 +57,10 @@ export interface BriefVersion {
 
 export interface LawRef {
   id: string;
-  case_id: string;
-  law_name: string | null;
-  article: string | null;
-  title: string | null;
-  full_text: string | null;
-  highlight_ranges: string | null;
-  usage_count: number | null;
-  source?: string | null;
-  is_manual?: boolean;
+  law_name: string;
+  article: string;
+  full_text: string;
+  is_manual: boolean;
 }
 
 type ContentSnapshot = { paragraphs: Paragraph[] };
@@ -406,7 +402,9 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   removeLawRef: async (lawRefId: string) => {
     set({ lawRefs: get().lawRefs.filter((r) => r.id !== lawRefId) });
     try {
-      await api.delete(`/law-refs/${lawRefId}`);
+      const caseId = useCaseStore.getState().currentCase?.id;
+      if (!caseId) return;
+      await api.delete(`/cases/${caseId}/law-refs/${lawRefId}`);
     } catch (err) {
       console.error('removeLawRef error:', err);
     }

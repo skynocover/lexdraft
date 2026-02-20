@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { getDB } from '../db';
-import { lawRefs, timelineEvents, cases } from '../db/schema';
+import { timelineEvents, cases } from '../db/schema';
 import { asc } from 'drizzle-orm';
 import { searchLaw } from '../lib/lawSearch';
+import { readLawRefs, upsertManyLawRefs, removeLawRef } from '../lib/lawRefsJson';
 import type { AppEnv } from '../types';
 
 const lawRouter = new Hono<AppEnv>();
@@ -34,9 +35,9 @@ lawRouter.get('/cases/:caseId/law-refs', async (c) => {
   const caseId = c.req.param('caseId');
   const db = getDB(c.env.DB);
 
-  const rows = await db.select().from(lawRefs).where(eq(lawRefs.case_id, caseId));
+  const refs = await readLawRefs(db, caseId);
 
-  return c.json(rows);
+  return c.json(refs);
 });
 
 // POST /api/cases/:caseId/law-refs — add law refs
@@ -56,40 +57,26 @@ lawRouter.post('/cases/:caseId/law-refs', async (c) => {
   }
 
   const db = getDB(c.env.DB);
-  const added = [];
+  const refs = body.items.map((item) => ({
+    id: item.id,
+    law_name: item.law_name,
+    article: item.article,
+    full_text: item.full_text,
+    is_manual: true,
+  }));
 
-  for (const item of body.items) {
-    try {
-      await db
-        .insert(lawRefs)
-        .values({
-          id: item.id,
-          case_id: caseId,
-          law_name: item.law_name,
-          article: item.article,
-          title: `${item.law_name} ${item.article}`,
-          full_text: item.full_text,
-          usage_count: 0,
-          is_manual: true,
-        })
-        .onConflictDoNothing();
-      added.push(item.id);
-    } catch {
-      /* skip duplicates */
-    }
-  }
+  const updated = await upsertManyLawRefs(db, caseId, refs);
 
-  const rows = await db.select().from(lawRefs).where(eq(lawRefs.case_id, caseId));
-
-  return c.json(rows);
+  return c.json(updated);
 });
 
-// DELETE /api/law-refs/:id — remove a law ref
-lawRouter.delete('/law-refs/:id', async (c) => {
+// DELETE /api/cases/:caseId/law-refs/:id — remove a law ref
+lawRouter.delete('/cases/:caseId/law-refs/:id', async (c) => {
+  const caseId = c.req.param('caseId');
   const id = c.req.param('id');
   const db = getDB(c.env.DB);
 
-  await db.delete(lawRefs).where(eq(lawRefs.id, id));
+  await removeLawRef(db, caseId, id);
 
   return c.json({ ok: true });
 });

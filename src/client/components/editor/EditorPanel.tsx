@@ -87,6 +87,7 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
           />
         ) : activeTab?.type === 'law' ? (
           <LawViewer
+            lawRefId={activeTab.lawRefId}
             lawName={activeTab.lawName}
             article={activeTab.article}
             fullText={activeTab.fullText}

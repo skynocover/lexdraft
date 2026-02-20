@@ -1,10 +1,11 @@
-import { eq, sql, and, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { files, briefs, lawRefs } from '../../db/schema';
+import { files, briefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { parseJsonField } from '../toolHelpers';
 import { searchLaw } from '../../lib/lawSearch';
 import { hasReplacementChars, buildLawTextMap, repairLawCitations } from '../../lib/textSanitize';
+import { readLawRefs, upsertLawRef } from '../../lib/lawRefsJson';
 import type { Paragraph } from '../../../client/stores/useBriefStore';
 import type { ToolHandler } from './types';
 
@@ -84,20 +85,19 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
     doc_type: 'file' as const,
   }));
 
-  // 3. Load law refs specified by relevant_law_ids: D1 cache first, fallback to MongoDB
+  // 3. Load law refs specified by relevant_law_ids: JSON cache first, fallback to MongoDB
   const loadedLawIds = new Set<string>();
   if (relevantLawIds.length) {
     const uncachedIds = relevantLawIds.filter((id) => !loadedLawIds.has(id));
 
     if (uncachedIds.length) {
-      // Check D1 cache
-      const cachedRows = await drizzle
-        .select()
-        .from(lawRefs)
-        .where(and(eq(lawRefs.case_id, caseId), inArray(lawRefs.id, uncachedIds)));
+      // Check JSON cache
+      const cachedRefs = await readLawRefs(drizzle, caseId);
+      const cachedById = new Map(cachedRefs.map((r) => [r.id, r]));
 
-      for (const ref of cachedRows) {
-        if (ref.full_text) {
+      for (const id of uncachedIds) {
+        const ref = cachedById.get(id);
+        if (ref && ref.full_text) {
           documents.push({
             title: `${ref.law_name} ${ref.article}`,
             content: ref.full_text,
@@ -107,7 +107,7 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
         }
       }
 
-      // Fetch missing from MongoDB and cache in D1
+      // Fetch missing from MongoDB and cache in JSON
       const stillMissing = uncachedIds.filter((id) => !loadedLawIds.has(id));
       if (stillMissing.length && ctx.mongoUrl) {
         for (const lawId of stillMissing) {
@@ -123,24 +123,13 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
                 console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
                 continue;
               }
-              await drizzle
-                .insert(lawRefs)
-                .values({
-                  id: r._id,
-                  case_id: caseId,
-                  law_name: r.law_name,
-                  article: r.article_no,
-                  title: `${r.law_name} ${r.article_no}`,
-                  full_text: r.content,
-                  usage_count: 1,
-                  is_manual: false,
-                })
-                .onConflictDoUpdate({
-                  target: lawRefs.id,
-                  set: {
-                    usage_count: sql`coalesce(${lawRefs.usage_count}, 0) + 1`,
-                  },
-                });
+              await upsertLawRef(drizzle, caseId, {
+                id: r._id,
+                law_name: r.law_name,
+                article: r.article_no,
+                full_text: r.content,
+                is_manual: false,
+              });
               documents.push({
                 title: `${r.law_name} ${r.article_no}`,
                 content: r.content,
@@ -205,7 +194,7 @@ ${existingParagraph.content_md}
     claudeInstruction,
   );
 
-  // 6. Post-processing: detect uncited law mentions in text and cache in D1
+  // 6. Post-processing: detect uncited law mentions in text and cache in JSON
   const citedLawLabels = new Set(citations.filter((c) => c.type === 'law').map((c) => c.label));
 
   // Deduplicate: use Set to avoid redundant MongoDB queries for same law
@@ -214,7 +203,7 @@ ${existingParagraph.content_md}
     mentionedLawKeys.add(`${match[1]}|第${match[2]}`);
   }
 
-  // Find laws mentioned in text but not cited by Claude — store in D1 as cache
+  // Find laws mentioned in text but not cited by Claude — store in JSON as cache
   const uncitedLaws = Array.from(mentionedLawKeys)
     .map((key) => {
       const [lawName, article] = key.split('|');
@@ -235,24 +224,13 @@ ${existingParagraph.content_md}
             console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
             continue;
           }
-          await drizzle
-            .insert(lawRefs)
-            .values({
-              id: r._id,
-              case_id: caseId,
-              law_name: r.law_name,
-              article: r.article_no,
-              title: `${r.law_name} ${r.article_no}`,
-              full_text: r.content,
-              usage_count: 1,
-              is_manual: false,
-            })
-            .onConflictDoUpdate({
-              target: lawRefs.id,
-              set: {
-                usage_count: sql`coalesce(${lawRefs.usage_count}, 0) + 1`,
-              },
-            });
+          await upsertLawRef(drizzle, caseId, {
+            id: r._id,
+            law_name: r.law_name,
+            article: r.article_no,
+            full_text: r.content,
+            is_manual: false,
+          });
         }
       } catch {
         /* skip on error */
@@ -261,7 +239,7 @@ ${existingParagraph.content_md}
   }
 
   // Send updated law refs to frontend
-  const displayRefs = await drizzle.select().from(lawRefs).where(eq(lawRefs.case_id, caseId));
+  const displayRefs = await readLawRefs(drizzle, caseId);
 
   await ctx.sendSSE({
     type: 'brief_update',
@@ -270,7 +248,7 @@ ${existingParagraph.content_md}
     data: displayRefs,
   });
 
-  // 6b. Repair corrupted quoted_text in law citations using D1 data
+  // 6b. Repair corrupted quoted_text in law citations using cached data
   const lawTextMap = buildLawTextMap(displayRefs);
   const allCitationRefs = [...citations, ...segments.flatMap((s) => s.citations)];
   repairLawCitations(allCitationRefs, lawTextMap);
