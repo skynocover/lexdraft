@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid'
 import { briefs } from '../../db/schema'
+import { toolError, toolSuccess } from '../toolHelpers'
 import type { ToolHandler } from './types'
 
 export const handleCreateBrief: ToolHandler = async (args, caseId, _db, drizzle, ctx) => {
@@ -7,7 +8,7 @@ export const handleCreateBrief: ToolHandler = async (args, caseId, _db, drizzle,
   const title = args.title as string
 
   if (!briefType || !title) {
-    return { result: 'Error: brief_type and title are required', success: false }
+    return toolError('brief_type 和 title 為必填')
   }
 
   const briefId = nanoid()
@@ -42,8 +43,7 @@ export const handleCreateBrief: ToolHandler = async (args, caseId, _db, drizzle,
     })
   }
 
-  return {
-    result: `已建立書狀「${title}」，brief_id: ${briefId}。請使用此 brief_id 搭配 write_brief_section 逐段撰寫內容。`,
-    success: true,
-  }
+  return toolSuccess(
+    `已建立書狀「${title}」，brief_id: ${briefId}。請使用此 brief_id 搭配 write_brief_section 逐段撰寫內容。`,
+  )
 }

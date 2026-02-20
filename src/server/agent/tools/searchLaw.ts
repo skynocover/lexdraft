@@ -1,5 +1,6 @@
 import { searchLaw } from '../../lib/lawSearch';
 import { ALIAS_MAP } from '../../lib/lawConstants';
+import { toolError, toolSuccess } from '../toolHelpers';
 import type { ToolHandler } from './types';
 
 /** Replace known aliases in a query string before sending to searchLaw */
@@ -16,20 +17,20 @@ const preprocessQuery = (query: string): string => {
 
 export const handleSearchLaw: ToolHandler = async (args, _caseId, _db, _drizzle, ctx) => {
   if (!ctx) {
-    return { result: 'Error: missing execution context', success: false };
+    return toolError('缺少執行上下文');
   }
 
   const rawQuery = args.query as string;
   const limit = (args.limit as number) || 10;
   if (!rawQuery) {
-    return { result: 'Error: query is required', success: false };
+    return toolError('query 為必填');
   }
 
   const query = preprocessQuery(rawQuery);
   const results = await searchLaw(ctx.mongoUrl, { query, limit });
 
   if (results.length === 0) {
-    return { result: `未找到與「${query}」相關的法條。`, success: true };
+    return toolSuccess(`未找到與「${query}」相關的法條。`);
   }
 
   // Format result text (include IDs so agent can pass them to write_brief_section)
@@ -40,8 +41,7 @@ export const handleSearchLaw: ToolHandler = async (args, _caseId, _db, _drizzle,
     )
     .join('\n');
 
-  return {
-    result: `找到 ${results.length} 條相關法條：\n${formatted}\n\n【下一步】你必須立即對需要引用這些法條的段落呼叫 write_brief_section，將上述方括號內的法條 ID 傳入 relevant_law_ids 參數。不要只搜尋而不更新書狀。`,
-    success: true,
-  };
+  return toolSuccess(
+    `找到 ${results.length} 條相關法條：\n${formatted}\n\n【下一步】你必須立即對需要引用這些法條的段落呼叫 write_brief_section，將上述方括號內的法條 ID 傳入 relevant_law_ids 參數。不要只搜尋而不更新書狀。`,
+  );
 };

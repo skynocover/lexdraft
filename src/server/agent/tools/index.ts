@@ -35,7 +35,7 @@ export async function executeTool(
 ): Promise<{ result: string; success: boolean }> {
   const handler = handlers[toolName];
   if (!handler) {
-    return { result: `Unknown tool: ${toolName}`, success: false };
+    return { result: `未知的工具：${toolName}`, success: false };
   }
   const drizzle = getDB(db);
   return handler(args, caseId, db, drizzle, ctx);

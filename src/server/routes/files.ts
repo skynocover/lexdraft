@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import type { AppEnv } from '../types'
 import { getDB } from '../db'
 import { files } from '../db/schema'
+import { badRequest, notFound } from '../lib/errors'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
 const MAX_FILES_PER_CASE = 30
@@ -18,22 +19,22 @@ filesRouter.post('/cases/:caseId/files', async (c) => {
   // 檢查檔案數量限制
   const existing = await db.select().from(files).where(eq(files.case_id, caseId))
   if (existing.length >= MAX_FILES_PER_CASE) {
-    return c.json({ error: `每個案件最多 ${MAX_FILES_PER_CASE} 個檔案` }, 400)
+    throw badRequest(`每個案件最多 ${MAX_FILES_PER_CASE} 個檔案`)
   }
 
   const formData = await c.req.formData()
   const file = formData.get('file') as File | null
 
   if (!file) {
-    return c.json({ error: '請選擇檔案' }, 400)
+    throw badRequest('請選擇檔案')
   }
 
   if (file.type !== 'application/pdf') {
-    return c.json({ error: '僅支援 PDF 檔案' }, 400)
+    throw badRequest('僅支援 PDF 檔案')
   }
 
   if (file.size > MAX_FILE_SIZE) {
-    return c.json({ error: '檔案大小不可超過 20MB' }, 400)
+    throw badRequest('檔案大小不可超過 20MB')
   }
 
   const fileId = nanoid()
@@ -121,9 +122,7 @@ filesRouter.put('/files/:id', async (c) => {
 
   const db = getDB(c.env.DB)
   const existing = await db.select().from(files).where(eq(files.id, id))
-  if (existing.length === 0) {
-    return c.json({ error: '檔案不存在' }, 404)
-  }
+  if (existing.length === 0) throw notFound('檔案')
 
   const updates: Record<string, string | null> = { updated_at: new Date().toISOString() }
   if (body.category !== undefined) updates.category = body.category
@@ -141,9 +140,7 @@ filesRouter.delete('/files/:id', async (c) => {
   const db = getDB(c.env.DB)
 
   const existing = await db.select().from(files).where(eq(files.id, id))
-  if (existing.length === 0) {
-    return c.json({ error: '檔案不存在' }, 404)
-  }
+  if (existing.length === 0) throw notFound('檔案')
 
   // 從 R2 刪除
   await c.env.BUCKET.delete(existing[0].r2_key)
@@ -158,14 +155,12 @@ filesRouter.get('/files/:id/pdf', async (c) => {
   const db = getDB(c.env.DB)
   const result = await db.select().from(files).where(eq(files.id, c.req.param('id')))
 
-  if (result.length === 0) {
-    return c.json({ error: '檔案不存在' }, 404)
-  }
+  if (result.length === 0) throw notFound('檔案')
 
   const file = result[0]
   const object = await c.env.BUCKET.get(file.r2_key)
   if (!object) {
-    return c.json({ error: '檔案不存在於儲存空間' }, 404)
+    throw notFound('儲存空間檔案')
   }
 
   return new Response(object.body, {
@@ -182,13 +177,11 @@ filesRouter.get('/files/:id/content', async (c) => {
   const db = getDB(c.env.DB)
   const result = await db.select().from(files).where(eq(files.id, c.req.param('id')))
 
-  if (result.length === 0) {
-    return c.json({ error: '檔案不存在' }, 404)
-  }
+  if (result.length === 0) throw notFound('檔案')
 
   const file = result[0]
   if (file.status !== 'ready' || !file.full_text) {
-    return c.json({ error: '檔案尚未處理完成' }, 400)
+    throw badRequest('檔案尚未處理完成')
   }
 
   return c.json({ id: file.id, filename: file.filename, full_text: file.full_text })

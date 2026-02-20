@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import { getDB } from '../db'
 import { damages } from '../db/schema'
 import type { AppEnv } from '../types'
+import { notFound } from '../lib/errors'
 
 const damagesRouter = new Hono<AppEnv>()
 
@@ -12,10 +13,7 @@ damagesRouter.get('/cases/:caseId/damages', async (c) => {
   const caseId = c.req.param('caseId')
   const db = getDB(c.env.DB)
 
-  const rows = await db
-    .select()
-    .from(damages)
-    .where(eq(damages.case_id, caseId))
+  const rows = await db.select().from(damages).where(eq(damages.case_id, caseId))
 
   const parsed = rows.map((d) => ({
     ...d,
@@ -53,17 +51,20 @@ damagesRouter.post('/cases/:caseId/damages', async (c) => {
     created_at: now,
   })
 
-  return c.json({
-    id,
-    case_id: caseId,
-    category: body.category,
-    description: body.description || null,
-    amount: body.amount,
-    basis: body.basis || null,
-    evidence_refs: body.evidence_refs || [],
-    dispute_id: body.dispute_id || null,
-    created_at: now,
-  }, 201)
+  return c.json(
+    {
+      id,
+      case_id: caseId,
+      category: body.category,
+      description: body.description || null,
+      amount: body.amount,
+      basis: body.basis || null,
+      evidence_refs: body.evidence_refs || [],
+      dispute_id: body.dispute_id || null,
+      created_at: now,
+    },
+    201,
+  )
 })
 
 // PUT /api/damages/:id — 更新金額項目
@@ -90,9 +91,7 @@ damagesRouter.put('/damages/:id', async (c) => {
   await db.update(damages).set(updates).where(eq(damages.id, id))
 
   const rows = await db.select().from(damages).where(eq(damages.id, id))
-  if (!rows.length) {
-    return c.json({ error: 'Damage not found' }, 404)
-  }
+  if (!rows.length) throw notFound('金額項目')
 
   const row = rows[0]
   return c.json({
@@ -108,7 +107,7 @@ damagesRouter.delete('/damages/:id', async (c) => {
 
   await db.delete(damages).where(eq(damages.id, id))
 
-  return c.json({ success: true })
+  return c.json({ ok: true })
 })
 
 export { damagesRouter }

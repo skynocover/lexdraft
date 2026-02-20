@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 export { AgentDO } from './server/durable-objects/AgentDO';
 import type { AppEnv } from './server/types';
 import { authMiddleware } from './server/middleware/auth';
@@ -13,6 +14,15 @@ import { inlineAIRouter } from './server/routes/inlineAI';
 import { processFileMessage } from './server/queue/fileProcessor';
 
 const app = new Hono<AppEnv>();
+
+// === 全域錯誤處理 ===
+app.onError((err, c) => {
+  if (err instanceof HTTPException) {
+    return err.getResponse();
+  }
+  console.error('[unhandled]', err);
+  return c.json({ error: '伺服器發生錯誤，請稍後再試' }, 500);
+});
 
 // === 公開路由 ===
 

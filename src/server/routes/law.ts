@@ -6,6 +6,8 @@ import { asc } from 'drizzle-orm';
 import { searchLaw } from '../lib/lawSearch';
 import { readLawRefs, upsertManyLawRefs, removeLawRef } from '../lib/lawRefsJson';
 import type { AppEnv } from '../types';
+import { notFound } from '../lib/errors';
+import { requireString, requireArray } from '../lib/validate';
 
 const lawRouter = new Hono<AppEnv>();
 
@@ -17,9 +19,7 @@ lawRouter.post('/law/search', async (c) => {
     nature?: string;
   }>();
 
-  if (!body.query) {
-    return c.json({ error: 'missing query' }, 400);
-  }
+  requireString(body.query, '搜尋關鍵字');
 
   const results = await searchLaw(c.env.MONGO_URL, {
     query: body.query,
@@ -52,9 +52,7 @@ lawRouter.post('/cases/:caseId/law-refs', async (c) => {
     }>;
   }>();
 
-  if (!body.items?.length) {
-    return c.json({ error: 'items required' }, 400);
-  }
+  requireArray(body.items, '法條項目');
 
   const db = getDB(c.env.DB);
   const refs = body.items.map((item) => ({
@@ -108,9 +106,7 @@ lawRouter.get('/cases/:caseId/parties', async (c) => {
     .from(cases)
     .where(eq(cases.id, caseId));
 
-  if (!caseRow) {
-    return c.json({ error: 'case not found' }, 404);
-  }
+  if (!caseRow) throw notFound('案件');
 
   const parties = [];
   if (caseRow.plaintiff) {

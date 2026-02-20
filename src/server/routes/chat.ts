@@ -4,6 +4,7 @@ import type { AppEnv } from '../types';
 import { getDB } from '../db';
 import { messages } from '../db/schema';
 import type { ChatMessageRecord, ChatRequest } from '../../shared/types';
+import { requireString } from '../lib/validate';
 
 const chatRouter = new Hono<AppEnv>();
 
@@ -12,9 +13,7 @@ chatRouter.post('/cases/:caseId/chat', async (c) => {
   const caseId = c.req.param('caseId');
   const body = await c.req.json<ChatRequest>();
 
-  if (!body.message?.trim()) {
-    return c.json({ error: 'message is required' }, 400);
-  }
+  requireString(body.message, '訊息');
 
   // Get DO stub by caseId
   const id = c.env.AGENT_DO.idFromName(caseId);

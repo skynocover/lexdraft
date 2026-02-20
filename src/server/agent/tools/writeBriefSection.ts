@@ -2,7 +2,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { files, briefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
-import { parseJsonField } from '../toolHelpers';
+import { toolError, toolSuccess, parseJsonField } from '../toolHelpers';
 import {
   loadLawDocsByIds,
   fetchAndCacheUncitedMentions,
@@ -13,7 +13,7 @@ import type { ToolHandler } from './types';
 
 export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, drizzle, ctx) => {
   if (!ctx) {
-    return { result: 'Error: missing execution context', success: false };
+    return toolError('缺少執行上下文');
   }
 
   const briefId = args.brief_id as string;
@@ -26,20 +26,14 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
   const disputeId = (args.dispute_id as string) || null;
 
   if (!briefId || !section || !instruction || !relevantFileIds?.length) {
-    return {
-      result: 'Error: brief_id, section, instruction, relevant_file_ids are required',
-      success: false,
-    };
+    return toolError('brief_id、section、instruction、relevant_file_ids 為必填');
   }
 
   // 1. Read brief and determine if this is an update or create (must happen before Claude call)
   const briefRows = await drizzle.select().from(briefs).where(eq(briefs.id, briefId));
 
   if (!briefRows.length) {
-    return {
-      result: `Error: brief not found (id: ${briefId})`,
-      success: false,
-    };
+    return toolError(`找不到書狀（id: ${briefId}）`);
   }
 
   const brief = briefRows[0];
@@ -73,7 +67,7 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
     .where(inArray(files.id, relevantFileIds));
 
   if (!relevantFiles.length) {
-    return { result: 'Error: no matching files found', success: false };
+    return toolError('找不到相關檔案');
   }
 
   const documents: ClaudeDocument[] = relevantFiles.map((f) => ({
@@ -195,8 +189,7 @@ ${existingParagraph.content_md}
   });
 
   const actionLabel = isUpdate ? '已更新' : '已撰寫';
-  return {
-    result: `${actionLabel}段落「${section}${subsection ? ' > ' + subsection : ''}」，包含 ${fileCitationCount} 個文件引用、${lawCitationCount} 個法條引用。`,
-    success: true,
-  };
+  return toolSuccess(
+    `${actionLabel}段落「${section}${subsection ? ' > ' + subsection : ''}」，包含 ${fileCitationCount} 個文件引用、${lawCitationCount} 個法條引用。`,
+  );
 };

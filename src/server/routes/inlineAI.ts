@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../types';
 import { callAI } from '../agent/aiClient';
 import type { ChatMessage } from '../agent/aiClient';
+import { badRequest } from '../lib/errors';
+import { requireString } from '../lib/validate';
 
 type Operation = 'condense' | 'strengthen';
 
@@ -25,12 +27,10 @@ inlineAIRouter.post('/inline-ai/transform', async (c) => {
     operation: string;
   }>();
 
-  if (!body.text?.trim()) {
-    return c.json({ error: '請提供要轉換的文字' }, 400);
-  }
+  requireString(body.text, '轉換文字');
 
   if (!VALID_OPERATIONS.has(body.operation)) {
-    return c.json({ error: '無效的操作類型' }, 400);
+    throw badRequest('無效的操作類型');
   }
 
   const systemPrompt = SYSTEM_PROMPTS[body.operation as Operation];

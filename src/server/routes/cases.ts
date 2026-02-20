@@ -14,6 +14,8 @@ import {
   timelineEvents,
   messages,
 } from '../db/schema';
+import { notFound } from '../lib/errors';
+import { requireString } from '../lib/validate';
 
 const DEFAULT_USER_ID = 'default-user';
 
@@ -52,9 +54,7 @@ casesRouter.post('/', async (c) => {
     defendant?: string;
   }>();
 
-  if (!body.title?.trim()) {
-    return c.json({ error: '案件名稱為必填' }, 400);
-  }
+  const title = requireString(body.title, '案件名稱');
 
   const db = getDB(c.env.DB);
   await ensureDefaultUser(db);
@@ -62,7 +62,7 @@ casesRouter.post('/', async (c) => {
   const newCase = {
     id: nanoid(),
     user_id: DEFAULT_USER_ID,
-    title: body.title.trim(),
+    title,
     case_number: body.case_number?.trim() || null,
     court: body.court?.trim() || null,
     case_type: body.case_type?.trim() || null,
@@ -84,9 +84,7 @@ casesRouter.get('/:id', async (c) => {
     .from(cases)
     .where(eq(cases.id, c.req.param('id')));
 
-  if (result.length === 0) {
-    return c.json({ error: '案件不存在' }, 404);
-  }
+  if (result.length === 0) throw notFound('案件');
 
   return c.json(result[0]);
 });
@@ -106,9 +104,7 @@ casesRouter.put('/:id', async (c) => {
   const db = getDB(c.env.DB);
   const existing = await db.select().from(cases).where(eq(cases.id, id));
 
-  if (existing.length === 0) {
-    return c.json({ error: '案件不存在' }, 404);
-  }
+  if (existing.length === 0) throw notFound('案件');
 
   const updates: Record<string, string | null> = { updated_at: new Date().toISOString() };
   if (body.title !== undefined) updates.title = body.title.trim();
@@ -130,9 +126,7 @@ casesRouter.delete('/:id', async (c) => {
   const db = getDB(c.env.DB);
 
   const existing = await db.select().from(cases).where(eq(cases.id, id));
-  if (existing.length === 0) {
-    return c.json({ error: '案件不存在' }, 404);
-  }
+  if (existing.length === 0) throw notFound('案件');
 
   // 刪除 brief_versions（需先查出 brief ids）
   const briefRows = await db.select({ id: briefs.id }).from(briefs).where(eq(briefs.case_id, id));
@@ -155,7 +149,7 @@ casesRouter.delete('/:id', async (c) => {
   // 刪除案件
   await db.delete(cases).where(eq(cases.id, id));
 
-  return c.json({ success: true });
+  return c.json({ ok: true });
 });
 
 export { casesRouter };
