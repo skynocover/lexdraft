@@ -71,6 +71,25 @@ export function CitationNodeView({ node }: NodeViewProps) {
     setShowPopover(false);
   }, [isFile, fileId, quotedText]);
 
+  const handleOpenLaw = useCallback(() => {
+    if (!isLaw || !label) return;
+    const lawRefs = useBriefStore.getState().lawRefs;
+    const lawRef = lawRefs.find(
+      (r) => `${r.law_name} ${r.article}` === label || r.law_name === label,
+    );
+    if (!lawRef) return;
+
+    useTabStore
+      .getState()
+      .openLawTabInOtherPanel(
+        lawRef.id,
+        lawRef.law_name ?? '',
+        lawRef.article ?? '',
+        lawRef.full_text ?? null,
+      );
+    setShowPopover(false);
+  }, [isLaw, label]);
+
   return (
     <NodeViewWrapper
       as="span"
@@ -181,6 +200,38 @@ export function CitationNodeView({ node }: NodeViewProps) {
             >
               <ExternalLink size={12} />
               開啟來源文件
+            </button>
+          )}
+
+          {/* Open law button for law citations */}
+          {isLaw && (
+            <button
+              onClick={handleOpenLaw}
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '4px 8px',
+                borderRadius: 4,
+                fontSize: 11,
+                fontWeight: 500,
+                color: '#6d28d9',
+                background: 'rgba(139,92,246,0.08)',
+                border: 'none',
+                cursor: 'pointer',
+                width: '100%',
+                justifyContent: 'center',
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = 'rgba(139,92,246,0.18)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = 'rgba(139,92,246,0.08)';
+              }}
+            >
+              <ExternalLink size={12} />
+              開啟法條
             </button>
           )}
 

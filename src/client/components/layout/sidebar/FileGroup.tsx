@@ -1,6 +1,7 @@
-import { useState } from "react";
-import type { CaseFile } from "../../../stores/useCaseStore";
-import { FileItem } from "./FileItem";
+import { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { CaseFile } from '../../../stores/useCaseStore';
+import { FileItem } from './FileItem';
 
 export function FileGroup({
   label,
@@ -32,7 +33,7 @@ export function FileGroup({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const fileId = e.dataTransfer.getData("text/file-id");
+    const fileId = e.dataTransfer.getData('text/file-id');
     if (fileId) {
       onDropFile(fileId, groupKey);
     }
@@ -40,39 +41,45 @@ export function FileGroup({
 
   return (
     <div
-      className={`${dragOver ? "rounded bg-ac/5" : ""}`}
+      className={`border-b border-bd last:border-b-0 ${dragOver ? 'bg-ac/5' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 transition hover:bg-bg-h"
+        className="flex w-full items-center gap-1.5 px-4 pt-3 pb-1 transition hover:bg-bg-h"
       >
-        <span className="text-[10px] text-t3">
-          {open ? "\u25BE" : "\u25B8"}
-        </span>
-        <span className="text-[11px] font-semibold tracking-wide text-t1">
-          {label}
-        </span>
-        <span className="text-[10px] text-t3">({files.length})</span>
+        {open ? (
+          <ChevronDown size={14} className="shrink-0 text-t3" />
+        ) : (
+          <ChevronRight size={14} className="shrink-0 text-t3" />
+        )}
+        <span className="text-xs font-semibold text-t2">{label}</span>
+        <span className="text-xs font-normal text-t3">({files.length})</span>
       </button>
-      {open && files.length > 0 && (
-        <div className="pb-1 pl-2">
-          {files.map((f) => (
-            <FileItem
-              key={f.id}
-              file={f}
-              isRebuttalTarget={rebuttalTargetIds.includes(f.id)}
-              onDelete={onDelete}
-            />
-          ))}
-        </div>
-      )}
-      {dragOver && files.length === 0 && open && (
-        <div className="mx-3 mb-2 rounded border border-dashed border-ac/40 py-2 text-center text-[10px] text-ac/60">
-          拖曳至此分類
-        </div>
+
+      {open && (
+        <>
+          {files.length > 0 && (
+            <div className="px-3 pb-2 space-y-0.5">
+              {files.map((f) => (
+                <FileItem
+                  key={f.id}
+                  file={f}
+                  groupKey={groupKey}
+                  isRebuttalTarget={rebuttalTargetIds.includes(f.id)}
+                  onDelete={onDelete}
+                />
+              ))}
+            </div>
+          )}
+          {dragOver && files.length === 0 && (
+            <div className="mx-4 mb-3 rounded-lg border border-dashed border-ac/40 py-3 text-center text-sm text-ac/60">
+              拖曳至此分類
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { useBriefStore, type Citation } from "../../../stores/useBriefStore";
+import { useState, useEffect, useMemo } from 'react';
+import { useBriefStore, type Citation } from '../../../stores/useBriefStore';
 
 interface CitationReviewModalProps {
   open: boolean;
@@ -12,10 +12,7 @@ interface ReviewItem {
   paragraphPreview: string;
 }
 
-export function CitationReviewModal({
-  open,
-  onClose,
-}: CitationReviewModalProps) {
+export function CitationReviewModal({ open, onClose }: CitationReviewModalProps) {
   const currentBrief = useBriefStore((s) => s.currentBrief);
   const updateCitationStatus = useBriefStore((s) => s.updateCitationStatus);
   const removeCitation = useBriefStore((s) => s.removeCitation);
@@ -33,7 +30,7 @@ export function CitationReviewModal({
     for (const p of currentBrief.content_structured.paragraphs) {
       const preview = p.content_md.slice(0, 80);
       for (const c of p.citations) {
-        if (c.status === "pending") {
+        if (c.status === 'pending') {
           items.push({
             paragraphId: p.id,
             citation: c,
@@ -44,7 +41,7 @@ export function CitationReviewModal({
       if (p.segments) {
         for (const seg of p.segments) {
           for (const c of seg.citations) {
-            if (c.status === "pending") {
+            if (c.status === 'pending') {
               items.push({
                 paragraphId: p.id,
                 citation: c,
@@ -65,10 +62,8 @@ export function CitationReviewModal({
   useEffect(() => {
     if (!open || !current) return;
     setHighlightCitationId(current.citation.id);
-    const el = document.querySelector(
-      `[data-paragraph-id="${current.paragraphId}"]`,
-    );
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const el = document.querySelector(`[data-paragraph-id="${current.paragraphId}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [currentIndex, open, current]);
 
   // Reset state on open
@@ -92,7 +87,7 @@ export function CitationReviewModal({
 
   const handleConfirm = () => {
     if (!current) return;
-    updateCitationStatus(current.paragraphId, current.citation.id, "confirmed");
+    updateCitationStatus(current.paragraphId, current.citation.id, 'confirmed');
     setConfirmedCount((n) => n + 1);
     goNext();
   };
@@ -125,17 +120,14 @@ export function CitationReviewModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-bd px-5 py-3">
           <span className="text-sm font-medium text-t1">
-            引用審查{" "}
+            引用審查{' '}
             {!finished && total > 0 && (
               <span className="text-t3">
                 ({currentIndex + 1}/{total})
               </span>
             )}
           </span>
-          <button
-            onClick={handleClose}
-            className="text-t3 hover:text-t1 text-lg leading-none"
-          >
+          <button onClick={handleClose} className="text-t3 hover:text-t1 text-lg leading-none">
             &times;
           </button>
         </div>
@@ -151,14 +143,12 @@ export function CitationReviewModal({
               <p className="mb-2 text-sm font-medium text-t1">審查完成！</p>
               <p className="text-sm text-t2">
                 <span className="text-gr">{confirmedCount} 確認</span>
-                {" / "}
+                {' / '}
                 <span className="text-rd">{removedCount} 移除</span>
                 {total - confirmedCount - removedCount > 0 && (
                   <>
-                    {" / "}
-                    <span className="text-t3">
-                      {total - confirmedCount - removedCount} 跳過
-                    </span>
+                    {' / '}
+                    <span className="text-t3">{total - confirmedCount - removedCount} 跳過</span>
                   </>
                 )}
               </p>
@@ -174,18 +164,16 @@ export function CitationReviewModal({
               {/* Citation info */}
               <div className="mb-3 flex items-center gap-2">
                 <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                    current.citation.type === "law"
-                      ? "bg-pu/20 text-pu"
-                      : "bg-ac/20 text-ac"
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                    current.citation.type === 'law' ? 'bg-pu/20 text-pu' : 'bg-ac/20 text-ac'
                   }`}
                 >
-                  {current.citation.type === "law" ? "法條" : "文件"}
+                  {current.citation.type === 'law' ? '法條' : '文件'}
                 </span>
                 <span className="truncate text-sm font-medium text-t1">
                   {current.citation.label}
                 </span>
-                <span className="shrink-0 rounded bg-yl/20 px-1.5 py-0.5 text-[10px] text-yl">
+                <span className="shrink-0 rounded bg-yl/20 px-1.5 py-0.5 text-[11px] text-yl">
                   待確認
                 </span>
               </div>
@@ -208,7 +196,7 @@ export function CitationReviewModal({
                 <div className="rounded bg-bg-2 p-3">
                   <p className="text-xs leading-5 text-t2">
                     {current.paragraphPreview}
-                    {current.paragraphPreview.length >= 80 && "..."}
+                    {current.paragraphPreview.length >= 80 && '...'}
                   </p>
                 </div>
               </div>

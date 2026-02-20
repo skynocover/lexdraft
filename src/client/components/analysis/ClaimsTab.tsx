@@ -16,7 +16,7 @@ const ClaimCard = ({ claim, allClaims }: { claim: ClaimGraph; allClaims: ClaimGr
     <div className="rounded-lg border border-bd bg-bg-2 px-3 py-2">
       <div className="flex items-start gap-2">
         <span
-          className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${badge.cls}`}
+          className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium ${badge.cls}`}
         >
           {badge.label}
         </span>
@@ -126,7 +126,7 @@ export const ClaimsTab = () => {
               <div className="grid grid-cols-2 gap-2 px-3 pb-3">
                 {/* Left: ours */}
                 <div className="space-y-1.5">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-t3">我方</p>
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-t3">我方</p>
                   {group.ourClaims.length > 0 ? (
                     group.ourClaims.map((c) => (
                       <ClaimCard key={c.id} claim={c} allClaims={claims} />
@@ -137,7 +137,7 @@ export const ClaimsTab = () => {
                 </div>
                 {/* Right: theirs */}
                 <div className="space-y-1.5">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-t3">對方</p>
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-t3">對方</p>
                   {group.theirClaims.length > 0 ? (
                     group.theirClaims.map((c) => (
                       <ClaimCard key={c.id} claim={c} allClaims={claims} />

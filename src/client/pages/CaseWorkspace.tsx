@@ -199,7 +199,7 @@ const SidebarStrip = ({ side, onClick }: { side: 'left' | 'right'; onClick: () =
       >
         {isLeft ? <PanelLeft size={16} /> : <PanelRight size={16} />}
       </button>
-      <span className="mt-3 text-[10px] text-t3" style={{ writingMode: 'vertical-lr' }}>
+      <span className="mt-3 text-[11px] text-t3" style={{ writingMode: 'vertical-lr' }}>
         {isLeft ? 'AI 助理' : '案件資料'}
       </span>
     </div>

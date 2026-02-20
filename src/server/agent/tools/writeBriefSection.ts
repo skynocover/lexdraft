@@ -4,6 +4,7 @@ import { files, briefs, lawRefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { parseJsonField } from '../toolHelpers';
 import { searchLaw } from '../../lib/lawSearch';
+import { hasReplacementChars, buildLawTextMap, repairLawCitations } from '../../lib/textSanitize';
 import type { Paragraph } from '../../../client/stores/useBriefStore';
 import type { ToolHandler } from './types';
 
@@ -117,6 +118,11 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
             });
             if (results.length > 0) {
               const r = results[0];
+              // Skip if MongoDB returned corrupted text
+              if (hasReplacementChars(r.content)) {
+                console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
+                continue;
+              }
               await drizzle
                 .insert(lawRefs)
                 .values({
@@ -225,6 +231,10 @@ ${existingParagraph.content_md}
         });
         if (results.length > 0) {
           const r = results[0];
+          if (hasReplacementChars(r.content)) {
+            console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
+            continue;
+          }
           await drizzle
             .insert(lawRefs)
             .values({
@@ -259,6 +269,11 @@ ${existingParagraph.content_md}
     action: 'set_law_refs',
     data: displayRefs,
   });
+
+  // 6b. Repair corrupted quoted_text in law citations using D1 data
+  const lawTextMap = buildLawTextMap(displayRefs);
+  const allCitationRefs = [...citations, ...segments.flatMap((s) => s.citations)];
+  repairLawCitations(allCitationRefs, lawTextMap);
 
   // 7. Build Paragraph object
   const lawCitationCount = citations.filter((c) => c.type === 'law').length;

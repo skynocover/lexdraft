@@ -49,7 +49,7 @@ export const EditorToolbar = ({
       {stats.confirmed > 0 || stats.pending > 0 ? (
         <button
           onClick={() => stats.pending > 0 && onCitationReview()}
-          className={`text-[11px] ${stats.pending > 0 ? 'hover:text-t1 cursor-pointer' : ''} text-t3`}
+          className={`text-xs ${stats.pending > 0 ? 'hover:text-t1 cursor-pointer' : ''} text-t3`}
         >
           引用：<span className="text-gr">{stats.confirmed} 確認</span>
           {stats.pending > 0 && (
@@ -60,7 +60,7 @@ export const EditorToolbar = ({
           )}
         </button>
       ) : (
-        <span className="text-[11px] text-t3">引用審查</span>
+        <span className="text-xs text-t3">引用審查</span>
       )}
 
       <span className="mx-2 h-4 w-px bg-bd" />
@@ -82,7 +82,7 @@ export const EditorToolbar = ({
       </button>
 
       {/* Save status (right side) */}
-      <div className="ml-auto text-[11px]">
+      <div className="ml-auto text-xs">
         {saving ? (
           <span className="text-t3">儲存中...</span>
         ) : hasContent && !dirty ? (

@@ -230,14 +230,14 @@ export function FileViewer({
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Toolbar */}
       <div className="flex shrink-0 items-center gap-3 border-b border-bd bg-bg-1 px-4 py-2">
-        <span className="rounded bg-rd/20 px-2 py-0.5 text-[10px] font-semibold text-rd">PDF</span>
+        <span className="rounded bg-rd/20 px-2 py-0.5 text-[11px] font-semibold text-rd">PDF</span>
         <span className="truncate text-xs font-medium text-t1">{filename}</span>
-        {numPages > 0 && <span className="text-[10px] text-t3">{numPages} 頁</span>}
+        {numPages > 0 && <span className="text-[11px] text-t3">{numPages} 頁</span>}
 
         {/* Highlight indicator */}
         {highlightText && (
           <div className="flex items-center gap-1.5">
-            <span className="rounded bg-yl/20 px-2 py-0.5 text-[10px] text-yl">引用定位</span>
+            <span className="rounded bg-yl/20 px-2 py-0.5 text-[11px] text-yl">引用定位</span>
             {onClearHighlight && (
               <button
                 onClick={onClearHighlight}

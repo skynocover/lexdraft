@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 /*
  * LexDraft Dark Theme — TASKS.md §9
@@ -12,14 +12,14 @@
   --color-bg-4: #363842;
   --color-bg-h: #3a3d4a;
 
-  /* Borders — subtler, lower contrast */
-  --color-bd: #2e3040;
-  --color-bd-l: #3d4055;
+  /* Borders — visible separation */
+  --color-bd: #383b4a;
+  --color-bd-l: #4a4e62;
 
   /* Text */
-  --color-t1: #e8e9ee;
-  --color-t2: #9ea1b2;
-  --color-t3: #6e7188;
+  --color-t1: #ecedf2;
+  --color-t2: #b4b7c8;
+  --color-t3: #8b8ea3;
 
   /* Accent colors */
   --color-ac: #7c9aff;
@@ -44,8 +44,8 @@ body {
   background-color: var(--color-bg-0);
   color: var(--color-t1);
   font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, "Noto Sans TC", sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans TC',
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -142,6 +142,40 @@ body {
   margin: 0.5em 0;
 }
 
+/* ===================== Light Theme Scope ===================== */
+
+.theme-light {
+  --color-bg-0: #ffffff;
+  --color-bg-1: #f9fafb;
+  --color-bg-2: #f3f4f6;
+  --color-bg-3: #e5e7eb;
+  --color-bg-4: #d1d5db;
+  --color-bg-h: #f0f1f5;
+
+  --color-bd: #e5e7eb;
+  --color-bd-l: #d1d5db;
+
+  --color-t1: #1a1c22;
+  --color-t2: #6b7083;
+  --color-t3: #9ca0af;
+
+  --color-ac: #4a7cff;
+  --color-gr: #22a55b;
+  --color-yl: #d4a017;
+  --color-rd: #e04040;
+  --color-or: #c87a28;
+  --color-pu: #7c5cbf;
+  --color-cy: #1d8ea8;
+}
+
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+}
+
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #b0b5c0;
+}
+
 /* ===================== A4 Editor ===================== */
 
 /* Editor container — full white, like Word */
@@ -157,7 +191,7 @@ body {
   padding: 2.5cm;
   background: white;
   color: #1a1a1a;
-  font-family: "DFKai-SB", "BiauKai", "標楷體", "Noto Serif TC", serif;
+  font-family: 'DFKai-SB', 'BiauKai', '標楷體', 'Noto Serif TC', serif;
   font-size: 14pt;
   line-height: 25pt;
 }
@@ -241,7 +275,7 @@ body {
   cursor: pointer;
   position: relative;
   font-weight: 600;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .citation-badge.citation-law {
@@ -275,7 +309,7 @@ body {
   z-index: 50;
   font-size: 12px;
   line-height: 1.5;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   text-indent: 0;
   font-weight: normal;
 }

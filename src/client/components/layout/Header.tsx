@@ -1,20 +1,20 @@
-import { useNavigate } from 'react-router'
-import { useAuthStore } from '../../stores/useAuthStore'
-import { useCaseStore } from '../../stores/useCaseStore'
-import { useBriefStore } from '../../stores/useBriefStore'
-import { exportBriefToDocx } from '../editor/tiptap/exportDocx'
+import { useNavigate } from 'react-router';
+import { useAuthStore } from '../../stores/useAuthStore';
+import { useCaseStore } from '../../stores/useCaseStore';
+import { useBriefStore } from '../../stores/useBriefStore';
+import { exportBriefToDocx } from '../editor/tiptap/exportDocx';
 
 export function Header() {
-  const clearToken = useAuthStore((s) => s.clearToken)
-  const currentCase = useCaseStore((s) => s.currentCase)
-  const currentBrief = useBriefStore((s) => s.currentBrief)
-  const navigate = useNavigate()
+  const clearToken = useAuthStore((s) => s.clearToken);
+  const currentCase = useCaseStore((s) => s.currentCase);
+  const currentBrief = useBriefStore((s) => s.currentBrief);
+  const navigate = useNavigate();
 
   const handleDownloadWord = async () => {
-    if (!currentBrief?.content_structured) return
-    const title = currentBrief.title || '書狀'
-    await exportBriefToDocx(currentBrief.content_structured.paragraphs, title)
-  }
+    if (!currentBrief?.content_structured) return;
+    const title = currentBrief.title || '書狀';
+    await exportBriefToDocx(currentBrief.content_structured.paragraphs, title);
+  };
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-bd bg-bg-1 px-4">
@@ -31,7 +31,7 @@ export function Header() {
             <span className="text-t3">/</span>
             <span className="text-sm text-t1">{currentCase.title}</span>
             {currentCase.case_number && (
-              <span className="text-xs text-t3">({currentCase.case_number})</span>
+              <span className="text-[13px] text-t3">({currentCase.case_number})</span>
             )}
           </>
         )}
@@ -47,12 +47,15 @@ export function Header() {
           </button>
         )}
         <button
-          onClick={() => { clearToken(); navigate('/login') }}
+          onClick={() => {
+            clearToken();
+            navigate('/login');
+          }}
           className="text-xs text-t3 transition hover:text-t1"
         >
           登出
         </button>
       </div>
     </header>
-  )
+  );
 }

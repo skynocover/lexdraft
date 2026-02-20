@@ -7,6 +7,7 @@ import { useUIStore } from '../../stores/useUIStore';
 import { useRewindStore } from '../../stores/useRewindStore';
 import { QuickActionButtons } from '../chat/QuickActionButtons';
 import { PipelineStages } from '../chat/PipelineStages';
+import { getCategoryTagCls, getCategoryLabel } from '../../lib/categoryConfig';
 import type { PipelineStep } from '../../../shared/types';
 
 export function ChatPanel() {
@@ -106,10 +107,10 @@ export function ChatPanel() {
     <aside className="flex w-80 shrink-0 flex-col border-r border-bd bg-bg-1">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-bd px-3 py-2">
-        <span className="text-xs font-medium text-t2">AI 助理</span>
+        <span className="text-[13px] font-medium text-t2">AI 助理</span>
         <div className="flex items-center gap-1">
           {messages.length > 0 && !isStreaming && (
-            <button onClick={handleClear} className="text-[11px] text-t3 hover:text-rd">
+            <button onClick={handleClear} className="text-xs text-t3 hover:text-rd">
               清除對話
             </button>
           )}
@@ -160,7 +161,7 @@ export function ChatPanel() {
                 }}
               />
             </div>
-            <span className="text-[10px] text-t3">
+            <span className="text-[11px] text-t3">
               {agentProgress.current}/{agentProgress.total}
             </span>
           </div>
@@ -499,22 +500,14 @@ function FileListDisplay({ content }: { content: string }) {
     return <span className="text-t3">（無檔案）</span>;
   }
 
-  const categoryLabel: Record<string, string> = {
-    ours: '我方',
-    theirs: '對方',
-    court: '法院',
-    evidence: '證據',
-    other: '其他',
-  };
-
   return (
     <div className="space-y-1">
       {files.map((f, i) => (
         <div key={i} className="flex items-center gap-2">
           <span
-            className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-medium ${getCategoryColor(f.category)}`}
+            className={`shrink-0 rounded px-1 py-0.5 text-[11px] font-medium ${getCategoryTagCls(f.category)}`}
           >
-            {categoryLabel[f.category || 'other'] || '其他'}
+            {getCategoryLabel(f.category)}
           </span>
           <span className="min-w-0 truncate text-t1">{f.filename}</span>
           {f.status === 'ready' && <span className="shrink-0 text-gr">&#10003;</span>}
@@ -523,21 +516,6 @@ function FileListDisplay({ content }: { content: string }) {
       ))}
     </div>
   );
-}
-
-function getCategoryColor(category: string | null): string {
-  switch (category) {
-    case 'ours':
-      return 'bg-ac/20 text-ac';
-    case 'theirs':
-      return 'bg-or/20 text-or';
-    case 'court':
-      return 'bg-pu/20 text-pu';
-    case 'evidence':
-      return 'bg-cy/20 text-cy';
-    default:
-      return 'bg-bg-4 text-t3';
-  }
 }
 
 function SearchLawDisplay({ content, query }: { content: string; query?: string }) {
@@ -556,7 +534,7 @@ function SearchLawDisplay({ content, query }: { content: string; query?: string 
   return (
     <div className="space-y-1.5">
       {query && (
-        <p className="text-[10px] text-t3">
+        <p className="text-[11px] text-t3">
           搜尋：<span className="text-t2">{query}</span>
         </p>
       )}
@@ -566,12 +544,12 @@ function SearchLawDisplay({ content, query }: { content: string; query?: string 
         const [, , title, preview] = match;
         return (
           <div key={i} className="flex items-start gap-1.5">
-            <span className="mt-0.5 shrink-0 rounded bg-purple-500/20 px-1 py-0.5 text-[9px] font-medium text-purple-400">
+            <span className="mt-0.5 shrink-0 rounded bg-purple-500/20 px-1 py-0.5 text-[11px] font-medium text-purple-400">
               法規
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium text-t1">{title}</p>
-              <p className="truncate text-[10px] text-t3">{preview}</p>
+              <p className="text-xs font-medium text-t1">{title}</p>
+              <p className="truncate text-[11px] text-t3">{preview}</p>
             </div>
           </div>
         );

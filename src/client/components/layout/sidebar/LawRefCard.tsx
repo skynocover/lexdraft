@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { X } from 'lucide-react';
 import type { LawRef } from '../../../stores/useBriefStore';
+import { useTabStore } from '../../../stores/useTabStore';
 
 interface LawRefCardProps {
   lawRef: LawRef;
@@ -9,23 +9,36 @@ interface LawRefCardProps {
 }
 
 export function LawRefCard({ lawRef, cited, onRemove }: LawRefCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const handleClick = () => {
+    useTabStore
+      .getState()
+      .openLawTab(lawRef.id, lawRef.law_name ?? '', lawRef.article ?? '', lawRef.full_text ?? null);
+  };
 
   return (
-    <div className={`group rounded border ${cited ? 'border-pu/25 bg-pu/5' : 'border-bd bg-bg-2'}`}>
+    <div className="group">
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-start gap-2 px-2 py-1.5 text-left transition hover:bg-bg-h"
+        onClick={handleClick}
+        className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition hover:bg-bg-2"
       >
-        {cited && (
-          <span className="mt-0.5 shrink-0 rounded bg-pu/20 px-1 py-0.5 text-[9px] font-medium text-pu">
-            引用
-          </span>
-        )}
+        {/* § icon badge */}
+        <span
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-base font-bold ${
+            cited ? 'bg-gr/10 text-gr' : 'bg-pu/10 text-pu'
+          }`}
+        >
+          §
+        </span>
         <div className="flex-1 min-w-0">
-          <p className={`truncate text-xs ${cited ? 'text-t1' : 'text-t2'}`}>
+          <p className="truncate text-sm font-medium text-t1">
             {lawRef.law_name} {lawRef.article}
           </p>
+          {lawRef.full_text && (
+            <p className="truncate text-xs text-t3">
+              {lawRef.full_text.slice(0, 40)}
+              {lawRef.full_text.length > 40 ? '...' : ''}
+            </p>
+          )}
         </div>
         {onRemove && (
           <button
@@ -33,19 +46,13 @@ export function LawRefCard({ lawRef, cited, onRemove }: LawRefCardProps) {
               e.stopPropagation();
               onRemove(lawRef.id);
             }}
-            className="shrink-0 rounded p-0.5 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
+            className="shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
             title="移除"
           >
-            <X size={10} />
+            <X size={14} />
           </button>
         )}
-        <span className="shrink-0 text-[10px] text-t3">{expanded ? '\u25BE' : '\u25B8'}</span>
       </button>
-      {expanded && lawRef.full_text && (
-        <div className="border-t border-bd px-2 py-1.5">
-          <p className="text-[11px] leading-4 text-t2">{lawRef.full_text}</p>
-        </div>
-      )}
     </div>
   );
 }

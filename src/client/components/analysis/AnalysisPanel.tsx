@@ -114,7 +114,7 @@ export function AnalysisPanel() {
       <div className="flex shrink-0 items-center border-b border-bd px-2">
         <button
           onClick={toggle}
-          className="mr-2 rounded p-1 text-[10px] text-t3 transition hover:bg-bg-h hover:text-t1"
+          className="mr-2 rounded p-1 text-[11px] text-t3 transition hover:bg-bg-h hover:text-t1"
           title={open ? '收合面板' : '展開面板'}
         >
           {open ? '▼' : '▲'}
@@ -137,7 +137,7 @@ export function AnalysisPanel() {
 
         {/* Word count — right side */}
         {charCount > 0 && (
-          <span className="ml-auto pr-2 text-[11px] text-t3">{charCount.toLocaleString()} 字</span>
+          <span className="ml-auto pr-2 text-xs text-t3">{charCount.toLocaleString()} 字</span>
         )}
       </div>
 

@@ -21,7 +21,7 @@ export const StageBadge = ({
   }[variant];
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}
     >
       {children}
     </span>
@@ -49,8 +49,8 @@ export const StepChildren = ({ children }: { children: PipelineStepChild[] }) =>
             ) : (
               <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-t3/30" />
             )}
-            <span className="flex-1 truncate text-[11px] text-t3">{child.label}</span>
-            {child.detail && <span className="text-[11px] text-t3/60">{child.detail}</span>}
+            <span className="flex-1 truncate text-xs text-t3">{child.label}</span>
+            {child.detail && <span className="text-xs text-t3/60">{child.detail}</span>}
             {child.results?.length ? (
               <ChevronRight
                 size={8}
@@ -61,7 +61,7 @@ export const StepChildren = ({ children }: { children: PipelineStepChild[] }) =>
           {expandedChild === ci && child.results && (
             <div className="space-y-0.5 pb-1 pl-7">
               {child.results.map((r, ri) => (
-                <p key={ri} className="text-[11px] text-t3/70">
+                <p key={ri} className="text-xs text-t3/70">
                   {r}
                 </p>
               ))}
@@ -110,7 +110,7 @@ export const ReviewContent = ({ data }: { data: ReviewData }) => {
         </span>
       </div>
       {(data.criticalCount > 0 || data.warningCount > 0) && (
-        <p className="text-[11px] text-t3">
+        <p className="text-xs text-t3">
           {data.criticalCount > 0 && `${data.criticalCount} 項重要問題`}
           {data.criticalCount > 0 && data.warningCount > 0 && '、'}
           {data.warningCount > 0 && `${data.warningCount} 項建議`}
@@ -120,7 +120,7 @@ export const ReviewContent = ({ data }: { data: ReviewData }) => {
         <div>
           <button
             onClick={() => setShowIssues(!showIssues)}
-            className="flex items-center gap-1.5 text-[11px] text-ac hover:underline"
+            className="flex items-center gap-1.5 text-xs text-ac hover:underline"
           >
             <ChevronRight
               size={8}
@@ -146,7 +146,7 @@ export const ReviewContent = ({ data }: { data: ReviewData }) => {
                     <span className="flex-1 text-xs text-t2">{issue.description}</span>
                   </div>
                   {issue.suggestion && (
-                    <p className="mt-1 pl-9 text-[11px] text-t3">{issue.suggestion}</p>
+                    <p className="mt-1 pl-9 text-xs text-t3">{issue.suggestion}</p>
                   )}
                 </div>
               ))}

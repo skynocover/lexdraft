@@ -83,7 +83,7 @@ export function CaseList() {
                       {c.case_number && <span className="text-xs text-t3">{c.case_number}</span>}
                       {c.court && <span className="text-xs text-t3">{c.court}</span>}
                       {c.case_type && (
-                        <span className="rounded bg-bg-3 px-1.5 py-0.5 text-[10px] text-t2">
+                        <span className="rounded bg-bg-3 px-1.5 py-0.5 text-[11px] text-t2">
                           {c.case_type}
                         </span>
                       )}

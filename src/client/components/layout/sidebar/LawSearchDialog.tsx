@@ -140,7 +140,7 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
               autoFocus
             />
             {searching && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-t3">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-t3">
                 搜尋中...
               </span>
             )}
@@ -195,13 +195,13 @@ export function LawSearchDialog({ open, onClose }: LawSearchDialogProps) {
                       {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="shrink-0 rounded bg-pu/15 px-1.5 py-0.5 text-[9px] font-medium text-pu">
+                          <span className="shrink-0 rounded bg-pu/15 px-1.5 py-0.5 text-[11px] font-medium text-pu">
                             法規
                           </span>
                           <span className="text-xs font-medium text-t1">
                             {r.law_name} {r.article_no}
                           </span>
-                          {alreadyAdded && <span className="text-[9px] text-t3">已加入</span>}
+                          {alreadyAdded && <span className="text-[11px] text-t3">已加入</span>}
                         </div>
                         <p className="mt-1 text-[11px] leading-4 text-t2">{r.content}</p>
                       </div>

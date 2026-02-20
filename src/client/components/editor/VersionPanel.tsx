@@ -115,7 +115,7 @@ export function VersionPanel({ open, onClose }: VersionPanelProps) {
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-xs font-medium text-t1">{v.label}</span>
                   </div>
-                  <div className="mt-0.5 text-[10px] text-t3">{formatTime(v.created_at)}</div>
+                  <div className="mt-0.5 text-[11px] text-t3">{formatTime(v.created_at)}</div>
 
                   {/* Hover actions */}
                   <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 gap-0.5 group-hover:flex">

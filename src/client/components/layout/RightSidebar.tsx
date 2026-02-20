@@ -7,7 +7,6 @@ import { useUIStore } from '../../stores/useUIStore';
 import { api } from '../../lib/api';
 import { useAuthStore } from '../../stores/useAuthStore';
 
-import { SectionHeader } from './sidebar/SectionHeader';
 import { ConfirmDialog } from './sidebar/ConfirmDialog';
 import { FileGroup } from './sidebar/FileGroup';
 import { LawRefCard } from './sidebar/LawRefCard';
@@ -21,6 +20,13 @@ const FILE_GROUPS: { key: Category; label: string }[] = [
   { key: 'court', label: '法院文件' },
   { key: 'evidence', label: '證據資料' },
 ];
+
+const BRIEF_TYPE_LABEL: Record<string, string> = {
+  complaint: '起訴狀',
+  defense: '答辯狀',
+  preparation: '準備書狀',
+  appeal: '上訴狀',
+};
 
 export function RightSidebar() {
   const currentCase = useCaseStore((s) => s.currentCase);
@@ -37,15 +43,11 @@ export function RightSidebar() {
   const openBriefTab = useTabStore((s) => s.openBriefTab);
   const closeTab = useTabStore((s) => s.closeTab);
 
-  // Derive activeTabId from the focused panel
   const focusedPanel = panels.find((p) => p.id === focusedPanelId);
   const activeTabId = focusedPanel?.activeTabId ?? null;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
-  const [briefsOpen, setBriefsOpen] = useState(true);
-  const [filesOpen, setFilesOpen] = useState(true);
-  const [lawRefsOpen, setLawRefsOpen] = useState(true);
   const [lawSearchOpen, setLawSearchOpen] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState<{
@@ -61,7 +63,6 @@ export function RightSidebar() {
     (f) => !f.category || !FILE_GROUPS.some((g) => g.key === f.category),
   );
 
-  // Cited law labels — only recalculates when brief content changes
   const citedLabels = useMemo(() => {
     const labels = new Set<string>();
     if (!currentBrief?.content_structured?.paragraphs) return labels;
@@ -80,10 +81,6 @@ export function RightSidebar() {
     return labels;
   }, [currentBrief]);
 
-  // Two-tier law refs:
-  // 引用區 = all cited laws (regardless of source)
-  // 備用區 = is_manual && not cited (lawyer's picks waiting to be used)
-  // Hidden = not is_manual && not cited (AI-found, cleaned up after pipeline)
   const { citedLawRefs, availableLawRefs } = useMemo(() => {
     const cited: typeof lawRefs = [];
     const available: typeof lawRefs = [];
@@ -162,7 +159,6 @@ export function RightSidebar() {
     const briefId = confirmDelete.id;
     setConfirmDelete(null);
 
-    // Find the panel containing this brief tab and close it
     const tabId = `brief:${briefId}`;
     const { panels: currentPanels } = useTabStore.getState();
     const ownerPanel = currentPanels.find((p) => p.tabIds.includes(tabId));
@@ -175,16 +171,16 @@ export function RightSidebar() {
   const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
 
   return (
-    <aside className="flex w-80 min-h-0 shrink-0 flex-col border-l border-bd bg-bg-1 overflow-y-auto">
-      {/* Sidebar header with collapse button */}
-      <div className="flex items-center justify-between border-b border-bd px-3 py-2">
-        <span className="text-xs font-medium text-t2">案件資料</span>
+    <aside className="theme-light flex w-80 min-h-0 shrink-0 flex-col border-l border-bd bg-bg-0 overflow-y-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-bd px-4 py-3">
+        <span className="text-base font-bold text-t1">案件資料</span>
         <button
           onClick={toggleRightSidebar}
           className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
           title="收合側邊欄"
         >
-          <ChevronsRight size={14} />
+          <ChevronsRight size={16} />
         </button>
       </div>
 
@@ -196,216 +192,197 @@ export function RightSidebar() {
         />
       )}
 
-      {/* 書狀草稿區塊 */}
+      {/* 書狀草稿 */}
       <div className="border-b border-bd">
-        <SectionHeader
-          label="書狀草稿"
-          count={briefs.length}
-          countUnit="份"
-          open={briefsOpen}
-          onToggle={() => setBriefsOpen(!briefsOpen)}
-        />
-        {briefsOpen &&
-          (briefs.length === 0 ? (
-            <div className="px-3 pb-3">
-              <p className="text-center text-[11px] text-t3">尚無書狀</p>
-            </div>
-          ) : (
-            <div className="px-1 pb-2">
-              {briefs.map((b) => {
-                const tabId = `brief:${b.id}`;
-                const isActive = activeTabId === tabId;
-                const title = b.title || b.brief_type;
-                return (
-                  <div
-                    key={b.id}
-                    className={`group flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition ${
-                      isActive ? 'bg-ac/10 text-ac' : 'hover:bg-bg-h'
-                    }`}
-                  >
-                    <button
-                      onClick={() => openBriefTab(b.id, title)}
-                      className="flex flex-1 items-start gap-2 min-w-0"
-                    >
-                      <span className={`mt-0.5 text-[11px] ${isActive ? 'text-ac' : 'text-ac/60'}`}>
-                        DOC
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`truncate text-xs ${isActive ? 'text-ac font-medium' : 'text-t1'}`}
-                        >
-                          {b.title || '書狀'}
-                        </p>
-                        <span className="text-[10px] text-t3">
-                          {{
-                            complaint: '起訴狀',
-                            defense: '答辯狀',
-                            preparation: '準備書狀',
-                            appeal: '上訴狀',
-                          }[b.brief_type] || b.brief_type}
-                        </span>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete({ id: b.id, title })}
-                      className="mt-0.5 shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
-                      title="刪除書狀"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-      </div>
-
-      {/* 案件卷宗區塊 */}
-      <div className="border-b border-bd">
-        <div className="flex items-center">
-          <div className="flex-1">
-            <SectionHeader
-              label="案件卷宗"
-              count={totalFiles}
-              countUnit="個檔案"
-              open={filesOpen}
-              onToggle={() => setFilesOpen(!filesOpen)}
-            />
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/pdf"
-            multiple
-            onChange={handleUpload}
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="mr-2 rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac disabled:opacity-50"
-            title="上傳檔案"
-          >
-            {uploading ? (
-              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ac border-t-transparent" />
-            ) : (
-              <Plus size={14} />
-            )}
-          </button>
+        <div className="px-4 pt-4 pb-2">
+          <span className="text-sm font-semibold text-t2">書狀草稿</span>
         </div>
-        {filesOpen && (
-          <>
-            {processingFiles > 0 && (
-              <div className="mx-3 mb-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-yl">處理中...</span>
-                  <span className="text-[10px] text-t3">
-                    {readyFiles}/{totalFiles}
-                  </span>
+        {briefs.length === 0 ? (
+          <div className="px-4 pb-4">
+            <p className="text-sm text-t3">尚無書狀</p>
+          </div>
+        ) : (
+          <div className="px-3 pb-3 space-y-1">
+            {briefs.map((b) => {
+              const tabId = `brief:${b.id}`;
+              const isActive = activeTabId === tabId;
+              const title = b.title || b.brief_type;
+              return (
+                <div
+                  key={b.id}
+                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${
+                    isActive ? 'bg-ac/8' : 'hover:bg-bg-2'
+                  }`}
+                >
+                  <button
+                    onClick={() => openBriefTab(b.id, title)}
+                    className="flex flex-1 items-center gap-3 min-w-0"
+                  >
+                    {/* DOC icon badge */}
+                    <span
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border text-xs font-bold ${
+                        isActive ? 'border-ac bg-ac/10 text-ac' : 'border-bd text-t3'
+                      }`}
+                    >
+                      DOC
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className={`truncate text-sm font-medium ${
+                          isActive ? 'text-ac' : 'text-t1'
+                        }`}
+                      >
+                        {b.title || '書狀'}
+                      </p>
+                      <p className="text-xs text-t3">
+                        {BRIEF_TYPE_LABEL[b.brief_type] || b.brief_type}
+                      </p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete({ id: b.id, title })}
+                    className="shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
+                    title="刪除書狀"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-                <div className="h-1 rounded-full bg-bg-3">
-                  <div
-                    className="h-1 rounded-full bg-ac transition-all"
-                    style={{
-                      width: totalFiles > 0 ? `${(readyFiles / totalFiles) * 100}%` : '0%',
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {grouped.map((g) => (
-              <FileGroup
-                key={g.key}
-                label={g.label}
-                groupKey={g.key}
-                files={g.files}
-                rebuttalTargetIds={rebuttalTargetFileIds}
-                onDelete={handleDelete}
-                onDropFile={handleDropFile}
-              />
-            ))}
-
-            {otherFiles.length > 0 && (
-              <FileGroup
-                label="其他"
-                groupKey="other"
-                files={otherFiles}
-                rebuttalTargetIds={rebuttalTargetFileIds}
-                onDelete={handleDelete}
-                onDropFile={handleDropFile}
-              />
-            )}
-
-            {caseFiles.length === 0 && (
-              <div className="px-3 pb-3">
-                <p className="text-center text-[11px] text-t3">尚無檔案</p>
-              </div>
-            )}
-          </>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* 法條引用區塊 */}
-      <div>
-        <div className="flex items-center">
-          <div className="flex-1">
-            <SectionHeader
-              label="法條引用"
-              count={lawRefs.length}
-              countUnit="條"
-              open={lawRefsOpen}
-              onToggle={() => setLawRefsOpen(!lawRefsOpen)}
+      {/* 案件卷宗 */}
+      <div className="border-b border-bd">
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-t2">案件卷宗</span>
+            {totalFiles > 0 && <span className="text-xs text-t3">{totalFiles} 個檔案</span>}
+          </div>
+          <div className="flex items-center gap-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              multiple
+              onChange={handleUpload}
+              className="hidden"
             />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac disabled:opacity-50"
+              title="上傳檔案"
+            >
+              {uploading ? (
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-ac border-t-transparent" />
+              ) : (
+                <Plus size={16} />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {processingFiles > 0 && (
+          <div className="mx-4 mb-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-yl">處理中...</span>
+              <span className="text-xs text-t3">
+                {readyFiles}/{totalFiles}
+              </span>
+            </div>
+            <div className="h-1 rounded-full bg-bg-3">
+              <div
+                className="h-1 rounded-full bg-ac transition-all"
+                style={{
+                  width: totalFiles > 0 ? `${(readyFiles / totalFiles) * 100}%` : '0%',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {grouped.map((g) => (
+          <FileGroup
+            key={g.key}
+            label={g.label}
+            groupKey={g.key}
+            files={g.files}
+            rebuttalTargetIds={rebuttalTargetFileIds}
+            onDelete={handleDelete}
+            onDropFile={handleDropFile}
+          />
+        ))}
+
+        <FileGroup
+          label="其他"
+          groupKey="other"
+          files={otherFiles}
+          rebuttalTargetIds={rebuttalTargetFileIds}
+          onDelete={handleDelete}
+          onDropFile={handleDropFile}
+        />
+
+        {caseFiles.length === 0 && (
+          <div className="px-4 pb-4">
+            <p className="text-sm text-t3">尚無檔案</p>
+          </div>
+        )}
+      </div>
+
+      {/* 法條引用 */}
+      <div>
+        <div className="flex items-center justify-between px-4 pt-4 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-t2">法條引用</span>
+            {lawRefs.length > 0 && <span className="text-xs text-t3">{lawRefs.length} 條</span>}
           </div>
           <button
             onClick={() => setLawSearchOpen(true)}
-            className="mr-2 rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac"
+            className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac"
             title="搜尋法條"
           >
-            <Search size={14} />
+            <Search size={16} />
           </button>
         </div>
-        {lawRefsOpen && (
-          <div className="px-1 pb-3">
-            {citedLawRefs.length === 0 && availableLawRefs.length === 0 ? (
-              <div className="px-2 py-4 text-center">
-                <p className="text-[11px] text-t3">尚無法條</p>
-                <button
-                  onClick={() => setLawSearchOpen(true)}
-                  className="mt-1.5 text-[11px] text-ac transition hover:underline"
-                >
-                  搜尋並加入法條
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-1 px-1">
-                {/* 已引用 */}
-                {citedLawRefs.length > 0 && (
-                  <>
-                    <p className="px-1 pt-1 text-[9px] font-medium uppercase tracking-wider text-t3">
-                      已引用 ({citedLawRefs.length})
-                    </p>
-                    {citedLawRefs.map((ref) => (
-                      <LawRefCard key={ref.id} lawRef={ref} cited onRemove={removeLawRef} />
-                    ))}
-                  </>
-                )}
-                {/* 備用 */}
-                {availableLawRefs.length > 0 && (
-                  <>
-                    <p className="px-1 pt-2 text-[9px] font-medium uppercase tracking-wider text-t3">
-                      備用 ({availableLawRefs.length})
-                    </p>
-                    {availableLawRefs.map((ref) => (
-                      <LawRefCard key={ref.id} lawRef={ref} onRemove={removeLawRef} />
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+
+        <div className="px-3 pb-4">
+          {citedLawRefs.length === 0 && availableLawRefs.length === 0 ? (
+            <div className="py-3 text-center">
+              <p className="text-sm text-t3">尚無法條</p>
+              <button
+                onClick={() => setLawSearchOpen(true)}
+                className="mt-1.5 text-sm text-ac transition hover:underline"
+              >
+                搜尋並加入法條
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {citedLawRefs.length > 0 && (
+                <>
+                  <p className="px-1 pt-1 text-xs font-medium text-t3">
+                    已引用 ({citedLawRefs.length})
+                  </p>
+                  {citedLawRefs.map((ref) => (
+                    <LawRefCard key={ref.id} lawRef={ref} cited onRemove={removeLawRef} />
+                  ))}
+                </>
+              )}
+              {availableLawRefs.length > 0 && (
+                <>
+                  <p className="px-1 pt-2 text-xs font-medium text-t3">
+                    備用 ({availableLawRefs.length})
+                  </p>
+                  {availableLawRefs.map((ref) => (
+                    <LawRefCard key={ref.id} lawRef={ref} onRemove={removeLawRef} />
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <LawSearchDialog open={lawSearchOpen} onClose={() => setLawSearchOpen(false)} />

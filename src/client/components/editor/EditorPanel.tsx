@@ -6,6 +6,7 @@ import { BriefEditor } from './index';
 import { FileViewer } from './FileViewer';
 import { OutlinePanel } from './OutlinePanel';
 import { VersionPreviewEditor } from './VersionPreviewEditor';
+import { LawViewer } from './LawViewer';
 
 interface EditorPanelProps {
   panelId: string;
@@ -83,6 +84,12 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
                 tabId: activeTabId,
               })
             }
+          />
+        ) : activeTab?.type === 'law' ? (
+          <LawViewer
+            lawName={activeTab.lawName}
+            article={activeTab.article}
+            fullText={activeTab.fullText}
           />
         ) : (
           <div className="flex h-full items-center justify-center">

@@ -9,6 +9,7 @@ import {
   type ClaudeUsage,
 } from './claudeClient';
 import { searchLaw } from '../lib/lawSearch';
+import { hasReplacementChars, buildLawTextMap, repairLawCitations } from '../lib/textSanitize';
 import { runResearchAgent, type ResearchProgressCallback } from './researchAgent';
 import {
   runOrchestratorAgent,
@@ -1150,6 +1151,15 @@ ${completedText}`;
   // Post-processing: detect uncited law mentions and cache them in D1
   await postProcessLawCitations(ctx, text, citations);
 
+  // Repair corrupted quoted_text in law citations using D1 data
+  const currentRefs = await ctx.drizzle
+    .select()
+    .from(lawRefs)
+    .where(eq(lawRefs.case_id, ctx.caseId));
+  const lawTextMap = buildLawTextMap(currentRefs);
+  const allCitationRefs = [...citations, ...segments.flatMap((s) => s.citations)];
+  repairLawCitations(allCitationRefs, lawTextMap);
+
   // Build paragraph
   const paragraph: Paragraph = {
     id: nanoid(),
@@ -1230,6 +1240,10 @@ const postProcessLawCitations = async (
         });
         if (results.length > 0) {
           const r = results[0];
+          if (hasReplacementChars(r.content)) {
+            console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
+            continue;
+          }
           await ctx.drizzle
             .insert(lawRefs)
             .values({

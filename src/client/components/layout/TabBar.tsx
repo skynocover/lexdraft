@@ -33,19 +33,24 @@ const SortableTab = ({
 
   const isBrief = tabData.type === 'brief';
   const isVersion = tabData.type === 'version-preview';
+  const isLaw = tabData.type === 'law';
   const label =
     tabData.type === 'brief'
       ? tabData.title || '書狀'
       : tabData.type === 'version-preview'
         ? tabData.label
-        : tabData.filename;
+        : tabData.type === 'law'
+          ? `${tabData.lawName} ${tabData.article}`
+          : tabData.filename;
 
   const badgeClass = isBrief
     ? 'bg-ac/20 text-ac'
     : isVersion
       ? 'bg-pp/20 text-pp'
-      : 'bg-rd/20 text-rd';
-  const badgeText = isBrief ? 'DOC' : isVersion ? 'VER' : 'PDF';
+      : isLaw
+        ? 'bg-pu/20 text-pu'
+        : 'bg-rd/20 text-rd';
+  const badgeText = isBrief ? 'DOC' : isVersion ? 'VER' : isLaw ? 'LAW' : 'PDF';
 
   return (
     <button
@@ -54,11 +59,11 @@ const SortableTab = ({
       {...attributes}
       {...listeners}
       onClick={() => setActiveTab(tabId, panelId)}
-      className={`group flex h-full max-w-45 items-center gap-1.5 border-r border-bd px-3 text-xs transition ${
+      className={`group flex h-full max-w-45 items-center gap-1.5 border-r border-bd px-3 text-[13px] transition ${
         isActive ? 'border-b-2 border-b-ac bg-bg-0 text-t1' : 'text-t3 hover:bg-bg-h hover:text-t2'
       }`}
     >
-      <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold ${badgeClass}`}>
+      <span className={`shrink-0 rounded px-1 py-0.5 text-[11px] font-semibold ${badgeClass}`}>
         {badgeText}
       </span>
       <span className="truncate">{label}</span>
