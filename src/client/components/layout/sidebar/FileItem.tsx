@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import type { CaseFile } from '../../../stores/useCaseStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { CATEGORY_CONFIG } from '../../../lib/categoryConfig';
+import { ConfirmDialog } from './ConfirmDialog';
 
 export function FileItem({
   file,
@@ -117,29 +118,16 @@ export function FileItem({
       )}
 
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-72 rounded-lg border border-bd bg-bg-0 p-4 shadow-xl">
-            <p className="mb-1 text-sm text-t1">確定刪除此檔案？</p>
-            <p className="mb-4 truncate text-xs text-t3">{file.filename}</p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="rounded border border-bd px-3 py-1.5 text-xs text-t2 transition hover:bg-bg-h"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => {
-                  onDelete(file.id);
-                  setConfirmDelete(false);
-                }}
-                className="rounded bg-rd px-3 py-1.5 text-xs text-white transition hover:bg-rd/80"
-              >
-                刪除
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          message="確定刪除此檔案？"
+          onConfirm={() => {
+            onDelete(file.id);
+            setConfirmDelete(false);
+          }}
+          onCancel={() => setConfirmDelete(false)}
+        >
+          <p className="truncate text-xs text-t3">{file.filename}</p>
+        </ConfirmDialog>
       )}
     </div>
   );

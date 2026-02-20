@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { useBriefStore } from '../../../stores/useBriefStore';
+import { forEachCitation } from '../../../lib/citationUtils';
 import { LawRefCard } from './LawRefCard';
 import { LawSearchDialog } from './LawSearchDialog';
 
@@ -14,18 +15,9 @@ export const LawRefsSection = () => {
   const citedLabels = useMemo(() => {
     const labels = new Set<string>();
     if (!currentBrief?.content_structured?.paragraphs) return labels;
-    for (const p of currentBrief.content_structured.paragraphs) {
-      for (const c of p.citations) {
-        if (c.type === 'law') labels.add(c.label);
-      }
-      if (p.segments) {
-        for (const seg of p.segments) {
-          for (const c of seg.citations) {
-            if (c.type === 'law') labels.add(c.label);
-          }
-        }
-      }
-    }
+    forEachCitation(currentBrief.content_structured.paragraphs, (c) => {
+      if (c.type === 'law') labels.add(c.label);
+    });
     return labels;
   }, [currentBrief]);
 

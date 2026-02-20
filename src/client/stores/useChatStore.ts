@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
+import { api } from '../lib/api';
 import { useAuthStore } from './useAuthStore';
 import { useBriefStore, type Brief, type Paragraph, type LawRef } from './useBriefStore';
 import {
@@ -84,12 +85,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadHistory: async (caseId: string) => {
     try {
-      const token = useAuthStore.getState().token;
-      const res = await fetch(`/api/cases/${caseId}/messages`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error('Failed to load messages');
-      const data = (await res.json()) as ChatMessageRecord[];
+      const data = await api.get<ChatMessageRecord[]>(`/cases/${caseId}/messages`);
       set({
         messages: data.map((m) => ({
           id: m.id,
@@ -393,11 +389,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       _abortController.abort();
     }
     try {
-      const token = useAuthStore.getState().token;
-      await fetch(`/api/cases/${caseId}/chat/cancel`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      await api.post(`/cases/${caseId}/chat/cancel`, {});
     } catch {
       // Ignore cancel errors
     }
@@ -406,11 +398,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   clearConversation: async (caseId: string) => {
     try {
-      const token = useAuthStore.getState().token;
-      await fetch(`/api/cases/${caseId}/messages`, {
-        method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      await api.delete(`/cases/${caseId}/messages`);
     } catch (err) {
       console.error('clearConversation error:', err);
     }

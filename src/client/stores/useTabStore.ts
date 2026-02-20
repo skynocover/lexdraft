@@ -95,6 +95,47 @@ const createMainPanel = (): Panel => ({
 const findPanelWithTab = (panels: Panel[], tabId: string): Panel | undefined =>
   panels.find((p) => p.tabIds.includes(tabId));
 
+/**
+ * Generic helper: open a tab in a non-focused panel.
+ * Handles 3 cases: tab exists elsewhere, tab in focused panel (split), tab doesn't exist yet.
+ */
+const openInOtherPanel = (
+  get: () => TabState,
+  set: (s: Partial<TabState>) => void,
+  tabId: string,
+  openFn: () => void,
+) => {
+  const { panels, focusedPanelId } = get();
+
+  // Case 1: tab exists in a non-focused panel → activate it there
+  const existingPanel = findPanelWithTab(panels, tabId);
+  if (existingPanel && existingPanel.id !== focusedPanelId) {
+    set({
+      panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
+    });
+    return;
+  }
+
+  // Case 2: tab exists in the focused panel → split it out
+  if (existingPanel && existingPanel.id === focusedPanelId) {
+    get().splitPanel(tabId, focusedPanelId);
+    return;
+  }
+
+  // Case 3: tab doesn't exist → open in another panel or create split
+  const otherPanel = panels.find((p) => p.id !== focusedPanelId);
+  if (otherPanel) {
+    const prevFocused = focusedPanelId;
+    set({ focusedPanelId: otherPanel.id });
+    openFn();
+    set({ focusedPanelId: prevFocused });
+  } else {
+    openFn();
+    get().splitPanel(tabId, focusedPanelId);
+    set({ focusedPanelId });
+  }
+};
+
 export const useTabStore = create<TabState>((set, get) => ({
   tabRegistry: {},
   panels: [createMainPanel()],
@@ -211,44 +252,9 @@ export const useTabStore = create<TabState>((set, get) => ({
   },
 
   openFileTabInOtherPanel: (fileId, filename, highlightText) => {
-    const { panels, focusedPanelId, tabRegistry, setFileHighlight } = get();
     const tabId = `file:${fileId}`;
-
-    // If tab already exists in a non-focused panel, just activate it there
-    const existingPanel = findPanelWithTab(panels, tabId);
-    if (existingPanel && existingPanel.id !== focusedPanelId) {
-      set({
-        panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
-      });
-      if (highlightText) setFileHighlight(fileId, highlightText);
-      return;
-    }
-
-    // If tab exists in the focused panel, split it out to a new panel
-    if (existingPanel && existingPanel.id === focusedPanelId) {
-      get().splitPanel(tabId, focusedPanelId);
-      if (highlightText) setFileHighlight(fileId, highlightText);
-      return;
-    }
-
-    // Tab doesn't exist yet — find a non-focused panel or create one
-    const otherPanel = panels.find((p) => p.id !== focusedPanelId);
-    if (otherPanel) {
-      // Temporarily switch focus to the other panel, open file, then restore focus
-      const prevFocused = focusedPanelId;
-      set({ focusedPanelId: otherPanel.id });
-      get().openFileTab(fileId, filename);
-      if (highlightText) get().setFileHighlight(fileId, highlightText);
-      // Restore focus back to the original panel (where the brief is)
-      set({ focusedPanelId: prevFocused });
-    } else {
-      // Only one panel — open the file in it, then split it out
-      get().openFileTab(fileId, filename);
-      if (highlightText) get().setFileHighlight(fileId, highlightText);
-      get().splitPanel(tabId, focusedPanelId);
-      // After split, the new panel has focus — restore focus to the original
-      set({ focusedPanelId: focusedPanelId });
-    }
+    openInOtherPanel(get, set, tabId, () => get().openFileTab(fileId, filename));
+    if (highlightText) get().setFileHighlight(fileId, highlightText);
   },
 
   setFileHighlight: (fileId, highlightText) => {
@@ -641,36 +647,8 @@ export const useTabStore = create<TabState>((set, get) => ({
   },
 
   openLawTabInOtherPanel: (lawRefId, lawName, article, fullText) => {
-    const { panels, focusedPanelId } = get();
     const tabId = `law:${lawRefId}`;
-
-    // If tab already exists in a non-focused panel, just activate it there
-    const existingPanel = findPanelWithTab(panels, tabId);
-    if (existingPanel && existingPanel.id !== focusedPanelId) {
-      set({
-        panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
-      });
-      return;
-    }
-
-    // If tab exists in the focused panel, split it out to a new panel
-    if (existingPanel && existingPanel.id === focusedPanelId) {
-      get().splitPanel(tabId, focusedPanelId);
-      return;
-    }
-
-    // Tab doesn't exist yet — find a non-focused panel or create one
-    const otherPanel = panels.find((p) => p.id !== focusedPanelId);
-    if (otherPanel) {
-      const prevFocused = focusedPanelId;
-      set({ focusedPanelId: otherPanel.id });
-      get().openLawTab(lawRefId, lawName, article, fullText);
-      set({ focusedPanelId: prevFocused });
-    } else {
-      get().openLawTab(lawRefId, lawName, article, fullText);
-      get().splitPanel(tabId, focusedPanelId);
-      set({ focusedPanelId: focusedPanelId });
-    }
+    openInOtherPanel(get, set, tabId, () => get().openLawTab(lawRefId, lawName, article, fullText));
   },
 
   updateBriefTabTitle: (briefId, title) => {

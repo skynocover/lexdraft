@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useCaseStore, type Case } from '../stores/useCaseStore';
 import { api } from '../lib/api';
+import { ConfirmDialog } from '../components/layout/sidebar/ConfirmDialog';
 
 export function CaseList() {
   const cases = useCaseStore((s) => s.cases);
@@ -113,29 +114,17 @@ export function CaseList() {
 
       {/* Confirm delete dialog */}
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-80 rounded-lg border border-bd bg-bg-1 p-4 shadow-xl">
-            <p className="mb-1 text-sm font-medium text-t1">確定刪除此案件？</p>
-            <p className="mb-1 text-xs text-t2">{confirmDelete.title}</p>
-            <p className="mb-4 text-xs text-rd">
-              此操作將刪除案件下所有書狀、檔案、對話記錄等資料，且無法復原。
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="rounded border border-bd px-3 py-1 text-xs text-t2 transition hover:bg-bg-h"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => handleDelete(confirmDelete)}
-                className="rounded bg-rd px-3 py-1 text-xs text-white transition hover:bg-rd/80"
-              >
-                刪除案件
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          message="確定刪除此案件？"
+          confirmLabel="刪除案件"
+          onConfirm={() => handleDelete(confirmDelete)}
+          onCancel={() => setConfirmDelete(null)}
+        >
+          <p className="text-xs text-t2">{confirmDelete.title}</p>
+          <p className="text-xs text-rd">
+            此操作將刪除案件下所有書狀、檔案、對話記錄等資料，且無法復原。
+          </p>
+        </ConfirmDialog>
       )}
     </div>
   );

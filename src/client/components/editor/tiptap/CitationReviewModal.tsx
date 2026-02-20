@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useBriefStore, type Citation } from '../../../stores/useBriefStore';
+import { forEachCitation } from '../../../lib/citationUtils';
 
 interface CitationReviewModalProps {
   open: boolean;
@@ -27,31 +28,15 @@ export function CitationReviewModal({ open, onClose }: CitationReviewModalProps)
   const pendingItems = useMemo<ReviewItem[]>(() => {
     if (!currentBrief?.content_structured) return [];
     const items: ReviewItem[] = [];
-    for (const p of currentBrief.content_structured.paragraphs) {
-      const preview = p.content_md.slice(0, 80);
-      for (const c of p.citations) {
-        if (c.status === 'pending') {
-          items.push({
-            paragraphId: p.id,
-            citation: c,
-            paragraphPreview: preview,
-          });
-        }
+    forEachCitation(currentBrief.content_structured.paragraphs, (c, p) => {
+      if (c.status === 'pending') {
+        items.push({
+          paragraphId: p.id,
+          citation: c,
+          paragraphPreview: p.content_md.slice(0, 80),
+        });
       }
-      if (p.segments) {
-        for (const seg of p.segments) {
-          for (const c of seg.citations) {
-            if (c.status === 'pending') {
-              items.push({
-                paragraphId: p.id,
-                citation: c,
-                paragraphPreview: preview,
-              });
-            }
-          }
-        }
-      }
-    }
+    });
     return items;
   }, [open]); // Only recompute when modal opens
 

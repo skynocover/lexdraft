@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronRight, Eye, Undo2, Trash2, Plus } from 'lucide-react';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useTabStore } from '../../stores/useTabStore';
+import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
 
 interface VersionPanelProps {
   open: boolean;
@@ -183,48 +184,22 @@ export function VersionPanel({ open, onClose }: VersionPanelProps) {
 
       {/* Confirm delete dialog */}
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-72 rounded-lg border border-bd bg-bg-1 p-4 shadow-xl">
-            <p className="mb-4 text-sm text-t1">確定刪除此版本？</p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="rounded border border-bd px-3 py-1 text-xs text-t2 transition hover:bg-bg-h"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => handleDelete(confirmDelete)}
-                className="rounded bg-rd px-3 py-1 text-xs text-white transition hover:bg-rd/80"
-              >
-                刪除
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          message="確定刪除此版本？"
+          onConfirm={() => handleDelete(confirmDelete)}
+          onCancel={() => setConfirmDelete(null)}
+        />
       )}
 
       {/* Confirm restore dialog */}
       {confirmRestore && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-72 rounded-lg border border-bd bg-bg-1 p-4 shadow-xl">
-            <p className="mb-4 text-sm text-t1">確定還原到此版本？目前的內容將被覆蓋。</p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmRestore(null)}
-                className="rounded border border-bd px-3 py-1 text-xs text-t2 transition hover:bg-bg-h"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => handleRestore(confirmRestore)}
-                className="rounded bg-ac px-3 py-1 text-xs text-bg-0 transition hover:opacity-90"
-              >
-                還原
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          message="確定還原到此版本？目前的內容將被覆蓋。"
+          confirmLabel="還原"
+          variant="primary"
+          onConfirm={() => handleRestore(confirmRestore)}
+          onCancel={() => setConfirmRestore(null)}
+        />
       )}
     </>
   );

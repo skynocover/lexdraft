@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import { useCaseStore } from './useCaseStore';
+import { forEachCitation, mapParagraphCitations } from '../lib/citationUtils';
 
 // Re-export analysis types for backward compatibility
 export type { Dispute, Damage, TimelineEvent, Party } from './useAnalysisStore';
@@ -117,9 +118,26 @@ interface BriefState {
   citationStats: () => { confirmed: number; pending: number };
 }
 
-function cloneSnapshot(s: ContentSnapshot): ContentSnapshot {
-  return JSON.parse(JSON.stringify(s));
-}
+const cloneSnapshot = (s: ContentSnapshot): ContentSnapshot => structuredClone(s);
+
+/** Capture undo snapshot from current state. Returns partial state to merge into set(). */
+const buildHistoryUpdate = (
+  currentBrief: Brief | null,
+  _history: ContentSnapshot[],
+): Pick<BriefState, '_history' | '_future' | 'dirty'> => {
+  const result: Pick<BriefState, '_history' | '_future' | 'dirty'> = {
+    _future: [],
+    dirty: true,
+    _history,
+  };
+  if (currentBrief?.content_structured) {
+    result._history = [
+      ..._history.slice(-(MAX_HISTORY - 1)),
+      cloneSnapshot(currentBrief.content_structured),
+    ];
+  }
+  return result;
+};
 
 export const useBriefStore = create<BriefState>((set, get) => ({
   currentBrief: null,
@@ -143,22 +161,10 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   setContentStructured: (content: { paragraphs: Paragraph[] }) => {
     const { currentBrief, _history } = get();
     if (!currentBrief) return;
-
-    const snapshot = currentBrief.content_structured
-      ? cloneSnapshot(currentBrief.content_structured)
-      : null;
-
-    const newState: Partial<BriefState> = {
+    set({
       currentBrief: { ...currentBrief, content_structured: content },
-      dirty: true,
-      _future: [],
-    };
-
-    if (snapshot) {
-      newState._history = [..._history.slice(-(MAX_HISTORY - 1)), snapshot];
-    }
-
-    set(newState);
+      ...buildHistoryUpdate(currentBrief, _history),
+    });
   },
 
   setTitle: (title: string) => {
@@ -232,8 +238,6 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   removeParagraph: (paragraphId: string) => {
     const { currentBrief, _history } = get();
     if (!currentBrief?.content_structured) return;
-
-    const snapshot = cloneSnapshot(currentBrief.content_structured);
     set({
       currentBrief: {
         ...currentBrief,
@@ -243,9 +247,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
           ),
         },
       },
-      dirty: true,
-      _history: [..._history.slice(-(MAX_HISTORY - 1)), snapshot],
-      _future: [],
+      ...buildHistoryUpdate(currentBrief, _history),
     });
   },
 
@@ -256,58 +258,36 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   ) => {
     const { currentBrief, _history } = get();
     if (!currentBrief?.content_structured) return;
-
-    const snapshot = cloneSnapshot(currentBrief.content_structured);
-    const updateCitation = (c: Citation): Citation => (c.id === citationId ? { ...c, status } : c);
-
     set({
       currentBrief: {
         ...currentBrief,
         content_structured: {
-          paragraphs: currentBrief.content_structured.paragraphs.map((p) => {
-            if (p.id !== paragraphId) return p;
-            return {
-              ...p,
-              citations: p.citations.map(updateCitation),
-              segments: p.segments?.map((seg) => ({
-                ...seg,
-                citations: seg.citations.map(updateCitation),
-              })),
-            };
-          }),
+          paragraphs: mapParagraphCitations(
+            currentBrief.content_structured.paragraphs,
+            paragraphId,
+            (citations) => citations.map((c) => (c.id === citationId ? { ...c, status } : c)),
+          ),
         },
       },
-      dirty: true,
-      _history: [..._history.slice(-(MAX_HISTORY - 1)), snapshot],
-      _future: [],
+      ...buildHistoryUpdate(currentBrief, _history),
     });
   },
 
   removeCitation: (paragraphId: string, citationId: string) => {
     const { currentBrief, _history } = get();
     if (!currentBrief?.content_structured) return;
-
-    const snapshot = cloneSnapshot(currentBrief.content_structured);
     set({
       currentBrief: {
         ...currentBrief,
         content_structured: {
-          paragraphs: currentBrief.content_structured.paragraphs.map((p) => {
-            if (p.id !== paragraphId) return p;
-            return {
-              ...p,
-              citations: p.citations.filter((c) => c.id !== citationId),
-              segments: p.segments?.map((seg) => ({
-                ...seg,
-                citations: seg.citations.filter((c) => c.id !== citationId),
-              })),
-            };
-          }),
+          paragraphs: mapParagraphCitations(
+            currentBrief.content_structured.paragraphs,
+            paragraphId,
+            (citations) => citations.filter((c) => c.id !== citationId),
+          ),
         },
       },
-      dirty: true,
-      _history: [..._history.slice(-(MAX_HISTORY - 1)), snapshot],
-      _future: [],
+      ...buildHistoryUpdate(currentBrief, _history),
     });
   },
 
@@ -444,23 +424,12 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   citationStats: () => {
     const { currentBrief } = get();
     if (!currentBrief?.content_structured) return { confirmed: 0, pending: 0 };
-
     let confirmed = 0;
     let pending = 0;
-    for (const p of currentBrief.content_structured.paragraphs) {
-      for (const c of p.citations) {
-        if (c.status === 'confirmed') confirmed++;
-        else if (c.status === 'pending') pending++;
-      }
-      if (p.segments) {
-        for (const seg of p.segments) {
-          for (const c of seg.citations) {
-            if (c.status === 'confirmed') confirmed++;
-            else if (c.status === 'pending') pending++;
-          }
-        }
-      }
-    }
+    forEachCitation(currentBrief.content_structured.paragraphs, (c) => {
+      if (c.status === 'confirmed') confirmed++;
+      else if (c.status === 'pending') pending++;
+    });
     return { confirmed, pending };
   },
 }));
