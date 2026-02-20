@@ -187,6 +187,8 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   },
 
   loadBrief: async (briefId: string) => {
+    // Skip if already loaded
+    if (get().currentBrief?.id === briefId) return;
     try {
       const brief = await api.get<Brief>(`/briefs/${briefId}`);
       set({ currentBrief: brief, _history: [], _future: [] });

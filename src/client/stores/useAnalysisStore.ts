@@ -81,6 +81,17 @@ interface AnalysisState {
   loadParties: (caseId: string) => Promise<void>;
 }
 
+const makeLoader =
+  <T>(key: keyof AnalysisState, endpoint: string, set: (s: Partial<AnalysisState>) => void) =>
+  async (caseId: string) => {
+    try {
+      const data = await api.get<T[]>(`/cases/${caseId}/${endpoint}`);
+      set({ [key]: data } as Partial<AnalysisState>);
+    } catch (err) {
+      console.error(`load ${key} error:`, err);
+    }
+  };
+
 export const useAnalysisStore = create<AnalysisState>((set) => ({
   disputes: [],
   damages: [],
@@ -96,39 +107,8 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   setClaims: (claims) => set({ claims }),
   setHighlightDisputeId: (highlightDisputeId) => set({ highlightDisputeId }),
 
-  loadDisputes: async (caseId: string) => {
-    try {
-      const disputes = await api.get<Dispute[]>(`/cases/${caseId}/disputes`);
-      set({ disputes });
-    } catch (err) {
-      console.error('loadDisputes error:', err);
-    }
-  },
-
-  loadDamages: async (caseId: string) => {
-    try {
-      const damages = await api.get<Damage[]>(`/cases/${caseId}/damages`);
-      set({ damages });
-    } catch (err) {
-      console.error('loadDamages error:', err);
-    }
-  },
-
-  loadTimeline: async (caseId: string) => {
-    try {
-      const timeline = await api.get<TimelineEvent[]>(`/cases/${caseId}/timeline`);
-      set({ timeline });
-    } catch (err) {
-      console.error('loadTimeline error:', err);
-    }
-  },
-
-  loadParties: async (caseId: string) => {
-    try {
-      const parties = await api.get<Party[]>(`/cases/${caseId}/parties`);
-      set({ parties });
-    } catch (err) {
-      console.error('loadParties error:', err);
-    }
-  },
+  loadDisputes: makeLoader<Dispute>('disputes', 'disputes', set),
+  loadDamages: makeLoader<Damage>('damages', 'damages', set),
+  loadTimeline: makeLoader<TimelineEvent>('timeline', 'timeline', set),
+  loadParties: makeLoader<Party>('parties', 'parties', set),
 }));
