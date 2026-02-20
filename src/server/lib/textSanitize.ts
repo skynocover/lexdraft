@@ -12,6 +12,9 @@ export const hasReplacementChars = (text: string | null | undefined): boolean =>
   return text.includes('\uFFFD');
 };
 
+/** Strips all U+FFFD replacement characters from a string. */
+export const stripReplacementChars = (text: string): string => text.replace(/\uFFFD/g, '');
+
 /**
  * Build a lookup map from law_name + article → full_text.
  * Used to replace corrupted quoted_text in citations with clean D1 data.

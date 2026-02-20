@@ -12,6 +12,7 @@ import {
 } from '../agent/aiClient';
 import { TOOL_DEFINITIONS, executeTool } from '../agent/tools';
 import { parseOpenAIStream, type OpenAIChunk } from '../agent/sseParser';
+import { stripReplacementChars } from '../lib/textSanitize';
 
 const VALID_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((t) => t.function.name));
 import type { SSEEvent } from '../../shared/types';
@@ -414,7 +415,7 @@ ${paragraphList}
       });
 
       // Strip U+FFFD replacement characters caused by multi-byte UTF-8 split across chunks
-      fullContent = fullContent.replace(/\uFFFD/g, '');
+      fullContent = stripReplacementChars(fullContent);
 
       if (toolCalls.length > 0) {
         // Save assistant message with tool_calls metadata

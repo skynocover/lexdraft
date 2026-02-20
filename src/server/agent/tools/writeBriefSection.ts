@@ -3,14 +3,13 @@ import { nanoid } from 'nanoid';
 import { files, briefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { parseJsonField } from '../toolHelpers';
-import { searchLaw } from '../../lib/lawSearch';
-import { hasReplacementChars, buildLawTextMap, repairLawCitations } from '../../lib/textSanitize';
-import { readLawRefs, upsertLawRef } from '../../lib/lawRefsJson';
+import {
+  loadLawDocsByIds,
+  fetchAndCacheUncitedMentions,
+  repairAndGetRefs,
+} from '../../lib/lawRefService';
 import type { Paragraph } from '../../../client/stores/useBriefStore';
 import type { ToolHandler } from './types';
-
-/** Regex to detect law article references like 民法第184條、道路交通安全規則第102條第1項第7款 */
-const LAW_ARTICLE_REGEX = /([\u4e00-\u9fff]{2,}(?:法|規則|條例|辦法|細則))第(\d+條(?:之\d+)?)/g;
 
 export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, drizzle, ctx) => {
   if (!ctx) {
@@ -86,62 +85,10 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
   }));
 
   // 3. Load law refs specified by relevant_law_ids: JSON cache first, fallback to MongoDB
-  const loadedLawIds = new Set<string>();
   if (relevantLawIds.length) {
-    const uncachedIds = relevantLawIds.filter((id) => !loadedLawIds.has(id));
-
-    if (uncachedIds.length) {
-      // Check JSON cache
-      const cachedRefs = await readLawRefs(drizzle, caseId);
-      const cachedById = new Map(cachedRefs.map((r) => [r.id, r]));
-
-      for (const id of uncachedIds) {
-        const ref = cachedById.get(id);
-        if (ref && ref.full_text) {
-          documents.push({
-            title: `${ref.law_name} ${ref.article}`,
-            content: ref.full_text,
-            doc_type: 'law' as const,
-          });
-          loadedLawIds.add(ref.id);
-        }
-      }
-
-      // Fetch missing from MongoDB and cache in JSON
-      const stillMissing = uncachedIds.filter((id) => !loadedLawIds.has(id));
-      if (stillMissing.length && ctx.mongoUrl) {
-        for (const lawId of stillMissing) {
-          try {
-            const results = await searchLaw(ctx.mongoUrl, {
-              query: lawId,
-              limit: 1,
-            });
-            if (results.length > 0) {
-              const r = results[0];
-              // Skip if MongoDB returned corrupted text
-              if (hasReplacementChars(r.content)) {
-                console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
-                continue;
-              }
-              await upsertLawRef(drizzle, caseId, {
-                id: r._id,
-                law_name: r.law_name,
-                article: r.article_no,
-                full_text: r.content,
-                is_manual: false,
-              });
-              documents.push({
-                title: `${r.law_name} ${r.article_no}`,
-                content: r.content,
-                doc_type: 'law' as const,
-              });
-              loadedLawIds.add(r._id);
-            }
-          } catch {
-            /* skip on error */
-          }
-        }
-      }
+    const lawDocs = await loadLawDocsByIds(drizzle, caseId, ctx.mongoUrl, relevantLawIds);
+    for (const doc of lawDocs) {
+      documents.push({ title: doc.title, content: doc.content, doc_type: 'law' as const });
     }
   }
 
@@ -194,52 +141,12 @@ ${existingParagraph.content_md}
     claudeInstruction,
   );
 
-  // 6. Post-processing: detect uncited law mentions in text and cache in JSON
+  // 6. Post-processing: detect uncited law mentions, fetch, cache, repair citations
   const citedLawLabels = new Set(citations.filter((c) => c.type === 'law').map((c) => c.label));
+  await fetchAndCacheUncitedMentions(drizzle, caseId, ctx.mongoUrl, text, citedLawLabels);
 
-  // Deduplicate: use Set to avoid redundant MongoDB queries for same law
-  const mentionedLawKeys = new Set<string>();
-  for (const match of text.matchAll(LAW_ARTICLE_REGEX)) {
-    mentionedLawKeys.add(`${match[1]}|第${match[2]}`);
-  }
-
-  // Find laws mentioned in text but not cited by Claude — store in JSON as cache
-  const uncitedLaws = Array.from(mentionedLawKeys)
-    .map((key) => {
-      const [lawName, article] = key.split('|');
-      return { lawName, article };
-    })
-    .filter((m) => !citedLawLabels.has(`${m.lawName} ${m.article}`));
-
-  if (uncitedLaws.length > 0 && ctx.mongoUrl) {
-    for (const law of uncitedLaws) {
-      try {
-        const results = await searchLaw(ctx.mongoUrl, {
-          query: `${law.lawName} ${law.article}`,
-          limit: 1,
-        });
-        if (results.length > 0) {
-          const r = results[0];
-          if (hasReplacementChars(r.content)) {
-            console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
-            continue;
-          }
-          await upsertLawRef(drizzle, caseId, {
-            id: r._id,
-            law_name: r.law_name,
-            article: r.article_no,
-            full_text: r.content,
-            is_manual: false,
-          });
-        }
-      } catch {
-        /* skip on error */
-      }
-    }
-  }
-
-  // Send updated law refs to frontend
-  const displayRefs = await readLawRefs(drizzle, caseId);
+  const allCitationRefs = [...citations, ...segments.flatMap((s) => s.citations)];
+  const displayRefs = await repairAndGetRefs(drizzle, caseId, allCitationRefs);
 
   await ctx.sendSSE({
     type: 'brief_update',
@@ -247,11 +154,6 @@ ${existingParagraph.content_md}
     action: 'set_law_refs',
     data: displayRefs,
   });
-
-  // 6b. Repair corrupted quoted_text in law citations using cached data
-  const lawTextMap = buildLawTextMap(displayRefs);
-  const allCitationRefs = [...citations, ...segments.flatMap((s) => s.citations)];
-  repairLawCitations(allCitationRefs, lawTextMap);
 
   // 7. Build Paragraph object
   const lawCitationCount = citations.filter((c) => c.type === 'law').length;

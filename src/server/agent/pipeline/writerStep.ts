@@ -2,21 +2,13 @@ import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { briefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument, type ClaudeUsage } from '../claudeClient';
-import { searchLaw } from '../../lib/lawSearch';
-import { hasReplacementChars, buildLawTextMap, repairLawCitations } from '../../lib/textSanitize';
-import {
-  readLawRefs,
-  upsertLawRef,
-  hasLawRefByNameArticle,
-  removeLawRefsWhere,
-} from '../../lib/lawRefsJson';
+import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
+import { fetchAndCacheUncitedMentions, repairAndGetRefs } from '../../lib/lawRefService';
 import { parseJsonField } from '../toolHelpers';
 import type { StrategyOutput } from './types';
 import type { PipelineContext } from '../briefPipeline';
 import type { ContextStore } from '../contextStore';
 import type { Paragraph, TextSegment, Citation } from '../../../client/stores/useBriefStore';
-
-const LAW_ARTICLE_REGEX = /([\u4e00-\u9fff]{2,}(?:法|規則|條例|辦法|細則))第(\d+條(?:之\d+)?)/g;
 
 export const getSectionKey = (section: string, subsection?: string) =>
   `${section}${subsection ? ' > ' + subsection : ''}`;
@@ -292,14 +284,25 @@ ${completedText}`;
     strategySection.subsection,
   );
 
-  // Post-processing: detect uncited law mentions and cache them in JSON
-  await postProcessLawCitations(ctx, text, citations);
+  // Post-processing: detect uncited law mentions, fetch, cache, repair citations
+  const citedLawLabels = new Set(citations.filter((c) => c.type === 'law').map((c) => c.label));
+  const allRefs = await fetchAndCacheUncitedMentions(
+    ctx.drizzle,
+    ctx.caseId,
+    ctx.mongoUrl,
+    text,
+    citedLawLabels,
+  );
 
-  // Repair corrupted quoted_text in law citations using JSON data
-  const currentRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
-  const lawTextMap = buildLawTextMap(currentRefs);
+  await ctx.sendSSE({
+    type: 'brief_update',
+    brief_id: '',
+    action: 'set_law_refs',
+    data: allRefs,
+  });
+
   const allCitationRefs = [...citations, ...segments.flatMap((s) => s.citations)];
-  repairLawCitations(allCitationRefs, lawTextMap);
+  await repairAndGetRefs(ctx.drizzle, ctx.caseId, allCitationRefs);
 
   // Build paragraph
   const paragraph: Paragraph = {
@@ -337,70 +340,6 @@ ${completedText}`;
   });
 
   return paragraph;
-};
-
-// ── Post-processing: law citation tracking ──
-
-const postProcessLawCitations = async (
-  ctx: PipelineContext,
-  text: string,
-  citations: Citation[],
-) => {
-  const citedLawLabels = new Set(citations.filter((c) => c.type === 'law').map((c) => c.label));
-
-  // Detect law mentions in text that aren't already cached — cache them
-  const mentionedLawKeys = new Set<string>();
-  for (const match of text.matchAll(LAW_ARTICLE_REGEX)) {
-    mentionedLawKeys.add(`${match[1]}|第${match[2]}`);
-  }
-
-  const uncitedLaws = Array.from(mentionedLawKeys)
-    .map((key) => {
-      const [lawName, article] = key.split('|');
-      return { lawName, article };
-    })
-    .filter((m) => !citedLawLabels.has(`${m.lawName} ${m.article}`));
-
-  const currentRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
-
-  for (const law of uncitedLaws) {
-    try {
-      const alreadyCached = hasLawRefByNameArticle(currentRefs, law.lawName, law.article);
-
-      if (!alreadyCached && ctx.mongoUrl) {
-        const results = await searchLaw(ctx.mongoUrl, {
-          query: `${law.lawName} ${law.article}`,
-          limit: 1,
-        });
-        if (results.length > 0) {
-          const r = results[0];
-          if (hasReplacementChars(r.content)) {
-            console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
-            continue;
-          }
-          await upsertLawRef(ctx.drizzle, ctx.caseId, {
-            id: r._id,
-            law_name: r.law_name,
-            article: r.article_no,
-            full_text: r.content,
-            is_manual: false,
-          });
-        }
-      }
-    } catch {
-      /* skip */
-    }
-  }
-
-  // Send all law refs to frontend
-  const allRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
-
-  await ctx.sendSSE({
-    type: 'brief_update',
-    brief_id: '',
-    action: 'set_law_refs',
-    data: allRefs,
-  });
 };
 
 // ── Cleanup: remove uncited non-manual law refs after pipeline ──

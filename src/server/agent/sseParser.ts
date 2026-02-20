@@ -2,24 +2,25 @@
  * Shared OpenAI-compatible SSE stream parser.
  * Used by both collectStreamText (tool execution) and AgentDO (agent loop).
  */
+import { stripReplacementChars } from '../lib/textSanitize';
 
 export interface OpenAIChunk {
   choices?: Array<{
     delta: {
-      content?: string
+      content?: string;
       tool_calls?: Array<{
-        index: number
-        id?: string
-        function?: { name?: string; arguments?: string }
-      }>
-    }
-    finish_reason?: string | null
-  }>
+        index: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+    finish_reason?: string | null;
+  }>;
   usage?: {
-    prompt_tokens?: number
-    completion_tokens?: number
-    total_tokens?: number
-  }
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 }
 
 /**
@@ -30,34 +31,36 @@ export async function parseOpenAIStream(
   response: Response,
   onChunk: (chunk: OpenAIChunk) => void,
 ): Promise<void> {
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
 
   const processLines = (lines: string[]) => {
     for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const data = line.slice(6).trim()
-      if (data === '[DONE]') continue
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') continue;
       try {
-        onChunk(JSON.parse(data))
-      } catch { /* skip unparseable */ }
+        onChunk(JSON.parse(data));
+      } catch {
+        /* skip unparseable */
+      }
     }
-  }
+  };
 
   while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-    processLines(lines)
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    processLines(lines);
   }
 
   // Flush remaining bytes in decoder
-  buffer += decoder.decode()
+  buffer += decoder.decode();
   if (buffer) {
-    processLines(buffer.split('\n'))
+    processLines(buffer.split('\n'));
   }
 }
 
@@ -66,10 +69,10 @@ export async function parseOpenAIStream(
  * Strips U+FFFD replacement characters from corrupted multi-byte sequences.
  */
 export async function collectStreamText(response: Response): Promise<string> {
-  let text = ''
+  let text = '';
   await parseOpenAIStream(response, (chunk) => {
-    const content = chunk.choices?.[0]?.delta?.content
-    if (content) text += content
-  })
-  return text.replace(/\uFFFD/g, '')
+    const content = chunk.choices?.[0]?.delta?.content;
+    if (content) text += content;
+  });
+  return stripReplacementChars(text);
 }
