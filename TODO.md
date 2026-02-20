@@ -120,3 +120,9 @@
 - [ ] 將 AI model name、max rounds、file size limits 等硬編碼值抽到共用 config
 - [ ] 統一 AI prompt templates 到 `src/server/agent/prompts.ts`
 - [ ] 移除開發用 console.error，改為結構化 logging
+
+### 3.5 已完成的後端重構
+
+- [x] 分析工具 factory pattern：`analyzeDisputes`/`calculateDamages`/`generateTimeline` 共用 `analysisFactory.ts`
+- [x] `fileProcessor.ts` 改用 `aiClient.ts` 的 `callAI`，消除 gateway URL 建構重複
+- [x] `callAI` 擴充支援 `maxTokens`、`responseFormat` 選項

@@ -46,7 +46,7 @@ inlineAIRouter.post('/inline-ai/transform', async (c) => {
     CF_AIG_TOKEN: c.env.CF_AIG_TOKEN,
   };
 
-  const { content } = await callAI(env, messages, INLINE_MODEL);
+  const { content } = await callAI(env, messages, { model: INLINE_MODEL });
   return c.json({ result: content });
 });
 

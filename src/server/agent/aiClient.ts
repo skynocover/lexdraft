@@ -72,21 +72,37 @@ export async function callAIStreaming(env: AIEnv, opts: CallAIOptions): Promise<
   return response;
 }
 
+interface CallAISimpleOptions {
+  model?: string;
+  maxTokens?: number;
+  responseFormat?: Record<string, unknown>;
+}
+
 /**
  * Call AI Gateway without streaming. Returns the full response content.
  */
 export const callAI = async (
   env: AIEnv,
   messages: ChatMessage[],
-  model?: string,
+  opts?: CallAISimpleOptions,
 ): Promise<{ content: string }> => {
+  const body: Record<string, unknown> = {
+    model: opts?.model || MODEL,
+    messages,
+    stream: false,
+    max_tokens: opts?.maxTokens || 4096,
+  };
+  if (opts?.responseFormat) {
+    body.response_format = opts.responseFormat;
+  }
+
   const response = await fetch(getGatewayUrl(env), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
     },
-    body: JSON.stringify({ model: model || MODEL, messages, stream: false, max_tokens: 4096 }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     const errText = await response.text();

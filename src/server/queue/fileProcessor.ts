@@ -1,9 +1,12 @@
-import { eq } from "drizzle-orm";
-import { getDocumentProxy, extractText } from "unpdf";
-import { getDB } from "../db";
-import { files } from "../db/schema";
+import { eq } from 'drizzle-orm';
+import { getDocumentProxy, extractText } from 'unpdf';
+import { getDB } from '../db';
+import { files } from '../db/schema';
+import { callAI, type AIEnv } from '../agent/aiClient';
 
-const CMAP_BASE_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/";
+const CMAP_BASE_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/';
+
+const FLASH_LITE_MODEL = 'google-ai-studio/gemini-2.0-flash-lite';
 
 /**
  * Workers 環境用的 CMap reader。
@@ -20,7 +23,7 @@ class WorkersCMapReaderFactory {
   }
 
   async fetch({ name }: { name: string }) {
-    const url = this.baseUrl + name + (this.isCompressed ? ".bcmap" : "");
+    const url = this.baseUrl + name + (this.isCompressed ? '.bcmap' : '');
     const response = await globalThis.fetch(url);
     if (!response.ok) {
       throw new Error(`Unable to load CMap at: ${url} (${response.status})`);
@@ -38,7 +41,7 @@ interface FileMessage {
 }
 
 interface ClassificationResult {
-  category: "ours" | "theirs" | "court" | "evidence" | "other";
+  category: 'ours' | 'theirs' | 'court' | 'evidence' | 'other';
   doc_type: string;
   doc_date: string | null;
   summary: {
@@ -101,95 +104,49 @@ const MARKDOWN_PROMPT = `你是文件格式轉換助手。將以下從 PDF 提�
 
 目標：產出的 Markdown 可以用 ## 作為分割點，將文件切成有意義的段落。`;
 
-async function convertToMarkdown(
-  text: string,
-  env: { CF_ACCOUNT_ID: string; CF_GATEWAY_ID: string; CF_AIG_TOKEN: string },
-): Promise<string> {
+const convertToMarkdown = async (text: string, aiEnv: AIEnv): Promise<string> => {
   const truncated = text.slice(0, 15000);
+  const userContent =
+    text.length > 15000
+      ? `以下是文件內容（前 15000 字）：\n\n${truncated}`
+      : `以下是文件內容：\n\n${truncated}`;
 
-  const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`;
+  const { content } = await callAI(
+    aiEnv,
+    [
+      { role: 'system', content: MARKDOWN_PROMPT },
+      { role: 'user', content: userContent },
+    ],
+    { model: FLASH_LITE_MODEL, maxTokens: 8192 },
+  );
 
-  const response = await fetch(gatewayUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "cf-aig-authorization": `Bearer ${env.CF_AIG_TOKEN}`,
-    },
-    body: JSON.stringify({
-      model: "google-ai-studio/gemini-2.0-flash-lite",
-      messages: [
-        { role: "system", content: MARKDOWN_PROMPT },
-        {
-          role: "user",
-          content:
-            text.length > 15000
-              ? `以下是文件內容（前 15000 字）：\n\n${truncated}`
-              : `以下是文件內容：\n\n${truncated}`,
-        },
-      ],
-      max_tokens: 8192,
-    }),
-  });
+  return content || text;
+};
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(
-      `AI Gateway error (markdown): ${response.status} - ${errText}`,
-    );
-  }
-
-  const data = (await response.json()) as {
-    choices: Array<{ message: { role: string; content: string } }>;
-  };
-
-  return data.choices?.[0]?.message?.content || text;
-}
-
-async function classifyWithAI(
+const classifyWithAI = async (
   filename: string,
   text: string,
-  env: { CF_ACCOUNT_ID: string; CF_GATEWAY_ID: string; CF_AIG_TOKEN: string },
-): Promise<ClassificationResult> {
-  // 截取前 8000 字元（避免 token 爆量）
+  aiEnv: AIEnv,
+): Promise<ClassificationResult> => {
   const truncated = text.slice(0, 8000);
 
-  // Cloudflare AI Gateway Unified API（OpenAI 相容），使用 Unified Billing 不需要 provider API key
-  const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`;
-
-  const response = await fetch(gatewayUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "cf-aig-authorization": `Bearer ${env.CF_AIG_TOKEN}`,
+  const { content } = await callAI(
+    aiEnv,
+    [
+      { role: 'system', content: CLASSIFY_PROMPT },
+      { role: 'user', content: `檔案名稱：${filename}\n\n文件內容（前 8000 字）：\n${truncated}` },
+    ],
+    {
+      model: FLASH_LITE_MODEL,
+      maxTokens: 1024,
+      responseFormat: { type: 'json_object' },
     },
-    body: JSON.stringify({
-      model: "google-ai-studio/gemini-2.0-flash-lite",
-      messages: [
-        { role: "system", content: CLASSIFY_PROMPT },
-        {
-          role: "user",
-          content: `檔案名稱：${filename}\n\n文件內容（前 8000 字）：\n${truncated}`,
-        },
-      ],
-      max_tokens: 1024,
-      response_format: { type: "json_object" },
-    }),
-  });
+  );
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`AI Gateway error: ${response.status} - ${errText}`);
-  }
+  return JSON.parse(content || '{}') as ClassificationResult;
+};
 
-  const data = (await response.json()) as {
-    choices: Array<{ message: { role: string; content: string } }>;
-  };
-  const text_content = data.choices?.[0]?.message?.content || "{}";
-
-  return JSON.parse(text_content) as ClassificationResult;
-}
-
-export async function processFileMessage(
+export const processFileMessage = async (
   message: FileMessage,
   env: {
     DB: D1Database;
@@ -198,20 +155,25 @@ export async function processFileMessage(
     CF_GATEWAY_ID: string;
     CF_AIG_TOKEN: string;
   },
-) {
+) => {
   const db = getDB(env.DB);
+  const aiEnv: AIEnv = {
+    CF_ACCOUNT_ID: env.CF_ACCOUNT_ID,
+    CF_GATEWAY_ID: env.CF_GATEWAY_ID,
+    CF_AIG_TOKEN: env.CF_AIG_TOKEN,
+  };
 
   // 標記為 processing
   await db
     .update(files)
-    .set({ status: "processing", updated_at: new Date().toISOString() })
+    .set({ status: 'processing', updated_at: new Date().toISOString() })
     .where(eq(files.id, message.fileId));
 
   try {
     // 1. 從 R2 讀取 PDF
     const object = await env.BUCKET.get(message.r2Key);
     if (!object) {
-      throw new Error("R2 object not found");
+      throw new Error('R2 object not found');
     }
     const pdfBuffer = await object.arrayBuffer();
 
@@ -225,11 +187,11 @@ export async function processFileMessage(
     });
     const result = await extractText(pdf);
     const fullText = Array.isArray(result.text)
-      ? result.text.join("\n")
-      : String(result.text || "");
+      ? result.text.join('\n')
+      : String(result.text || '');
 
     if (!fullText.trim()) {
-      throw new Error("PDF 文字提取失敗，可能為純圖片掃描檔");
+      throw new Error('PDF 文字提取失敗，可能為純圖片掃描檔');
     }
 
     // 3. AI 分類 + 摘要 + Markdown 轉換（透過 Cloudflare AI Gateway）
@@ -237,12 +199,9 @@ export async function processFileMessage(
     let contentMd: string | null = null;
     if (env.CF_ACCOUNT_ID && env.CF_GATEWAY_ID && env.CF_AIG_TOKEN) {
       const [classResult, mdResult] = await Promise.all([
-        classifyWithAI(message.filename, fullText, env),
-        convertToMarkdown(fullText, env).catch((err) => {
-          console.error(
-            `Markdown conversion failed for ${message.fileId}:`,
-            err,
-          );
+        classifyWithAI(message.filename, fullText, aiEnv),
+        convertToMarkdown(fullText, aiEnv).catch((err) => {
+          console.error(`Markdown conversion failed for ${message.fileId}:`, err);
           return null;
         }),
       ]);
@@ -257,16 +216,14 @@ export async function processFileMessage(
     await db
       .update(files)
       .set({
-        status: "ready",
+        status: 'ready',
         full_text: fullText,
         content_md: contentMd,
         category: classification.category,
         doc_type: classification.doc_type,
         doc_date: classification.doc_date,
         summary: JSON.stringify(classification.summary),
-        extracted_claims: JSON.stringify(
-          classification.summary.key_claims || [],
-        ),
+        extracted_claims: JSON.stringify(classification.summary.key_claims || []),
         updated_at: new Date().toISOString(),
       })
       .where(eq(files.id, message.fileId));
@@ -275,36 +232,36 @@ export async function processFileMessage(
     await db
       .update(files)
       .set({
-        status: "error",
+        status: 'error',
         updated_at: new Date().toISOString(),
       })
       .where(eq(files.id, message.fileId));
     console.error(`File processing failed for ${message.fileId}:`, err);
     throw err; // 讓 Queue 重試
   }
-}
+};
 
 /** 無 API key 時的 fallback 分類（純靠檔名） */
-function fallbackClassify(filename: string): ClassificationResult {
+const fallbackClassify = (filename: string): ClassificationResult => {
   const name = filename.toLowerCase();
-  let category: ClassificationResult["category"] = "other";
-  let doc_type = "other";
+  let category: ClassificationResult['category'] = 'other';
+  let doc_type = 'other';
 
-  if (name.includes("起訴") || name.includes("準備")) {
-    category = "ours";
-    doc_type = name.includes("起訴") ? "complaint" : "preparation";
-  } else if (name.includes("答辯") || name.includes("爭點")) {
-    category = "theirs";
-    doc_type = "defense";
-  } else if (name.includes("筆錄")) {
-    category = "court";
-    doc_type = "transcript";
-  } else if (name.includes("裁定") || name.includes("判決")) {
-    category = "court";
-    doc_type = "ruling";
-  } else if (name.includes("通知")) {
-    category = "court";
-    doc_type = "notice";
+  if (name.includes('起訴') || name.includes('準備')) {
+    category = 'ours';
+    doc_type = name.includes('起訴') ? 'complaint' : 'preparation';
+  } else if (name.includes('答辯') || name.includes('爭點')) {
+    category = 'theirs';
+    doc_type = 'defense';
+  } else if (name.includes('筆錄')) {
+    category = 'court';
+    doc_type = 'transcript';
+  } else if (name.includes('裁定') || name.includes('判決')) {
+    category = 'court';
+    doc_type = 'ruling';
+  } else if (name.includes('通知')) {
+    category = 'court';
+    doc_type = 'notice';
   }
 
   return {
@@ -313,13 +270,8 @@ function fallbackClassify(filename: string): ClassificationResult {
     doc_date: null,
     summary: {
       type: doc_type,
-      party:
-        category === "ours"
-          ? "plaintiff"
-          : category === "theirs"
-            ? "defendant"
-            : null,
-      summary: "（無 AI API Key，僅依檔名分類）",
+      party: category === 'ours' ? 'plaintiff' : category === 'theirs' ? 'defendant' : null,
+      summary: '（無 AI API Key，僅依檔名分類）',
       key_claims: [],
       key_dates: [],
       key_amounts: [],
@@ -327,4 +279,4 @@ function fallbackClassify(filename: string): ClassificationResult {
       judge_focus: null,
     },
   };
-}
+};
