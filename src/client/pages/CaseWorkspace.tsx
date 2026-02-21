@@ -7,6 +7,7 @@ import {
   Panel as ResizablePanel,
   Separator as PanelResizeHandle,
 } from 'react-resizable-panels';
+import { toast } from 'sonner';
 import { useCaseStore, type Case, type CaseFile } from '../stores/useCaseStore';
 import { useBriefStore } from '../stores/useBriefStore';
 import { useAnalysisStore } from '../stores/useAnalysisStore';
@@ -35,6 +36,7 @@ export function CaseWorkspace() {
   const loadClaims = useAnalysisStore((s) => s.loadClaims);
   const panels = useTabStore((s) => s.panels);
   const openBriefTab = useTabStore((s) => s.openBriefTab);
+  const openFileTab = useTabStore((s) => s.openFileTab);
   const clearTabs = useTabStore((s) => s.clearTabs);
   const reorderTab = useTabStore((s) => s.reorderTab);
   const moveTab = useTabStore((s) => s.moveTab);
@@ -42,6 +44,7 @@ export function CaseWorkspace() {
   const toggleLeftSidebar = useUIStore((s) => s.toggleLeftSidebar);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const pollingRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const initialTabRef = useRef(new URLSearchParams(window.location.search).get('tab'));
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -79,18 +82,66 @@ export function CaseWorkspace() {
   useEffect(() => {
     if (!caseId) return;
 
+    let cancelled = false;
+
+    // 從 ref 讀取初始 URL 參數（ref 在 render 階段就捕獲，不受 Strict Mode cleanup 影響）
+    const tabParam = initialTabRef.current;
+
     // 載入案件資料
     api.get<Case>(`/cases/${caseId}`).then(setCurrentCase).catch(console.error);
 
     // 載入檔案列表
-    api.get<CaseFile[]>(`/cases/${caseId}/files`).then(setFiles).catch(console.error);
+    const filesPromise = api
+      .get<CaseFile[]>(`/cases/${caseId}/files`)
+      .then((data) => {
+        setFiles(data);
+        return data;
+      })
+      .catch((err) => {
+        console.error(err);
+        return [] as CaseFile[];
+      });
 
     // 載入聊天歷史
     useChatStore.getState().loadHistory(caseId);
 
-    // 載入書狀列表，如有書狀則開啟第一個 tab
-    loadBriefs(caseId).then(() => {
-      const briefs = useBriefStore.getState().briefs;
+    // 載入書狀列表 + 從 URL 恢復 tab
+    const briefsPromise = loadBriefs(caseId).then(() => useBriefStore.getState().briefs);
+
+    Promise.all([briefsPromise, filesPromise]).then(([briefs, loadedFiles]) => {
+      if (cancelled) return;
+
+      // 用完即清，避免 caseId 變更時重複使用舊值
+      initialTabRef.current = null;
+
+      if (tabParam) {
+        const colonIdx = tabParam.indexOf(':');
+        const type = tabParam.slice(0, colonIdx);
+        const id = tabParam.slice(colonIdx + 1);
+
+        if (type === 'brief' && id) {
+          const brief = briefs.find((b) => b.id === id);
+          if (brief) {
+            openBriefTab(brief.id, brief.title || brief.brief_type);
+            return;
+          }
+          toast.error('該書狀已不存在');
+        } else if (type === 'file' && id) {
+          const file = loadedFiles.find((f) => f.id === id);
+          if (file) {
+            openFileTab(file.id, file.filename);
+            return;
+          }
+          toast.error('該檔案已不存在');
+        }
+
+        // 清除無效的 tab 參數
+        const url = new URL(window.location.href);
+        url.searchParams.delete('tab');
+        window.history.replaceState(null, '', url.toString());
+      }
+
+      // fallback: 開啟第一個書狀
       if (briefs.length > 0) {
         openBriefTab(briefs[0].id, briefs[0].title || briefs[0].brief_type);
       }
@@ -115,6 +166,7 @@ export function CaseWorkspace() {
     loadClaims(caseId);
 
     return () => {
+      cancelled = true;
       setCurrentCase(null);
       setCurrentBrief(null);
       setFiles([]);
@@ -140,6 +192,27 @@ export function CaseWorkspace() {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [files, caseId]);
+
+  // 同步 active tab 到 URL search params
+  useEffect(() => {
+    const unsub = useTabStore.subscribe((state, prevState) => {
+      const panel = state.panels.find((p) => p.id === state.focusedPanelId);
+      const activeTabId = panel?.activeTabId ?? null;
+
+      const prevPanel = prevState.panels.find((p) => p.id === prevState.focusedPanelId);
+      if (activeTabId === (prevPanel?.activeTabId ?? null)) return;
+
+      const url = new URL(window.location.href);
+      if (activeTabId?.startsWith('brief:') || activeTabId?.startsWith('file:')) {
+        url.searchParams.set('tab', activeTabId);
+      } else {
+        url.searchParams.delete('tab');
+      }
+      window.history.replaceState(null, '', url.toString());
+    });
+
+    return unsub;
+  }, []);
 
   return (
     <div className="flex h-screen flex-col bg-bg-0">
