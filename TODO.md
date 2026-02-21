@@ -182,10 +182,8 @@
 │   ┌ DisputeCard ┐       │
 │   └─────────────┘       │
 │                         │
-│ ▶ 主張圖譜 (12)         │  ← 收合狀態
 │ ▶ 金額計算 NT$1,234,567 │  ← 金額 badge
 │ ▶ 時間軸 (8)            │
-│ ▶ 主張與舉證             │
 │ ▶ 當事人                 │
 └─────────────────────────┘
 ```
@@ -302,14 +300,12 @@ Chat 保留在左側，但需要以下調整配合新佈局：
 #### 2.3 分析 Tab（整合原 AnalysisPanel）
 
 - [x] 2.3.1 建立 `AnalysisSidebarContent` 元件
-- [x] 2.3.2 使用 shadcn `Accordion` 元件，包含 6 個 item：
+- [x] 2.3.2 使用 shadcn `Accordion` 元件，包含 4 個 item（主張圖譜/主張與舉證已合併進爭點分析）：
       | AccordionItem | 標題 | Badge | 內容元件 |
       |---------------|------|-------|---------|
-      | disputes | 爭點分析 | `{count}` | `<DisputesTab />` |
-      | claims | 主張圖譜 | `{count}` | `<ClaimsTab />` |
+      | disputes | 爭點分析 | `{count} · {miss}缺漏` | `<DisputesTab />`（含 claims + evidence status） |
       | damages | 金額計算 | `NT$ {total}` | `<DamagesTab />` |
       | timeline | 時間軸 | `{count}` | `<TimelineTab />` |
-      | evidence | 主張與舉證 | — | `<EvidenceTab />` |
       | parties | 當事人 | — | `<PartiesTab />` |
 - [x] 2.3.3 Accordion 支援多項同時展開（`type="multiple"`）
 - [x] 2.3.4 展開狀態存在 `useUIStore.analysisAccordion` 中，切換 tab 後保留

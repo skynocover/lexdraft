@@ -5,10 +5,8 @@ import { BriefsSection } from './sidebar/BriefsSection';
 import { FilesSection } from './sidebar/FilesSection';
 import { LawRefsSection } from './sidebar/LawRefsSection';
 import { DisputesTab } from '../analysis/DisputesTab';
-import { ClaimsTab } from '../analysis/ClaimsTab';
 import { DamagesTab } from '../analysis/DamagesTab';
 import { TimelineTab } from '../analysis/TimelineTab';
-import { EvidenceTab } from '../analysis/EvidenceTab';
 import { PartiesTab } from '../analysis/PartiesTab';
 import { useAnalysisStore } from '../../stores/useAnalysisStore';
 import { useBriefStore } from '../../stores/useBriefStore';
@@ -158,9 +156,18 @@ const AnalysisSidebarContent = () => {
   const disputes = useAnalysisStore((s) => s.disputes);
   const damages = useAnalysisStore((s) => s.damages);
   const timeline = useAnalysisStore((s) => s.timeline);
-  const claims = useAnalysisStore((s) => s.claims);
 
   const totalDamages = damages.reduce((sum, d) => sum + d.amount, 0);
+
+  const disputesBadge = (() => {
+    if (disputes.length === 0) return null;
+    let miss = 0;
+    for (const d of disputes) {
+      if (!d.evidence || d.evidence.length === 0) miss++;
+    }
+    const label = miss > 0 ? `${disputes.length} 個爭點 · ${miss} 缺漏` : `${disputes.length}`;
+    return label;
+  })();
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto p-2.5">
@@ -177,34 +184,15 @@ const AnalysisSidebarContent = () => {
           <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
             <div className="flex items-center gap-2">
               <span>爭點分析</span>
-              {disputes.length > 0 && (
+              {disputesBadge && (
                 <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[11px] text-t3">
-                  {disputes.length}
+                  {disputesBadge}
                 </span>
               )}
             </div>
           </AccordionTrigger>
           <AccordionContent className="pb-2">
             <DisputesTab />
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem
-          value="claims"
-          className="rounded-xl border border-bd/50 bg-bg-1 px-3.5 shadow-lg shadow-black/25 last:border-b"
-        >
-          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
-            <div className="flex items-center gap-2">
-              <span>主張圖譜</span>
-              {claims.length > 0 && (
-                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[11px] text-t3">
-                  {claims.length}
-                </span>
-              )}
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="pb-2">
-            <ClaimsTab />
           </AccordionContent>
         </AccordionItem>
 
@@ -243,18 +231,6 @@ const AnalysisSidebarContent = () => {
           </AccordionTrigger>
           <AccordionContent className="pb-2">
             <TimelineTab />
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem
-          value="evidence"
-          className="rounded-xl border border-bd/50 bg-bg-1 px-3.5 shadow-lg shadow-black/25 last:border-b"
-        >
-          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
-            主張與舉證
-          </AccordionTrigger>
-          <AccordionContent className="pb-2">
-            <EvidenceTab />
           </AccordionContent>
         </AccordionItem>
 

@@ -241,7 +241,7 @@ const handleBriefUpdate = (event: Extract<SSEEvent, { type: 'brief_update' }>) =
       const claims = event.data as ClaimGraph[];
       analysisStore.setClaims(claims);
       if (claims.length > 0)
-        toast.success('主張圖譜已產生', { description: `${claims.length} 項主張` });
+        toast.success('主張分析已產生', { description: `${claims.length} 項主張` });
       break;
     }
   }
