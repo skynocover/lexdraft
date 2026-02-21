@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { getDB } from '../db';
-import { timelineEvents, cases } from '../db/schema';
+import { timelineEvents, cases, claims } from '../db/schema';
 import { asc } from 'drizzle-orm';
 import { searchLaw } from '../lib/lawSearch';
 import { readLawRefs, upsertManyLawRefs, removeLawRef } from '../lib/lawRefsJson';
@@ -77,6 +77,16 @@ lawRouter.delete('/cases/:caseId/law-refs/:id', async (c) => {
   await removeLawRef(db, caseId, id);
 
   return c.json({ ok: true });
+});
+
+// GET /api/cases/:caseId/claims — claims for a case
+lawRouter.get('/cases/:caseId/claims', async (c) => {
+  const caseId = c.req.param('caseId');
+  const db = getDB(c.env.DB);
+
+  const rows = await db.select().from(claims).where(eq(claims.case_id, caseId));
+
+  return c.json(rows);
 });
 
 // GET /api/cases/:caseId/timeline — D1 timeline_events for a case

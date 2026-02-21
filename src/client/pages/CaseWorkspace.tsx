@@ -32,6 +32,7 @@ export function CaseWorkspace() {
   const loadDamages = useAnalysisStore((s) => s.loadDamages);
   const loadTimeline = useAnalysisStore((s) => s.loadTimeline);
   const loadParties = useAnalysisStore((s) => s.loadParties);
+  const loadClaims = useAnalysisStore((s) => s.loadClaims);
   const panels = useTabStore((s) => s.panels);
   const openBriefTab = useTabStore((s) => s.openBriefTab);
   const clearTabs = useTabStore((s) => s.clearTabs);
@@ -109,6 +110,9 @@ export function CaseWorkspace() {
 
     // 載入當事人
     loadParties(caseId);
+
+    // 載入主張圖譜
+    loadClaims(caseId);
 
     return () => {
       setCurrentCase(null);

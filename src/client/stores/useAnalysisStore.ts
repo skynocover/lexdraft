@@ -79,6 +79,7 @@ interface AnalysisState {
   loadDamages: (caseId: string) => Promise<void>;
   loadTimeline: (caseId: string) => Promise<void>;
   loadParties: (caseId: string) => Promise<void>;
+  loadClaims: (caseId: string) => Promise<void>;
 }
 
 const makeLoader =
@@ -111,4 +112,5 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   loadDamages: makeLoader<Damage>('damages', 'damages', set),
   loadTimeline: makeLoader<TimelineEvent>('timeline', 'timeline', set),
   loadParties: makeLoader<Party>('parties', 'parties', set),
+  loadClaims: makeLoader<ClaimGraph>('claims', 'claims', set),
 }));

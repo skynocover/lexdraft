@@ -110,6 +110,21 @@ export const damages = sqliteTable('damages', {
   created_at: text('created_at'),
 });
 
+// 3.6 claims — 主張圖譜
+export const claims = sqliteTable('claims', {
+  id: text('id').primaryKey(),
+  case_id: text('case_id')
+    .notNull()
+    .references(() => cases.id),
+  side: text('side').notNull(), // ours | theirs
+  claim_type: text('claim_type').notNull(), // primary | rebuttal | supporting
+  statement: text('statement').notNull(),
+  assigned_section: text('assigned_section'),
+  dispute_id: text('dispute_id').references(() => disputes.id),
+  responds_to: text('responds_to'),
+  created_at: text('created_at'),
+});
+
 // 3.7 timeline_events — 時間軸事件
 export const timelineEvents = sqliteTable('timeline_events', {
   id: text('id').primaryKey(),

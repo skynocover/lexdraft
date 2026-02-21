@@ -57,6 +57,13 @@
       "when": 1771584104360,
       "tag": "0007_windy_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1771639366064,
+      "tag": "0008_peaceful_silk_fever",
+      "breakpoints": true
     }
   ]
 }

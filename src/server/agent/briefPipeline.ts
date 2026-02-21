@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { files, briefs, cases, disputes, damages, briefVersions } from '../db/schema';
+import { files, briefs, cases, disputes, damages, briefVersions, claims } from '../db/schema';
 import { getDB } from '../db';
 import { type ClaudeUsage } from './claudeClient';
 import { readLawRefs, upsertManyLawRefs } from '../lib/lawRefsJson';
@@ -423,6 +423,25 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
 
     // Set strategy in ContextStore
     store.setStrategyOutput(strategyOutput.claims, strategyOutput.sections);
+
+    // Persist claims to DB
+    await ctx.drizzle.delete(claims).where(eq(claims.case_id, ctx.caseId));
+    const now = new Date().toISOString();
+    if (strategyOutput.claims.length) {
+      await ctx.drizzle.insert(claims).values(
+        strategyOutput.claims.map((c) => ({
+          id: c.id,
+          case_id: ctx.caseId,
+          side: c.side,
+          claim_type: c.claim_type,
+          statement: c.statement,
+          assigned_section: c.assigned_section,
+          dispute_id: c.dispute_id,
+          responds_to: c.responds_to,
+          created_at: now,
+        })),
+      );
+    }
 
     // Send claims to frontend via SSE
     await ctx.sendSSE({
