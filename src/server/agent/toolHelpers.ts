@@ -157,7 +157,6 @@ const READY_FILE_SELECT = {
   category: files.category,
   doc_date: files.doc_date,
   summary: files.summary,
-  extracted_claims: files.extracted_claims,
 } as const;
 
 export type ReadyFile = {
@@ -166,7 +165,6 @@ export type ReadyFile = {
   category: string | null;
   doc_date: string | null;
   summary: string | null;
-  extracted_claims: string | null;
 };
 
 /**
@@ -219,7 +217,7 @@ export const buildFileContext = (
       }
 
       if (options.includeClaims) {
-        const claims = parseJsonField<string[]>(f.extracted_claims, []);
+        const claims = (summary.key_claims as string[]) || [];
         lines.push(`主張：${claims.length > 0 ? claims.join('；') : '無'}`);
       }
 

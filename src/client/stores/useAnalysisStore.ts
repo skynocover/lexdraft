@@ -13,14 +13,12 @@ export interface StructuredFact {
 export interface Dispute {
   id: string;
   case_id: string;
-  brief_id: string | null;
   number: number;
   title: string | null;
   our_position: string | null;
   their_position: string | null;
   evidence: string[] | null;
   law_refs: string[] | null;
-  priority: number;
   facts?: StructuredFact[];
 }
 

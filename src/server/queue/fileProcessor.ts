@@ -223,7 +223,6 @@ export const processFileMessage = async (
         doc_type: classification.doc_type,
         doc_date: classification.doc_date,
         summary: JSON.stringify(classification.summary),
-        extracted_claims: JSON.stringify(classification.summary.key_claims || []),
         updated_at: new Date().toISOString(),
       })
       .where(eq(files.id, message.fileId));

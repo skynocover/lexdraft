@@ -47,7 +47,6 @@ export const files = sqliteTable('files', {
   full_text: text('full_text'),
   content_md: text('content_md'), // AI-generated markdown (for citation chunking)
   summary: text('summary'), // JSON
-  extracted_claims: text('extracted_claims'), // JSON array
 
   created_at: text('created_at'),
   updated_at: text('updated_at'),
@@ -86,14 +85,12 @@ export const disputes = sqliteTable('disputes', {
   case_id: text('case_id')
     .notNull()
     .references(() => cases.id),
-  brief_id: text('brief_id').references(() => briefs.id),
   number: integer('number'),
   title: text('title'),
   our_position: text('our_position'),
   their_position: text('their_position'),
   evidence: text('evidence'), // JSON array
   law_refs: text('law_refs'), // JSON array
-  priority: integer('priority').default(0),
 });
 
 // 3.5 damages — 金額計算
