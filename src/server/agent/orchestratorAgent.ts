@@ -1,18 +1,22 @@
-// ── Orchestrator Agent ──
-// Tool-loop agent using Gemini Flash for case analysis.
-// Reads case files and produces comprehensive analysis to seed ContextStore.
+// ── Orchestrator Agent (Split: Case Reader + Issue Analyzer) ──
+// Case Reader: Tool-loop agent using Gemini Flash to read files and produce case summary.
+// Issue Analyzer: Single-shot call to identify legal issues from case summary.
 
 import { nanoid } from 'nanoid';
 import { eq } from 'drizzle-orm';
-import { callAIStreaming, type AIEnv, type ChatMessage, type ToolCall } from './aiClient';
+import { callAI, callAIStreaming, type AIEnv, type ChatMessage } from './aiClient';
 import { collectStreamWithToolCalls } from './sseParser';
 import { files } from '../db/schema';
 import { getDB } from '../db';
 import type { LegalIssue, InformationGap, StructuredFact } from './pipeline/types';
 import {
-  ORCHESTRATOR_SYSTEM_PROMPT,
-  ORCHESTRATOR_TOOLS,
-  buildOrchestratorInput,
+  CASE_READER_SYSTEM_PROMPT,
+  CASE_READER_TOOLS,
+  ISSUE_ANALYZER_SYSTEM_PROMPT,
+  buildCaseReaderInput,
+  buildIssueAnalyzerInput,
+  formatFileNotes,
+  type FileNote,
   type OrchestratorInput,
 } from './prompts/orchestratorPrompt';
 import { parseJsonField, parseLLMJsonResponse } from './toolHelpers';
@@ -21,9 +25,22 @@ import { parseJsonField, parseLLMJsonResponse } from './toolHelpers';
 
 const MAX_AGENT_ROUNDS = 8;
 const MAX_FILE_READS = 6;
-const WALL_CLOCK_TIMEOUT_MS = 90_000;
+const CASE_READER_TIMEOUT_MS = 90_000;
+const ISSUE_ANALYZER_TIMEOUT_MS = 60_000;
 
-// ── Output type ──
+// ── Output types ──
+
+export interface CaseReaderOutput {
+  caseSummary: string;
+  parties: { plaintiff: string; defendant: string };
+  timelineSummary: string;
+  fileNotes: FileNote[];
+}
+
+export interface IssueAnalyzerOutput {
+  legalIssues: LegalIssue[];
+  informationGaps: InformationGap[];
+}
 
 export interface OrchestratorOutput {
   caseSummary: string;
@@ -38,24 +55,26 @@ export interface OrchestratorOutput {
 export interface OrchestratorProgressCallback {
   onFileReadStart: (filename: string) => Promise<void>;
   onFileReadDone: (filename: string) => Promise<void>;
-  onAnalysisStart: () => Promise<void>;
+  onCaseSummaryStart: () => Promise<void>;
+  onCaseSummaryDone: () => Promise<void>;
+  onIssueAnalysisStart: () => Promise<void>;
 }
 
-// ── Main agent ──
+// ── Case Reader Agent ──
 
-export const runOrchestratorAgent = async (
+export const runCaseReader = async (
   aiEnv: AIEnv,
   drizzle: ReturnType<typeof getDB>,
   input: OrchestratorInput,
   signal: AbortSignal,
   progress?: OrchestratorProgressCallback,
-): Promise<OrchestratorOutput> => {
+): Promise<CaseReaderOutput> => {
   let fileReads = 0;
 
   // Build conversation
   const messages: ChatMessage[] = [
-    { role: 'system', content: ORCHESTRATOR_SYSTEM_PROMPT },
-    { role: 'user', content: buildOrchestratorInput(input) },
+    { role: 'system', content: CASE_READER_SYSTEM_PROMPT },
+    { role: 'user', content: buildCaseReaderInput(input) },
   ];
 
   // Tool handlers
@@ -102,7 +121,7 @@ export const runOrchestratorAgent = async (
 
   // Wall clock timeout
   const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), WALL_CLOCK_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => timeoutController.abort(), CASE_READER_TIMEOUT_MS);
 
   const combinedSignal = AbortSignal.any
     ? AbortSignal.any([signal, timeoutController.signal])
@@ -115,23 +134,25 @@ export const runOrchestratorAgent = async (
 
       const response = await callAIStreaming(aiEnv, {
         messages,
-        tools: ORCHESTRATOR_TOOLS,
+        tools: CASE_READER_TOOLS,
         signal: combinedSignal,
       });
 
       // Parse stream and collect tool calls
       const { content: fullContent, toolCalls } = await collectStreamWithToolCalls(response, round);
 
-      // No tool calls → agent is done, parse final output
+      // No tool calls -> agent is done, parse final output
       if (toolCalls.length === 0) {
-        if (progress) await progress.onAnalysisStart();
+        if (progress) await progress.onCaseSummaryStart();
         try {
-          return parseOrchestratorOutput(fullContent, input);
+          const result = parseCaseReaderOutput(fullContent, input);
+          if (progress) await progress.onCaseSummaryDone();
+          return result;
         } catch (parseErr) {
           // JSON parse failed — ask LLM to fix it (one retry)
           if (round < MAX_AGENT_ROUNDS - 1 && !combinedSignal.aborted) {
             console.warn(
-              'Orchestrator JSON parse failed, retrying with correction prompt:',
+              'Case Reader JSON parse failed, retrying with correction prompt:',
               parseErr,
             );
             messages.push({ role: 'assistant', content: fullContent || '' });
@@ -194,13 +215,56 @@ export const runOrchestratorAgent = async (
     const lastAssistant = messages.filter((m) => m.role === 'assistant').pop();
     if (lastAssistant?.content) {
       try {
-        return parseOrchestratorOutput(lastAssistant.content, input);
+        return parseCaseReaderOutput(lastAssistant.content, input);
       } catch {
         /* fall through */
       }
     }
 
-    return buildFallbackOutput(input);
+    return buildCaseReaderFallback(input);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+// ── Issue Analyzer Agent (single-shot) ──
+
+export const runIssueAnalyzer = async (
+  aiEnv: AIEnv,
+  caseReaderOutput: CaseReaderOutput,
+  briefType: string,
+  signal: AbortSignal,
+): Promise<IssueAnalyzerOutput> => {
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), ISSUE_ANALYZER_TIMEOUT_MS);
+
+  const combinedSignal = AbortSignal.any
+    ? AbortSignal.any([signal, timeoutController.signal])
+    : signal;
+
+  try {
+    if (combinedSignal.aborted) {
+      return { legalIssues: [], informationGaps: [] };
+    }
+
+    const userMessage = buildIssueAnalyzerInput({
+      caseSummary: caseReaderOutput.caseSummary,
+      parties: caseReaderOutput.parties,
+      timelineSummary: caseReaderOutput.timelineSummary,
+      fileNotes: formatFileNotes(caseReaderOutput.fileNotes),
+      briefType,
+    });
+
+    const { content } = await callAI(
+      aiEnv,
+      [
+        { role: 'system', content: ISSUE_ANALYZER_SYSTEM_PROMPT },
+        { role: 'user', content: userMessage },
+      ],
+      { maxTokens: 8192, signal: combinedSignal },
+    );
+
+    return parseIssueAnalyzerOutput(content);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -222,13 +286,67 @@ const normalizeSourceSide = (raw?: string): StructuredFact['source_side'] => {
   return '中立';
 };
 
-// ── Parse final output from LLM ──
+// ── Parse Case Reader output ──
 
-const parseOrchestratorOutput = (content: string, input: OrchestratorInput): OrchestratorOutput => {
+const parseCaseReaderOutput = (content: string, input: OrchestratorInput): CaseReaderOutput => {
   const parsed = parseLLMJsonResponse<{
     case_summary?: string;
     parties?: { plaintiff?: string; defendant?: string };
     timeline_summary?: string;
+    file_notes?:
+      | Array<{
+          filename?: string;
+          key_facts?: string[];
+          mentioned_laws?: string[];
+          claims?: string[];
+          key_amounts?: string[];
+        }>
+      | string;
+  }>(content, 'Case Reader Agent 回傳格式不正確');
+
+  const caseSummary = (parsed.case_summary || '').slice(0, 500);
+  const timelineSummary = (parsed.timeline_summary || '').slice(0, 800);
+
+  // Parse file_notes: expected array, graceful fallback if string
+  let fileNotes: FileNote[];
+  if (Array.isArray(parsed.file_notes)) {
+    fileNotes = parsed.file_notes.map((n) => ({
+      filename: n.filename || '',
+      key_facts: n.key_facts || [],
+      mentioned_laws: n.mentioned_laws || [],
+      claims: n.claims || [],
+      key_amounts: n.key_amounts || [],
+    }));
+  } else if (parsed.file_notes) {
+    // Fallback: LLM returned string instead of array
+    fileNotes = [
+      {
+        filename: '(combined)',
+        key_facts: [parsed.file_notes.slice(0, 2000)],
+        mentioned_laws: [],
+        claims: [],
+        key_amounts: [],
+      },
+    ];
+  } else {
+    fileNotes = [];
+  }
+
+  return {
+    caseSummary,
+    parties: {
+      plaintiff: parsed.parties?.plaintiff || input.existingParties.plaintiff || '',
+      defendant: parsed.parties?.defendant || input.existingParties.defendant || '',
+    },
+    timelineSummary,
+    fileNotes,
+  };
+};
+
+// ── Parse Issue Analyzer output ──
+
+const parseIssueAnalyzerOutput = (content: string): IssueAnalyzerOutput => {
+  const parsed = parseLLMJsonResponse<{
     legal_issues?: Array<{
       title?: string;
       our_position?: string;
@@ -249,7 +367,7 @@ const parseOrchestratorOutput = (content: string, input: OrchestratorInput): Orc
       related_issue_index?: number;
       suggestion?: string;
     }>;
-  }>(content, 'Orchestrator Agent 回傳格式不正確');
+  }>(content, 'Issue Analyzer Agent 回傳格式不正確');
 
   // Generate IDs for legal issues
   const legalIssues: LegalIssue[] = (parsed.legal_issues || []).map((issue) => ({
@@ -284,24 +402,12 @@ const parseOrchestratorOutput = (content: string, input: OrchestratorInput): Orc
     };
   });
 
-  const caseSummary = (parsed.case_summary || '').slice(0, 500);
-  const timelineSummary = (parsed.timeline_summary || '').slice(0, 800);
-
-  return {
-    caseSummary,
-    parties: {
-      plaintiff: parsed.parties?.plaintiff || input.existingParties.plaintiff || '',
-      defendant: parsed.parties?.defendant || input.existingParties.defendant || '',
-    },
-    timelineSummary,
-    legalIssues,
-    informationGaps,
-  };
+  return { legalIssues, informationGaps };
 };
 
-// ── Fallback when agent fails ──
+// ── Fallback when Case Reader fails ──
 
-const buildFallbackOutput = (input: OrchestratorInput): OrchestratorOutput => {
+const buildCaseReaderFallback = (input: OrchestratorInput): CaseReaderOutput => {
   return {
     caseSummary: input.readyFiles.map((f) => f.filename).join('、'),
     parties: {
@@ -309,7 +415,6 @@ const buildFallbackOutput = (input: OrchestratorInput): OrchestratorOutput => {
       defendant: input.existingParties.defendant || '',
     },
     timelineSummary: '',
-    legalIssues: [],
-    informationGaps: [],
+    fileNotes: [],
   };
 };

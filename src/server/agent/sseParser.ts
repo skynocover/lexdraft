@@ -120,16 +120,64 @@ export const collectStreamWithToolCalls = async (
     }
   });
 
+  // Gemini via AI Gateway may merge multiple parallel tool calls into one buffer
+  // (all sharing index=0), producing concatenated JSON: {…}{…}{…}
+  // Split them into individual tool calls.
   const toolCalls: ToolCall[] = [];
   for (const [, buf] of toolCallBuffers) {
-    if (buf.name) {
+    if (!buf.name) continue;
+    const argsList = splitConcatenatedJson(buf.args || '{}');
+    for (const args of argsList) {
       toolCalls.push({
-        id: buf.id || `call_${roundIndex}_${toolCalls.length}`,
+        id: `${buf.id || 'call'}_${roundIndex}_${toolCalls.length}`,
         type: 'function',
-        function: { name: buf.name, arguments: buf.args || '{}' },
+        function: { name: buf.name, arguments: args },
       });
     }
   }
 
   return { content, toolCalls };
+};
+
+/**
+ * Split concatenated JSON objects: `{…}{…}{…}` → [`{…}`, `{…}`, `{…}`]
+ * Tracks brace depth and string boundaries to handle nested objects and braces in strings.
+ */
+const splitConcatenatedJson = (str: string): string[] => {
+  const trimmed = str.trim();
+  if (!trimmed) return ['{}'];
+
+  const results: string[] = [];
+  let depth = 0;
+  let start = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        results.push(trimmed.slice(start, i + 1));
+        start = i + 1;
+      }
+    }
+  }
+
+  return results.length > 0 ? results : [trimmed];
 };

@@ -48,14 +48,14 @@ export type SSEEvent =
 export interface PipelineStepChild {
   label: string;
   detail?: string;
-  status: 'done' | 'running' | 'pending';
+  status: 'done' | 'running' | 'pending' | 'error';
   results?: string[];
 }
 
 export interface PipelineStep {
   label: string;
   detail?: string;
-  status: 'done' | 'running' | 'pending';
+  status: 'done' | 'running' | 'pending' | 'error';
   children?: PipelineStepChild[];
   content?: Record<string, unknown>;
 }

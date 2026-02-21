@@ -98,7 +98,7 @@ export const SEARCH_LAW_TOOL = {
           description: '搜尋關鍵字，例如「民法第184條」或「侵權行為」',
         },
         limit: {
-          type: 'number',
+          type: 'integer',
           description: '回傳結果數量上限（預設 5）',
         },
       },
@@ -115,6 +115,7 @@ export interface ResearchAgentInput {
     title: string;
     our_position: string;
     their_position: string;
+    mentioned_laws?: string[];
   }>;
   caseSummary: string;
   briefType: string;
@@ -122,10 +123,13 @@ export interface ResearchAgentInput {
 
 export const buildResearchAgentInput = (input: ResearchAgentInput): string => {
   const issueText = input.legalIssues
-    .map(
-      (issue) =>
-        `- [${issue.id}] ${issue.title}\n  我方：${issue.our_position}\n  對方：${issue.their_position}`,
-    )
+    .map((issue) => {
+      let text = `- [${issue.id}] ${issue.title}\n  我方：${issue.our_position}\n  對方：${issue.their_position}`;
+      if (issue.mentioned_laws?.length) {
+        text += `\n  相關法條：${issue.mentioned_laws.join('、')}`;
+      }
+      return text;
+    })
     .join('\n');
 
   return `請針對以下案件爭點進行法律研究。

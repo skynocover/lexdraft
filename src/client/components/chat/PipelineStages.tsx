@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import type { PipelineStep } from '../../../shared/types';
 import { StageBadge, StepChildren, ReviewContent } from './PipelineStageContent';
 import type { ReviewData } from './PipelineStageContent';
@@ -45,6 +45,13 @@ const StatusIndicator = ({ status }: { status: PipelineStep['status'] }) => {
     return (
       <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gr/15">
         <Check size={12} strokeWidth={3} className="text-gr" />
+      </span>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500/15">
+        <X size={12} strokeWidth={3} className="text-red-400" />
       </span>
     );
   }
@@ -109,7 +116,11 @@ const StageCard = ({ step, isLast }: { step: PipelineStep; isLast: boolean }) =>
           >
             {step.label}
           </span>
-          {step.detail && <span className="text-xs text-t3">{step.detail}</span>}
+          {step.detail && (
+            <span className={`text-xs ${step.status === 'error' ? 'text-red-400' : 'text-t3'}`}>
+              {step.detail}
+            </span>
+          )}
         </div>
         {showContent && (
           <ChevronDown

@@ -54,6 +54,12 @@ const searchWithCollection = async (
 ): Promise<LawArticle[]> => {
   const { limit, nature } = opts;
   const safeLimit = Math.min(Math.max(limit, 1), 50);
+
+  // Guard: empty query would crash MongoDB Atlas Search compound.should[].text.query
+  if (!query.trim()) {
+    return [];
+  }
+
   const articleMatch = query.match(ARTICLE_REGEX);
   const lawConceptMatch = !articleMatch ? query.match(LAW_CONCEPT_REGEX) : null;
 

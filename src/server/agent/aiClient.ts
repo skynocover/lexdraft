@@ -40,13 +40,27 @@ function getGatewayUrl(env: AIEnv): string {
 }
 
 /**
+ * Sanitize messages for Gemini via AI Gateway:
+ * Strip empty `content` from assistant messages that carry tool_calls,
+ * otherwise Gemini rejects the request with INVALID_ARGUMENT.
+ */
+const sanitizeMessages = (messages: ChatMessage[]): Record<string, unknown>[] =>
+  messages.map((m) => {
+    if (m.role === 'assistant' && m.tool_calls?.length && !m.content) {
+      const { content: _, ...rest } = m;
+      return rest;
+    }
+    return m;
+  });
+
+/**
  * Call AI Gateway with streaming enabled. Returns the raw Response
  * so the caller can parse the SSE stream incrementally.
  */
 export async function callAIStreaming(env: AIEnv, opts: CallAIOptions): Promise<Response> {
   const body: Record<string, unknown> = {
     model: MODEL,
-    messages: opts.messages,
+    messages: sanitizeMessages(opts.messages),
     stream: true,
     max_tokens: opts.maxTokens || 8192,
   };
@@ -66,6 +80,18 @@ export async function callAIStreaming(env: AIEnv, opts: CallAIOptions): Promise<
 
   if (!response.ok) {
     const errText = await response.text();
+    // Dump full message structure for debugging (content truncated)
+    const sanitized = body.messages as Record<string, unknown>[];
+    const msgDump = sanitized.map((m) => {
+      const dump: Record<string, unknown> = { role: m.role };
+      if (typeof m.content === 'string') dump.content = m.content.slice(0, 80) + '…';
+      if (m.tool_calls) dump.tool_calls = m.tool_calls;
+      if (m.tool_call_id) dump.tool_call_id = m.tool_call_id;
+      return dump;
+    });
+    console.error(
+      `AI Gateway ${response.status} | model=${MODEL} | payload=${JSON.stringify(body).length}ch\nmessages: ${JSON.stringify(msgDump, null, 2)}\ntools: ${JSON.stringify(body.tools)}\nresponse: ${errText.slice(0, 300)}`,
+    );
     throw new Error(`AI Gateway error: ${response.status} - ${errText}`);
   }
 
@@ -76,6 +102,7 @@ interface CallAISimpleOptions {
   model?: string;
   maxTokens?: number;
   responseFormat?: Record<string, unknown>;
+  signal?: AbortSignal;
 }
 
 /**
@@ -88,7 +115,7 @@ export const callAI = async (
 ): Promise<{ content: string }> => {
   const body: Record<string, unknown> = {
     model: opts?.model || MODEL,
-    messages,
+    messages: sanitizeMessages(messages),
     stream: false,
     max_tokens: opts?.maxTokens || 4096,
   };
@@ -103,6 +130,7 @@ export const callAI = async (
       'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
     },
     body: JSON.stringify(body),
+    signal: opts?.signal,
   });
   if (!response.ok) {
     const errText = await response.text();

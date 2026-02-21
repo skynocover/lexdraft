@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Check, CheckCircle2, ChevronRight, Loader2 } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronRight, Loader2, X } from 'lucide-react';
 import type { PipelineStepChild } from '../../../shared/types';
 
 // ── Badge (shared) ──
@@ -40,21 +40,29 @@ export const StepChildren = ({ children }: { children: PipelineStepChild[] }) =>
             onClick={() =>
               child.results?.length ? setExpandedChild(expandedChild === ci ? null : ci) : undefined
             }
-            className="flex w-full items-center gap-2 px-2 py-1 text-left"
+            className={`flex w-full items-start gap-2 px-2 py-1 text-left ${child.results?.length ? 'cursor-pointer' : 'cursor-default'}`}
           >
-            {child.status === 'running' ? (
-              <Loader2 size={10} className="shrink-0 animate-spin text-ac" />
-            ) : child.status === 'done' ? (
-              <Check size={10} strokeWidth={3} className="shrink-0 text-gr" />
-            ) : (
-              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-t3/30" />
-            )}
-            <span className="flex-1 truncate text-xs text-t3">{child.label}</span>
+            <span className="mt-0.5 shrink-0">
+              {child.status === 'running' ? (
+                <Loader2 size={10} className="animate-spin text-ac" />
+              ) : child.status === 'done' ? (
+                <Check size={10} strokeWidth={3} className="text-gr" />
+              ) : child.status === 'error' ? (
+                <X size={10} strokeWidth={3} className="text-red-400" />
+              ) : (
+                <span className="inline-block h-2.5 w-2.5 rounded-full border border-t3/30" />
+              )}
+            </span>
+            <span
+              className={`flex-1 text-xs ${child.status === 'error' ? 'break-all text-red-400' : 'truncate text-t3'}`}
+            >
+              {child.label}
+            </span>
             {child.detail && <span className="text-xs text-t3/60">{child.detail}</span>}
             {child.results?.length ? (
               <ChevronRight
                 size={8}
-                className={`shrink-0 text-t3/40 transition-transform duration-150 ${expandedChild === ci ? 'rotate-90' : ''}`}
+                className={`mt-0.5 shrink-0 text-t3/40 transition-transform duration-150 ${expandedChild === ci ? 'rotate-90' : ''}`}
               />
             ) : null}
           </button>

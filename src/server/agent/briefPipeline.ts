@@ -5,14 +5,22 @@ import { getDB } from '../db';
 import { type ClaudeUsage } from './claudeClient';
 import { readLawRefs, upsertManyLawRefs } from '../lib/lawRefsJson';
 import type { LawRefItem } from '../lib/lawRefsJson';
-import { runResearchAgent, type ResearchProgressCallback } from './researchAgent';
 import {
-  runOrchestratorAgent,
+  runResearchAgent,
+  type ResearchAgentResult,
+  type ResearchProgressCallback,
+} from './researchAgent';
+import { createLawSearchSession } from '../lib/lawSearch';
+import {
+  runCaseReader,
+  runIssueAnalyzer,
   type OrchestratorOutput,
+  type IssueAnalyzerOutput,
   type OrchestratorProgressCallback,
 } from './orchestratorAgent';
 import { parseJsonField, loadReadyFiles, toolError, toolSuccess } from './toolHelpers';
 import { ContextStore } from './contextStore';
+import type { LegalIssue, FoundLaw } from './pipeline/types';
 import type { ToolResult } from './tools/types';
 import type { Paragraph } from '../../client/stores/useBriefStore';
 import type { AIEnv } from './aiClient';
@@ -91,6 +99,11 @@ const createProgressTracker = (sendSSE: PipelineContext['sendSSE']) => {
       };
       await send();
     },
+    failStep: async (index: number, errorMsg: string) => {
+      steps[index].status = 'error';
+      steps[index].detail = errorMsg;
+      await send();
+    },
     completeWriting: async (total: number) => {
       steps[STEP_WRITER] = {
         ...steps[STEP_WRITER],
@@ -109,11 +122,11 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
   const totalUsage: ClaudeUsage = { input_tokens: 0, output_tokens: 0 };
   const failedSections: string[] = [];
   const store = new ContextStore();
+  const progress = createProgressTracker(ctx.sendSSE);
+  let currentStep = STEP_CASE;
 
   try {
-    const progress = createProgressTracker(ctx.sendSSE);
-
-    // ═══ Step 1: Orchestrator Agent — 案件分析 ═══
+    // ═══ Step 0: Case Reader + Issue Analyzer — 案件分析 ═══
     if (ctx.signal.aborted) return toolError('已取消');
     await progress.startStep(STEP_CASE);
 
@@ -138,58 +151,113 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     // Set up progress children for file reads
     const readChildren: PipelineStepChild[] = [];
 
-    const orchestratorProgress: OrchestratorProgressCallback = {
-      onFileReadStart: async (filename) => {
-        readChildren.push({ label: `閱讀 ${filename}`, status: 'running' });
-        await progress.setStepChildren(STEP_CASE, [...readChildren]);
-      },
-      onFileReadDone: async (filename) => {
-        const idx = readChildren.findIndex(
-          (c) => c.label === `閱讀 ${filename}` && c.status === 'running',
-        );
-        if (idx >= 0) {
-          readChildren[idx] = { ...readChildren[idx], status: 'done' };
-          await progress.setStepChildren(STEP_CASE, [...readChildren]);
-        }
-      },
-      onAnalysisStart: async () => {
-        readChildren.push({ label: '分析案件', status: 'running' });
-        await progress.setStepChildren(STEP_CASE, [...readChildren]);
-      },
-    };
+    // Parse file summaries once — reused in both branches
+    const parsedFiles = readyFiles.map((f) => {
+      const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
+      return {
+        id: f.id,
+        filename: f.filename,
+        category: f.category,
+        parsedSummary: (summary.summary as string) || null,
+      };
+    });
 
     store.briefType = ctx.briefType;
 
-    // Run Orchestrator Agent with fallback
+    // ── Branch: skip Step 0 if disputes already exist (save tokens) ──
     let orchestratorOutput: OrchestratorOutput | null = null;
-    try {
-      orchestratorOutput = await runOrchestratorAgent(
-        ctx.aiEnv,
-        ctx.drizzle,
-        {
-          readyFiles: readyFiles.map((f) => {
-            const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
-            return {
-              id: f.id,
-              filename: f.filename,
-              category: f.category,
-              summary: (summary.summary as string) || null,
-            };
-          }),
-          existingParties: { plaintiff: caseRow.plaintiff, defendant: caseRow.defendant },
-          briefType: ctx.briefType,
-        },
-        ctx.signal,
-        orchestratorProgress,
+
+    // Only skip if disputes have meaningful content (non-empty positions)
+    const hasUsableDisputes =
+      existingDisputes.length > 0 &&
+      existingDisputes.some((d) => d.our_position?.trim() || d.their_position?.trim());
+
+    if (hasUsableDisputes) {
+      // Use existing disputes — skip Case Reader + Issue Analyzer entirely
+      console.log(
+        `Skipping Step 0: reusing ${existingDisputes.length} existing disputes for case ${ctx.caseId}`,
       );
 
-      store.seedFromOrchestrator(orchestratorOutput);
-    } catch (orchErr) {
-      console.error('Orchestrator Agent failed, falling back to analyze_disputes:', orchErr);
+      const existingLegalIssues: LegalIssue[] = existingDisputes.map((d) => ({
+        id: d.id,
+        title: d.title || '未命名爭點',
+        our_position: d.our_position || '',
+        their_position: d.their_position || '',
+        key_evidence: parseJsonField<string[]>(d.evidence, []),
+        mentioned_laws: parseJsonField<string[]>(d.law_refs, []),
+        facts: [],
+      }));
 
-      // Fallback: use existing analyze_disputes logic
-      let disputeList = existingDisputes;
-      if (!disputeList.length) {
+      // Build caseSummary from pre-parsed file summaries (no LLM call)
+      const caseSummary = parsedFiles
+        .map((f) => `${f.filename}: ${f.parsedSummary || ''}`)
+        .join('\n');
+
+      orchestratorOutput = {
+        caseSummary,
+        parties: {
+          plaintiff: caseRow.plaintiff || '',
+          defendant: caseRow.defendant || '',
+        },
+        timelineSummary: '',
+        legalIssues: existingLegalIssues,
+        informationGaps: [],
+      };
+
+      store.seedFromOrchestrator(orchestratorOutput);
+
+      // Show quick progress
+      readChildren.push({ label: '沿用既有爭點', status: 'done' });
+      await progress.setStepChildren(STEP_CASE, [...readChildren]);
+    } else {
+      // No existing disputes — run full Case Reader + Issue Analyzer
+
+      const orchestratorInput = {
+        readyFiles: parsedFiles.map((f) => ({
+          id: f.id,
+          filename: f.filename,
+          category: f.category,
+          summary: f.parsedSummary,
+        })),
+        existingParties: { plaintiff: caseRow.plaintiff, defendant: caseRow.defendant },
+        briefType: ctx.briefType,
+      };
+
+      const orchestratorProgress: OrchestratorProgressCallback = {
+        onFileReadStart: async (filename) => {
+          readChildren.push({ label: `閱讀 ${filename}`, status: 'running' });
+          await progress.setStepChildren(STEP_CASE, [...readChildren]);
+        },
+        onFileReadDone: async (filename) => {
+          const idx = readChildren.findIndex(
+            (c) => c.label === `閱讀 ${filename}` && c.status === 'running',
+          );
+          if (idx >= 0) {
+            readChildren[idx] = { ...readChildren[idx], status: 'done' };
+            await progress.setStepChildren(STEP_CASE, [...readChildren]);
+          }
+        },
+        onCaseSummaryStart: async () => {
+          readChildren.push({ label: '案件摘要', status: 'running' });
+          await progress.setStepChildren(STEP_CASE, [...readChildren]);
+        },
+        onCaseSummaryDone: async () => {
+          const idx = readChildren.findIndex(
+            (c) => c.label === '案件摘要' && c.status === 'running',
+          );
+          if (idx >= 0) {
+            readChildren[idx] = { ...readChildren[idx], status: 'done' };
+            await progress.setStepChildren(STEP_CASE, [...readChildren]);
+          }
+        },
+        onIssueAnalysisStart: async () => {
+          readChildren.push({ label: '爭點分析', status: 'running' });
+          await progress.setStepChildren(STEP_CASE, [...readChildren]);
+        },
+      };
+
+      // Shared fallback: run analyze_disputes
+      const fallbackToAnalyzeDisputes = async () => {
         const { handleAnalyzeDisputes } = await import('./tools/analyzeDisputes');
         const result = await handleAnalyzeDisputes({}, ctx.caseId, ctx.db, ctx.drizzle, {
           sendSSE: ctx.sendSSE,
@@ -197,58 +265,110 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
           mongoUrl: ctx.mongoUrl,
         });
         if (result.success) {
-          disputeList = await ctx.drizzle
-            .select()
-            .from(disputes)
-            .where(eq(disputes.case_id, ctx.caseId));
+          return ctx.drizzle.select().from(disputes).where(eq(disputes.case_id, ctx.caseId));
         }
-      }
-      store.seedFromDisputes(disputeList);
-    }
+        return [];
+      };
 
-    // Sync disputes to DB if Orchestrator produced issues
-    if (orchestratorOutput && orchestratorOutput.legalIssues.length >= existingDisputes.length) {
-      // Delete old disputes and insert new ones
-      await ctx.drizzle.delete(disputes).where(eq(disputes.case_id, ctx.caseId));
-      if (orchestratorOutput.legalIssues.length) {
-        await ctx.drizzle.insert(disputes).values(
-          orchestratorOutput.legalIssues.map((issue) => ({
-            id: issue.id,
-            case_id: ctx.caseId,
-            number: 0,
-            title: issue.title,
-            our_position: issue.our_position,
-            their_position: issue.their_position,
-            evidence: issue.key_evidence.length > 0 ? JSON.stringify(issue.key_evidence) : null,
-            law_refs: issue.mentioned_laws.length > 0 ? JSON.stringify(issue.mentioned_laws) : null,
-          })),
+      try {
+        // Agent 0a: Case Reader
+        const caseReaderOutput = await runCaseReader(
+          ctx.aiEnv,
+          ctx.drizzle,
+          orchestratorInput,
+          ctx.signal,
+          orchestratorProgress,
         );
+
+        // Agent 0b: Issue Analyzer
+        let issueAnalyzerOutput: IssueAnalyzerOutput;
+        try {
+          await orchestratorProgress.onIssueAnalysisStart();
+          issueAnalyzerOutput = await runIssueAnalyzer(
+            ctx.aiEnv,
+            caseReaderOutput,
+            ctx.briefType,
+            ctx.signal,
+          );
+        } catch (issueErr) {
+          console.error('Issue Analyzer failed, falling back to analyze_disputes:', issueErr);
+
+          const disputeList = await fallbackToAnalyzeDisputes();
+          issueAnalyzerOutput = {
+            legalIssues: disputeList.map((d) => ({
+              id: d.id,
+              title: d.title || '未命名爭點',
+              our_position: d.our_position || '',
+              their_position: d.their_position || '',
+              key_evidence: [],
+              mentioned_laws: [],
+              facts: [],
+            })),
+            informationGaps: [],
+          };
+        }
+
+        orchestratorOutput = {
+          caseSummary: caseReaderOutput.caseSummary,
+          parties: caseReaderOutput.parties,
+          timelineSummary: caseReaderOutput.timelineSummary,
+          legalIssues: issueAnalyzerOutput.legalIssues,
+          informationGaps: issueAnalyzerOutput.informationGaps,
+        };
+
+        store.seedFromOrchestrator(orchestratorOutput);
+      } catch (orchErr) {
+        console.error('Case Reader failed, falling back to analyze_disputes:', orchErr);
+
+        const disputeList = await fallbackToAnalyzeDisputes();
+        store.seedFromDisputes(disputeList);
       }
 
-      // Send SSE updates
-      await ctx.sendSSE({
-        type: 'brief_update',
-        brief_id: '',
-        action: 'set_disputes',
-        data: orchestratorOutput.legalIssues.map((d, i) => ({
-          id: d.id,
-          case_id: ctx.caseId,
-          number: i + 1,
-          title: d.title,
-          our_position: d.our_position,
-          their_position: d.their_position,
-          evidence: d.key_evidence,
-          law_refs: d.mentioned_laws,
-          facts: d.facts,
-        })),
-      });
+      // Sync disputes to DB if Orchestrator produced new issues (batch for D1 param limit)
+      if (orchestratorOutput && orchestratorOutput.legalIssues.length > 0) {
+        await ctx.drizzle.delete(disputes).where(eq(disputes.case_id, ctx.caseId));
+        const DISPUTE_BATCH_SIZE = 10;
+        for (let i = 0; i < orchestratorOutput.legalIssues.length; i += DISPUTE_BATCH_SIZE) {
+          const batch = orchestratorOutput.legalIssues.slice(i, i + DISPUTE_BATCH_SIZE);
+          await ctx.drizzle.insert(disputes).values(
+            batch.map((issue) => ({
+              id: issue.id,
+              case_id: ctx.caseId,
+              number: 0,
+              title: issue.title,
+              our_position: issue.our_position,
+              their_position: issue.their_position,
+              evidence: issue.key_evidence.length > 0 ? JSON.stringify(issue.key_evidence) : null,
+              law_refs:
+                issue.mentioned_laws.length > 0 ? JSON.stringify(issue.mentioned_laws) : null,
+            })),
+          );
+        }
 
-      await ctx.sendSSE({
-        type: 'brief_update',
-        brief_id: '',
-        action: 'set_parties',
-        data: orchestratorOutput.parties,
-      });
+        await ctx.sendSSE({
+          type: 'brief_update',
+          brief_id: '',
+          action: 'set_disputes',
+          data: orchestratorOutput.legalIssues.map((d, i) => ({
+            id: d.id,
+            case_id: ctx.caseId,
+            number: i + 1,
+            title: d.title,
+            our_position: d.our_position,
+            their_position: d.their_position,
+            evidence: d.key_evidence,
+            law_refs: d.mentioned_laws,
+            facts: d.facts,
+          })),
+        });
+
+        await ctx.sendSSE({
+          type: 'brief_update',
+          brief_id: '',
+          action: 'set_parties',
+          data: orchestratorOutput.parties,
+        });
+      }
     }
 
     // Clean up: mark any stale running children as done
@@ -302,10 +422,12 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
 
     // ═══ Step 2: Legal Research Agent ═══
     if (ctx.signal.aborted) return toolError('已取消');
+    currentStep = STEP_LAW;
     await progress.startStep(STEP_LAW);
 
-    // Build case summary from file summaries for research context
-    const caseSummaryForResearch =
+    // Build case summary from file summaries for research context (cap at 4000 chars)
+    const MAX_SUMMARY_LEN = 4000;
+    const rawSummary =
       store.caseSummary ||
       readyFiles
         .map((f) => {
@@ -313,6 +435,10 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
           return `${f.filename}: ${summary.summary || ''}`;
         })
         .join('\n');
+    const caseSummaryForResearch =
+      rawSummary.length > MAX_SUMMARY_LEN
+        ? rawSummary.slice(0, MAX_SUMMARY_LEN) + '…（摘要已截斷）'
+        : rawSummary;
 
     // Track search children for progress UI
     const searchChildren: PipelineStepChild[] = [];
@@ -339,22 +465,50 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       },
     };
 
-    const researchResult = await runResearchAgent(
-      ctx.aiEnv,
-      ctx.mongoUrl,
-      {
-        legalIssues: store.legalIssues.map((issue) => ({
-          id: issue.id,
-          title: issue.title,
-          our_position: issue.our_position,
-          their_position: issue.their_position,
-        })),
-        caseSummary: caseSummaryForResearch,
-        briefType: ctx.briefType,
-      },
-      ctx.signal,
-      researchProgress,
-    );
+    let researchResult;
+    try {
+      researchResult = await runResearchAgent(
+        ctx.aiEnv,
+        ctx.mongoUrl,
+        {
+          legalIssues: store.legalIssues.map((issue) => ({
+            id: issue.id,
+            title: issue.title,
+            our_position: issue.our_position,
+            their_position: issue.their_position,
+            mentioned_laws: issue.mentioned_laws,
+          })),
+          caseSummary: caseSummaryForResearch,
+          briefType: ctx.briefType,
+        },
+        ctx.signal,
+        researchProgress,
+      );
+    } catch (researchErr) {
+      const errDetail = researchErr instanceof Error ? researchErr.message : '未知錯誤';
+      console.error('Research Agent failed, falling back to mentioned_laws lookup:', researchErr);
+
+      // Show warning in progress children (full error in results for expansion)
+      searchChildren.push({
+        label: 'Research Agent 失敗',
+        status: 'error',
+        results: [errDetail],
+      });
+      searchChildren.push({ label: '改用 mentioned_laws 直接查詢', status: 'running' });
+      await progress.setStepChildren(STEP_LAW, [...searchChildren]);
+
+      // Fallback: batch-search mentioned_laws from existing issues via MongoDB
+      researchResult = await fallbackResearchFromMentionedLaws(ctx.mongoUrl, store.legalIssues);
+
+      // Update fallback child to done
+      const fallbackIdx = searchChildren.findIndex(
+        (c) => c.label === '改用 mentioned_laws 直接查詢',
+      );
+      if (fallbackIdx >= 0) {
+        searchChildren[fallbackIdx] = { ...searchChildren[fallbackIdx], status: 'done' };
+        await progress.setStepChildren(STEP_LAW, [...searchChildren]);
+      }
+    }
 
     // Set research results directly in ContextStore
     store.research = researchResult.research;
@@ -400,6 +554,7 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
 
     // ═══ Step 3: 論證策略 ═══
     if (ctx.signal.aborted) return toolError('已取消');
+    currentStep = STEP_STRATEGY;
     await progress.startStep(STEP_STRATEGY);
 
     // Identify user-added laws (is_manual = true)
@@ -424,12 +579,14 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     // Set strategy in ContextStore
     store.setStrategyOutput(strategyOutput.claims, strategyOutput.sections);
 
-    // Persist claims to DB
+    // Persist claims to DB (batch to avoid D1's ~100 bound-param limit; 9 cols × 10 = 90)
     await ctx.drizzle.delete(claims).where(eq(claims.case_id, ctx.caseId));
     const now = new Date().toISOString();
-    if (strategyOutput.claims.length) {
+    const CLAIM_BATCH_SIZE = 10;
+    for (let i = 0; i < strategyOutput.claims.length; i += CLAIM_BATCH_SIZE) {
+      const batch = strategyOutput.claims.slice(i, i + CLAIM_BATCH_SIZE);
       await ctx.drizzle.insert(claims).values(
-        strategyOutput.claims.map((c) => ({
+        batch.map((c) => ({
           id: c.id,
           case_id: ctx.caseId,
           side: c.side,
@@ -473,6 +630,7 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     );
 
     // ═══ Step 4: Writer (sequential, uses strategy sections) ═══
+    currentStep = STEP_WRITER;
     const paragraphs: Paragraph[] = [];
 
     for (let i = 0; i < store.sections.length; i++) {
@@ -563,8 +721,92 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
 
     return toolSuccess(resultMsg);
   } catch (err) {
-    return toolError(`Pipeline 執行失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+    const errMsg = err instanceof Error ? err.message : '未知錯誤';
+    // Mark whichever step was running as error so the UI shows the cause
+    try {
+      await progress.failStep(currentStep, errMsg);
+    } catch {
+      /* ignore SSE send failures during error handling */
+    }
+    return toolError(`Pipeline 執行失敗：${errMsg}`);
   }
+};
+
+// ── Research fallback: look up mentioned_laws directly from MongoDB ──
+
+const fallbackResearchFromMentionedLaws = async (
+  mongoUrl: string,
+  legalIssues: LegalIssue[],
+): Promise<ResearchAgentResult> => {
+  const searchedLawIds = new Set<string>();
+  let totalSearches = 0;
+
+  // Collect all unique mentioned_laws across all issues
+  const allMentioned = new Map<string, string[]>(); // query → issue IDs
+  for (const issue of legalIssues) {
+    for (const law of issue.mentioned_laws) {
+      const trimmed = law.trim();
+      if (!trimmed) continue;
+      const existing = allMentioned.get(trimmed) || [];
+      existing.push(issue.id);
+      allMentioned.set(trimmed, existing);
+    }
+  }
+
+  // If no mentioned_laws at all, use issue titles as search queries
+  if (allMentioned.size === 0) {
+    for (const issue of legalIssues) {
+      const title = issue.title.trim();
+      if (!title) continue;
+      allMentioned.set(title, [issue.id]);
+    }
+  }
+
+  // Search each mentioned law
+  const lawSession = createLawSearchSession(mongoUrl);
+  const foundByIssue = new Map<string, FoundLaw[]>();
+
+  try {
+    for (const [query, issueIds] of allMentioned) {
+      totalSearches++;
+      const results = await lawSession.search(query, 3);
+
+      for (const r of results) {
+        searchedLawIds.add(r._id);
+        const foundLaw: FoundLaw = {
+          id: r._id,
+          law_name: r.law_name,
+          article_no: r.article_no,
+          content: r.content,
+          relevance: `與爭點相關（從 mentioned_laws 查詢）`,
+          side: 'attack',
+        };
+
+        for (const issueId of issueIds) {
+          const arr = foundByIssue.get(issueId) || [];
+          // Avoid duplicates
+          if (!arr.some((l) => l.id === foundLaw.id)) {
+            arr.push(foundLaw);
+          }
+          foundByIssue.set(issueId, arr);
+        }
+      }
+    }
+  } finally {
+    await lawSession.close();
+  }
+
+  // Build research results
+  const research = legalIssues.map((issue) => ({
+    issue_id: issue.id,
+    strength: 'moderate' as const,
+    found_laws: foundByIssue.get(issue.id) || [],
+    analysis: '透過 mentioned_laws 直接查詢法條（Research Agent 未執行）。',
+    attack_points: [],
+    defense_risks: [],
+  }));
+
+  return { research, searchedLawIds, totalSearches };
 };
 
 // ── Step 1 helpers ──

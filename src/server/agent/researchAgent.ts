@@ -139,32 +139,47 @@ export const runResearchAgent = async (
         tool_calls: toolCalls,
       });
 
-      // Execute tool calls
-      for (const tc of toolCalls) {
-        if (combinedSignal.aborted) break;
-        if (totalSearches >= MAX_TOTAL_SEARCHES) {
-          messages.push({
-            role: 'tool',
-            content: JSON.stringify({ error: '已達搜尋上限（20次）' }),
-            tool_call_id: tc.id,
-          });
-          continue;
-        }
+      // Execute tool calls in parallel
+      const toolResults = await Promise.all(
+        toolCalls.map(async (tc): Promise<ChatMessage> => {
+          if (combinedSignal.aborted || totalSearches >= MAX_TOTAL_SEARCHES) {
+            return {
+              role: 'tool',
+              content: combinedSignal.aborted
+                ? '已取消'
+                : JSON.stringify({ error: '已達搜尋上限（20次）' }),
+              tool_call_id: tc.id,
+            };
+          }
 
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(tc.function.arguments);
-        } catch {
-          /* empty args */
-        }
+          if (tc.function.name !== 'search_law') {
+            return {
+              role: 'tool',
+              content: `Unknown tool: ${tc.function.name}`,
+              tool_call_id: tc.id,
+            };
+          }
 
-        if (tc.function.name === 'search_law') {
-          const query = (args.query as string) || '';
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(tc.function.arguments);
+          } catch {
+            /* empty args */
+          }
+
+          const query = ((args.query as string) || '').trim();
           const limit = (args.limit as number) || 5;
+
+          if (!query) {
+            return {
+              role: 'tool',
+              content: 'query 不能為空，請提供搜尋關鍵字（如法規名稱、條號或法律概念）。',
+              tool_call_id: tc.id,
+            };
+          }
 
           const results = await handleSearchLaw(query, limit);
 
-          // Format results for LLM
           const resultText =
             results.length > 0
               ? results
@@ -174,19 +189,10 @@ export const runResearchAgent = async (
                   .join('\n\n')
               : '沒有找到相關法條。請嘗試換個關鍵字（如用全名取代縮寫、或用更廣的概念搜尋）。';
 
-          messages.push({
-            role: 'tool',
-            content: resultText,
-            tool_call_id: tc.id,
-          });
-        } else {
-          messages.push({
-            role: 'tool',
-            content: `Unknown tool: ${tc.function.name}`,
-            tool_call_id: tc.id,
-          });
-        }
-      }
+          return { role: 'tool', content: resultText, tool_call_id: tc.id };
+        }),
+      );
+      messages.push(...toolResults);
     }
 
     // Max rounds reached without final output — force extraction
