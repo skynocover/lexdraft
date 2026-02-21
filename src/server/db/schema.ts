@@ -23,6 +23,7 @@ export const cases = sqliteTable('cases', {
   plaintiff: text('plaintiff'),
   defendant: text('defendant'),
   law_refs: text('law_refs'),
+  timeline: text('timeline'), // JSON array of timeline events
   created_at: text('created_at'),
   updated_at: text('updated_at'),
 });
@@ -125,21 +126,7 @@ export const claims = sqliteTable('claims', {
   created_at: text('created_at'),
 });
 
-// 3.7 timeline_events — 時間軸事件
-export const timelineEvents = sqliteTable('timeline_events', {
-  id: text('id').primaryKey(),
-  case_id: text('case_id')
-    .notNull()
-    .references(() => cases.id),
-  date: text('date').notNull(),
-  title: text('title').notNull(),
-  description: text('description'),
-  source_file: text('source_file'),
-  is_critical: integer('is_critical', { mode: 'boolean' }).default(false),
-  created_at: text('created_at'),
-});
-
-// 3.8 messages — 聊天記錄
+// 3.7 messages — 聊天記錄
 export const messages = sqliteTable('messages', {
   id: text('id').primaryKey(),
   case_id: text('case_id')

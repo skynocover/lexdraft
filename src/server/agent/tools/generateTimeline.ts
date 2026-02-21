@@ -1,7 +1,13 @@
 import { eq } from 'drizzle-orm';
-import { nanoid } from 'nanoid';
-import { timelineEvents as timelineEventsTable } from '../../db/schema';
-import { createAnalysisTool } from './analysisFactory';
+import { cases } from '../../db/schema';
+import {
+  toolError,
+  loadReadyFiles,
+  buildFileContext,
+  callAnalysisAI,
+  parseLLMJsonArray,
+} from '../toolHelpers';
+import type { ToolHandler, ToolContext, ToolResult } from './types';
 
 interface TimelineItem {
   date: string;
@@ -11,12 +17,9 @@ interface TimelineItem {
   is_critical: boolean;
 }
 
-export const handleGenerateTimeline = createAnalysisTool<TimelineItem>({
-  fileContextOptions: { includeDocDate: true },
-
-  buildPrompt: (
-    fileContext,
-  ) => `你是專業的台灣法律分析助手。請根據以下案件文件摘要，產生時間軸事件列表。
+const buildPrompt = (
+  fileContext: string,
+) => `你是專業的台灣法律分析助手。請根據以下案件文件摘要，產生時間軸事件列表。
 
 ${fileContext}
 
@@ -36,42 +39,63 @@ ${fileContext}
 - is_critical 為布林值，標記關鍵事件（如起訴、判決、簽約、違約等）
 - 按日期從早到晚排序
 - 重要：絕對不要使用 emoji 或特殊符號
-- 只回傳 JSON 陣列，不要其他文字。`,
+- 只回傳 JSON 陣列，不要其他文字。`;
 
-  parseErrorLabel: '無法解析時間軸結果',
-  emptyMessage: '未能從檔案中識別出時間軸事件。',
+export const handleGenerateTimeline: ToolHandler = async (
+  _args: Record<string, unknown>,
+  caseId: string,
+  db: D1Database,
+  drizzle,
+  ctx?: ToolContext,
+): Promise<ToolResult> => {
+  if (!ctx) {
+    return toolError('Error: missing execution context');
+  }
 
-  preProcess: (items) => items.sort((a, b) => a.date.localeCompare(b.date)),
+  // 1. Load all ready files
+  let readyFiles;
+  try {
+    readyFiles = await loadReadyFiles(db, caseId);
+  } catch (e) {
+    return e as ToolResult;
+  }
 
-  persistAndNotify: async (items, caseId, drizzle, sendSSE) => {
-    await drizzle.delete(timelineEventsTable).where(eq(timelineEventsTable.case_id, caseId));
+  // 2. Build context + prompt → call AI
+  const fileContext = buildFileContext(readyFiles, { includeDocDate: true });
+  const prompt = buildPrompt(fileContext);
+  const responseText = await callAnalysisAI(ctx.aiEnv, prompt);
 
-    const now = new Date().toISOString();
-    if (items.length) {
-      await drizzle.insert(timelineEventsTable).values(
-        items.map((evt) => ({
-          id: nanoid(),
-          case_id: caseId,
-          date: evt.date,
-          title: evt.title,
-          description: evt.description || '',
-          source_file: evt.source_file || '',
-          is_critical: evt.is_critical || false,
-          created_at: now,
-        })),
-      );
-    }
+  // 3. Parse JSON array from response
+  let items: TimelineItem[];
+  try {
+    items = parseLLMJsonArray<TimelineItem>(responseText, '無法解析時間軸結果');
+  } catch {
+    return toolError('無法解析時間軸結果');
+  }
 
-    await sendSSE({
-      type: 'brief_update',
-      brief_id: '',
-      action: 'set_timeline',
-      data: items,
-    });
+  if (!items.length) {
+    return { result: '未能從檔案中識別出時間軸事件。', success: false };
+  }
 
-    const summary = items
-      .map((e) => `${e.date} ${e.title}${e.is_critical ? ' (關鍵)' : ''}`)
-      .join('\n');
-    return `已產生 ${items.length} 個時間軸事件：\n${summary}`;
-  },
-});
+  // 4. Sort by date
+  items.sort((a, b) => a.date.localeCompare(b.date));
+
+  // 5. Persist to cases.timeline JSON column
+  await drizzle
+    .update(cases)
+    .set({ timeline: JSON.stringify(items) })
+    .where(eq(cases.id, caseId));
+
+  // 6. Send SSE notification
+  await ctx.sendSSE({
+    type: 'brief_update',
+    brief_id: '',
+    action: 'set_timeline',
+    data: items,
+  });
+
+  const summary = items
+    .map((e) => `${e.date} ${e.title}${e.is_critical ? ' (關鍵)' : ''}`)
+    .join('\n');
+  return { result: `已產生 ${items.length} 個時間軸事件：\n${summary}`, success: true };
+};

@@ -12,7 +12,6 @@ import {
   disputes,
   damages,
   claims,
-  timelineEvents,
   messages,
 } from '../db/schema';
 import { notFound } from '../lib/errors';
@@ -141,7 +140,6 @@ casesRouter.delete('/:id', async (c) => {
   await db.delete(claims).where(eq(claims.case_id, id));
   await db.delete(disputes).where(eq(disputes.case_id, id));
   await db.delete(damages).where(eq(damages.case_id, id));
-  await db.delete(timelineEvents).where(eq(timelineEvents.case_id, id));
   await db.delete(messages).where(eq(messages.case_id, id));
   await db.delete(briefs).where(eq(briefs.case_id, id));
 

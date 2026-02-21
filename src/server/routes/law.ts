@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { getDB } from '../db';
-import { timelineEvents, cases, claims } from '../db/schema';
-import { asc } from 'drizzle-orm';
+import { cases, claims } from '../db/schema';
 import { searchLaw } from '../lib/lawSearch';
 import { readLawRefs, upsertManyLawRefs, removeLawRef } from '../lib/lawRefsJson';
 import type { AppEnv } from '../types';
@@ -89,18 +88,20 @@ lawRouter.get('/cases/:caseId/claims', async (c) => {
   return c.json(rows);
 });
 
-// GET /api/cases/:caseId/timeline — D1 timeline_events for a case
+// GET /api/cases/:caseId/timeline — read from cases.timeline JSON
 lawRouter.get('/cases/:caseId/timeline', async (c) => {
   const caseId = c.req.param('caseId');
   const db = getDB(c.env.DB);
 
-  const rows = await db
-    .select()
-    .from(timelineEvents)
-    .where(eq(timelineEvents.case_id, caseId))
-    .orderBy(asc(timelineEvents.date));
+  const [row] = await db
+    .select({ timeline: cases.timeline })
+    .from(cases)
+    .where(eq(cases.id, caseId));
 
-  return c.json(rows);
+  if (!row) throw notFound('案件');
+
+  const items = row.timeline ? JSON.parse(row.timeline) : [];
+  return c.json(items);
 });
 
 // GET /api/cases/:caseId/parties — parties from case record
