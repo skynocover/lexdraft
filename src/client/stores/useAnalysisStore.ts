@@ -38,7 +38,6 @@ export interface TimelineEvent {
   date: string;
   title: string;
   description: string;
-  source_file: string;
   is_critical: boolean;
 }
 

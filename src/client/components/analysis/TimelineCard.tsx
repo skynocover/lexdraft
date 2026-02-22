@@ -56,7 +56,6 @@ export const TimelineCard = ({ event, onEdit, onDelete }: TimelineCardProps) => 
         {event.description && (
           <p className="mt-1 text-sm leading-relaxed text-t2">{event.description}</p>
         )}
-        {event.source_file && <p className="mt-1 text-xs text-t3">來源：{event.source_file}</p>}
       </div>
     </div>
   );

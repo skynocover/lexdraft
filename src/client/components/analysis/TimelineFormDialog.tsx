@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
+import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
 import type { TimelineEvent } from '../../stores/useAnalysisStore';
 
@@ -24,7 +25,6 @@ export const TimelineFormDialog = ({
   const [date, setDate] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [sourceFile, setSourceFile] = useState('');
   const [isCritical, setIsCritical] = useState(false);
 
   useEffect(() => {
@@ -32,7 +32,6 @@ export const TimelineFormDialog = ({
       setDate(event?.date ?? '');
       setTitle(event?.title ?? '');
       setDescription(event?.description ?? '');
-      setSourceFile(event?.source_file ?? '');
       setIsCritical(event?.is_critical ?? false);
     }
   }, [open, event]);
@@ -46,7 +45,6 @@ export const TimelineFormDialog = ({
       date: date.trim(),
       title: title.trim(),
       description: description.trim(),
-      source_file: sourceFile.trim(),
       is_critical: isCritical,
     });
   };
@@ -59,20 +57,6 @@ export const TimelineFormDialog = ({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="tl-date" className="text-t2">
-              日期
-            </Label>
-            <Input
-              id="tl-date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              required
-              className="border-bd bg-bg-2 text-t1"
-            />
-          </div>
-
           <div className="space-y-2">
             <Label htmlFor="tl-title" className="text-t2">
               標題
@@ -88,27 +72,29 @@ export const TimelineFormDialog = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="tl-desc" className="text-t2">
-              描述
+            <Label htmlFor="tl-date" className="text-t2">
+              日期
             </Label>
             <Input
-              id="tl-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="事件詳細描述"
+              id="tl-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              required
               className="border-bd bg-bg-2 text-t1"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="tl-source" className="text-t2">
-              來源檔案
+            <Label htmlFor="tl-desc" className="text-t2">
+              描述
             </Label>
-            <Input
-              id="tl-source"
-              value={sourceFile}
-              onChange={(e) => setSourceFile(e.target.value)}
-              placeholder="來源檔案名稱"
+            <Textarea
+              id="tl-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="事件詳細描述"
+              rows={3}
               className="border-bd bg-bg-2 text-t1"
             />
           </div>

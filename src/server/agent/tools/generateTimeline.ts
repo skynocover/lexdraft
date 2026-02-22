@@ -15,7 +15,6 @@ interface TimelineItem {
   date: string;
   title: string;
   description: string;
-  source_file: string;
   is_critical: boolean;
 }
 
@@ -31,7 +30,6 @@ ${fileContext}
     "date": "2024-01-15",
     "title": "事件標題",
     "description": "事件詳細描述",
-    "source_file": "來源檔案名稱",
     "is_critical": true
   }
 ]

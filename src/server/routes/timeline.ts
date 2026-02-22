@@ -11,7 +11,6 @@ interface TimelineItem {
   date: string;
   title: string;
   description: string;
-  source_file: string;
   is_critical: boolean;
 }
 
@@ -73,7 +72,6 @@ timelineRouter.post('/cases/:caseId/timeline', async (c) => {
     date: string;
     title: string;
     description?: string;
-    source_file?: string;
     is_critical?: boolean;
   }>();
   const drizzle = getDB(c.env.DB);
@@ -85,7 +83,6 @@ timelineRouter.post('/cases/:caseId/timeline', async (c) => {
     date: body.date,
     title: body.title,
     description: body.description || '',
-    source_file: body.source_file || '',
     is_critical: body.is_critical ?? false,
   };
 
@@ -105,7 +102,6 @@ timelineRouter.put('/cases/:caseId/timeline/:eventId', async (c) => {
     date?: string;
     title?: string;
     description?: string;
-    source_file?: string;
     is_critical?: boolean;
   }>();
   const drizzle = getDB(c.env.DB);
@@ -117,7 +113,6 @@ timelineRouter.put('/cases/:caseId/timeline/:eventId', async (c) => {
   if (body.date !== undefined) items[idx].date = body.date;
   if (body.title !== undefined) items[idx].title = body.title;
   if (body.description !== undefined) items[idx].description = body.description;
-  if (body.source_file !== undefined) items[idx].source_file = body.source_file;
   if (body.is_critical !== undefined) items[idx].is_critical = body.is_critical;
 
   items.sort((a, b) => a.date.localeCompare(b.date));
