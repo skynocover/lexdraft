@@ -25,7 +25,6 @@ interface TokenUsage {
 interface ChatState {
   messages: ChatMessage[];
   isStreaming: boolean;
-  agentProgress: { current: number; total: number } | null;
   tokenUsage: TokenUsage | null;
   error: string | null;
   prefillInput: string | null;
@@ -36,7 +35,6 @@ interface ChatState {
   appendToMessage: (id: string, text: string) => void;
   clearMessages: () => void;
   setIsStreaming: (isStreaming: boolean) => void;
-  setAgentProgress: (progress: { current: number; total: number } | null) => void;
   setTokenUsage: (usage: TokenUsage | null) => void;
   setError: (error: string | null) => void;
   setPrefillInput: (text: string | null) => void;
@@ -52,7 +50,6 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isStreaming: false,
-  agentProgress: null,
   tokenUsage: null,
   error: null,
   prefillInput: null,
@@ -68,9 +65,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       messages: s.messages.map((m) => (m.id === id ? { ...m, content: m.content + text } : m)),
     })),
-  clearMessages: () => set({ messages: [], tokenUsage: null, error: null, agentProgress: null }),
+  clearMessages: () => set({ messages: [], tokenUsage: null, error: null }),
   setIsStreaming: (isStreaming) => set({ isStreaming }),
-  setAgentProgress: (agentProgress) => set({ agentProgress }),
   setTokenUsage: (tokenUsage) => set({ tokenUsage }),
   setError: (error) => set({ error }),
   setPrefillInput: (prefillInput) => set({ prefillInput }),
@@ -93,15 +89,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (caseId: string, message: string) => {
-    const {
-      addMessage,
-      appendToMessage,
-      updateMessage,
-      setIsStreaming,
-      setAgentProgress,
-      setTokenUsage,
-      setError,
-    } = get();
+    const { addMessage, appendToMessage, updateMessage, setIsStreaming, setTokenUsage, setError } =
+      get();
 
     // Optimistic add user message
     const userMsgId = nanoid();
@@ -114,7 +103,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     setIsStreaming(true);
     setError(null);
-    setAgentProgress(null);
 
     const abortController = new AbortController();
     set({ _abortController: abortController });
@@ -165,7 +153,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         addMessage,
         appendToMessage,
         updateMessage,
-        setAgentProgress,
         setTokenUsage,
         setError,
         getMessages: () => get().messages,
@@ -198,7 +185,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     } finally {
       setIsStreaming(false);
-      setAgentProgress(null);
       set({ _abortController: null });
       // Clear rebuttal targets when done
       useBriefStore.getState().setRebuttalTargetFileIds([]);
@@ -215,7 +201,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch {
       // Ignore cancel errors
     }
-    set({ isStreaming: false, agentProgress: null, _abortController: null });
+    set({ isStreaming: false, _abortController: null });
   },
 
   clearConversation: async (caseId: string) => {
@@ -225,6 +211,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error('clearConversation error:', err);
     }
     useRewindStore.getState().clear();
-    set({ messages: [], tokenUsage: null, error: null, agentProgress: null });
+    set({ messages: [], tokenUsage: null, error: null });
   },
 }));

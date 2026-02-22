@@ -325,12 +325,6 @@ ${paragraphList}
         break;
       }
 
-      await sendSSE({
-        type: 'progress',
-        current: round + 1,
-        total: MAX_ROUNDS,
-      });
-
       // Call AI Gateway (streaming)
       const response = await callAIStreaming(aiEnv, {
         messages: chatMessages,

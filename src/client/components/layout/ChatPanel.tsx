@@ -9,7 +9,7 @@ export function ChatPanel() {
   const { caseId } = useParams();
   const messages = useChatStore((s) => s.messages);
   const isStreaming = useChatStore((s) => s.isStreaming);
-  const agentProgress = useChatStore((s) => s.agentProgress);
+
   const error = useChatStore((s) => s.error);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const cancelChat = useChatStore((s) => s.cancelChat);
@@ -22,19 +22,6 @@ export function ChatPanel() {
   // Find last assistant message id
   const lastAssistantId = useMemo(
     () => messages.findLast((m) => m.role === 'assistant')?.id ?? null,
-    [messages],
-  );
-
-  // Detect if a write_full_brief pipeline is actively running (has its own progress UI)
-  const hasPipelineRunning = useMemo(
-    () =>
-      messages.some(
-        (m) =>
-          m.role === 'tool_call' &&
-          m.metadata?.tool_name === 'write_full_brief' &&
-          m.metadata?.status === 'running' &&
-          Array.isArray(m.metadata?.pipeline_steps),
-      ),
     [messages],
   );
 
@@ -144,23 +131,6 @@ export function ChatPanel() {
             />
           );
         })}
-
-        {/* Progress indicator (hidden when pipeline has its own progress) */}
-        {agentProgress && isStreaming && !hasPipelineRunning && (
-          <div className="flex items-center gap-2 px-2 py-1">
-            <div className="h-1 flex-1 rounded-full bg-bg-3">
-              <div
-                className="h-1 rounded-full bg-ac transition-all"
-                style={{
-                  width: `${(agentProgress.current / agentProgress.total) * 100}%`,
-                }}
-              />
-            </div>
-            <span className="text-[11px] text-t3">
-              {agentProgress.current}/{agentProgress.total}
-            </span>
-          </div>
-        )}
 
         {/* Error banner */}
         {error && (

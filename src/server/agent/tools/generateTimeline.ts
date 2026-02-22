@@ -94,8 +94,5 @@ export const handleGenerateTimeline: ToolHandler = async (
     data: items,
   });
 
-  const summary = items
-    .map((e) => `${e.date} ${e.title}${e.is_critical ? ' (關鍵)' : ''}`)
-    .join('\n');
-  return { result: `已產生 ${items.length} 個時間軸事件：\n${summary}`, success: true };
+  return { result: `已產生 ${items.length} 個時間軸事件`, success: true };
 };

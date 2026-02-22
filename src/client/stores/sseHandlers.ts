@@ -22,7 +22,6 @@ interface SSEActions {
   addMessage: (message: ChatMessage) => void;
   appendToMessage: (id: string, text: string) => void;
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
-  setAgentProgress: (progress: { current: number; total: number } | null) => void;
   setTokenUsage: (
     usage: {
       prompt_tokens: number;
@@ -131,10 +130,6 @@ export const handleSSEEvent = (
       }
       break;
     }
-
-    case 'progress':
-      actions.setAgentProgress({ current: event.current, total: event.total });
-      break;
 
     case 'usage':
       actions.setTokenUsage({

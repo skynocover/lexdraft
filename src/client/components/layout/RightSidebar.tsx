@@ -185,7 +185,7 @@ const AnalysisSidebarContent = () => {
   };
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Sub-tab pills */}
       <div className="sticky top-0 z-10 flex gap-1 border-b border-bd bg-bg-0 px-2.5 py-2">
         {ANALYSIS_SUB_TABS.map((tab) => {
