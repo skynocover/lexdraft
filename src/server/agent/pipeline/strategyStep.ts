@@ -7,6 +7,7 @@ import type { PipelineContext } from '../briefPipeline';
 import type { ContextStore } from '../contextStore';
 import type { loadReadyFiles } from '../toolHelpers';
 import type { AIEnv } from '../aiClient';
+import type { TimelineItem, DamageItem } from './types';
 
 // ── Step 3: 論證策略 helpers ──
 
@@ -14,14 +15,10 @@ export const callStrategist = async (
   ctx: PipelineContext,
   store: ContextStore,
   readyFiles: Awaited<ReturnType<typeof loadReadyFiles>>,
-  damageList: Array<{
-    id: string;
-    category: string;
-    description: string | null;
-    amount: number;
-  }>,
+  damageList: DamageItem[],
   usage: ClaudeUsage,
   userAddedLaws: Array<{ id: string; law_name: string; article_no: string; content: string }>,
+  timelineList: TimelineItem[] = [],
 ): Promise<StrategyOutput> => {
   const fileSummaries = readyFiles.map((f) => {
     const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
@@ -54,12 +51,9 @@ export const callStrategist = async (
     })),
     informationGaps: store.informationGaps,
     fileSummaries,
-    damages: damageList.map((d) => ({
-      category: d.category,
-      description: d.description,
-      amount: d.amount,
-    })),
+    damages: damageList,
     userAddedLaws,
+    timeline: timelineList,
   });
 
   // First attempt

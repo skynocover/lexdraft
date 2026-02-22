@@ -11,6 +11,8 @@ import type {
   FoundLaw,
   DraftSection,
   WriterContext,
+  TimelineItem,
+  DamageItem,
 } from './pipeline/types';
 import type { OrchestratorOutput } from './orchestratorAgent';
 
@@ -37,6 +39,8 @@ export class ContextStore {
   briefType = '';
   legalIssues: LegalIssue[] = [];
   informationGaps: InformationGap[] = [];
+  damages: DamageItem[] = [];
+  timeline: TimelineItem[] = [];
 
   // Step 2: 法律研究 Agent 產出 (Phase 2 — currently seeded from law search)
   research: ResearchResult[] = [];

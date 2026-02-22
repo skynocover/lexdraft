@@ -1,4 +1,5 @@
 import { buildCaseMetaLines, buildInstructionsBlock } from './promptHelpers';
+import type { TimelineItem } from '../pipeline/types';
 
 // ── 論證策略 Step — System Prompt ──
 
@@ -53,6 +54,14 @@ export const STRATEGIST_SYSTEM_PROMPT = `你是一位資深台灣訴訟律師。
 - 「爭執」的事實：需要重點論證，提出證據佐證
 - 「自認」的事實：明確援引對方書狀中的自認
 - 「推定」的事實：援引法律推定，轉移舉證責任
+
+═══ 時間軸運用 ═══
+
+- 時間軸提供案件事件的時序脈絡，★ 標記為關鍵事件
+- 在設計論證策略時，利用時間軸確認事實發生順序，建立因果關係
+- 在 fact_application 中引用關鍵時間點，強化事實涵攝的說服力
+- 若時間軸顯示對方有遲延或違約行為，可作為攻擊要點
+- 若案件涉及時效問題，時間軸是判斷時效起算的重要依據
 
 ═══ Information Gaps 處理 ═══
 
@@ -204,6 +213,7 @@ export interface StrategistInput {
     article_no: string;
     content: string;
   }>;
+  timeline: TimelineItem[];
 }
 
 export const buildStrategistInput = (input: StrategistInput): string => {
@@ -263,6 +273,13 @@ export const buildStrategistInput = (input: StrategistInput): string => {
           .join('\n')
       : '無';
 
+  const timelineText =
+    input.timeline.length > 0
+      ? input.timeline
+          .map((t) => `- ${t.date} ${t.is_critical ? '★' : ' '} ${t.title}：${t.description}`)
+          .join('\n')
+      : '無';
+
   const meta = input.caseMetadata;
   const metaLines = buildCaseMetaLines(meta);
   const caseMetaBlock = metaLines.length > 0 ? `\n[案件基本資訊]\n${metaLines.join('\n')}\n` : '';
@@ -289,5 +306,8 @@ ${gapText}
 ${userLawText}
 
 [損害賠償]
-${damageText}${input.damages.length > 0 ? `\n合計：NT$ ${totalDamage.toLocaleString()}` : ''}`;
+${damageText}${input.damages.length > 0 ? `\n合計：NT$ ${totalDamage.toLocaleString()}` : ''}
+
+[時間軸]
+${timelineText}`;
 };

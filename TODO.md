@@ -30,6 +30,7 @@
 - [x] Pipeline v3 Phase 3b：事實爭議管理 + 完整 Claim Graph
 - [x] Pipeline v3 Phase 4：品質審查（結構化前檢 + LLM 審查）
 - [x] Pipeline 進度優化：隱藏舊進度條、法條搜尋顯示逐筆查詢進度（可展開看結果）、自動去除重複標題
+- [x] Pipeline 金額與時間軸 Check-and-Reuse：Step 0 三路平行（爭點/金額/時間軸），存在則沿用，不存在則自動生成；Strategist 接收時間軸資訊
 - [x] 法條引用切換書狀時正確更新：改為僅依據當前書狀段落引用判斷已引用/備用
 - [x] 法條搜尋優化：PCode 直接查表、別名解析（消保法→消費者保護法）、條號格式標準化、searchLawBatch 減少連線數
 - [ ] 用戶自定義指令：律師可建立常用 prompt 指令集

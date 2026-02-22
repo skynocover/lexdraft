@@ -6,7 +6,10 @@
 - [兩種撰寫模式](#兩種撰寫模式)
 - [write_full_brief Pipeline 深入解析](#write_full_brief-pipeline-深入解析)
   - [架構總覽](#架構總覽)
+  - [完整流程圖（Mermaid）](#完整流程圖mermaid)
   - [ContextStore 中央資料庫](#contextstore-中央資料庫)
+    - [`seedFromOrchestrator()` 詳解](#seedfromorchestrator-詳解)
+    - [步驟間資料依賴總覽](#步驟間資料依賴總覽)
   - [Step 0：案件分析（Case Reader + Issue Analyzer）](#step-0案件分析case-reader--issue-analyzer)
   - [Step 1：法律研究（Research Agent）](#step-1法律研究research-agent)
   - [Step 2：論證策略（Strategist）](#step-2論證策略strategist)
@@ -82,24 +85,301 @@ Step 3: Writer (Claude Haiku 4.5 + Citations API)
       逐段撰寫、自動引用、後處理
 ```
 
+### 完整流程圖（Mermaid）
+
+```mermaid
+flowchart TD
+    Start([Pipeline 開始]) --> LoadInit
+
+    subgraph Init["初始化 (Promise.all 平行)"]
+        LoadInit["A1: 載入檔案元資料"] --> ParallelLoad["A2: 4 個 DB 查詢 + 建立書狀"]
+    end
+
+    ParallelLoad --> ThreeWay
+
+    subgraph ThreeWay["三路平行 Check-and-Reuse (Promise.all)"]
+        direction LR
+        subgraph DisputeBranch["爭點"]
+            CheckDisputes{"DB 已有<br/>有效爭點？"}
+            CheckDisputes -- "YES" --> ReuseDisputes["沿用既有爭點"]
+            CheckDisputes -- "NO" --> CaseReader["Case Reader<br/>+ Issue Analyzer"]
+        end
+        subgraph DamageBranch["金額"]
+            CheckDamages{"DB 已有<br/>金額？"}
+            CheckDamages -- "YES" --> ReuseDamages["沿用既有金額"]
+            CheckDamages -- "NO" --> CalcDamages["calculate_damages"]
+        end
+        subgraph TimelineBranch["時間軸"]
+            CheckTimeline{"DB 已有<br/>時間軸？"}
+            CheckTimeline -- "YES" --> ReuseTimeline["沿用既有時間軸"]
+            CheckTimeline -- "NO" --> GenTimeline["generate_timeline"]
+        end
+    end
+
+    ThreeWay --> StoreResults["存入 ContextStore<br/>damages + timeline"]
+    StoreResults --> MergePoint["A12: 載入檔案全文 + 既有法條"]
+
+    MergePoint --> ResearchAgent
+
+    subgraph Step1["Step 1：法條研究"]
+        ResearchAgent["B1: Research Agent<br/>Gemini 多輪, search_law 平行"]
+        ResearchAgent --> RASuccess{成功？}
+        RASuccess -- YES --> StoreResearch["B2: 存入 ContextStore<br/>快取法條到 D1"]
+        RASuccess -- NO --> FallbackResearch["B3: fallback<br/>mentioned_laws 直查 MongoDB"]
+        FallbackResearch --> StoreResearch
+    end
+
+    StoreResearch --> Strategist
+
+    subgraph Step2["Step 2：論證策略"]
+        Strategist["C1: Strategist<br/>Claude Haiku 4.5 single-shot"]
+        Strategist --> Validate{"C2: 驗證<br/>結構完整？"}
+        Validate -- YES --> UseStrategy["C3: 使用策略結果"]
+        Validate -- NO --> Retry["C4: 注入錯誤訊息重試"]
+        Retry --> UseStrategy
+        UseStrategy --> SetStrategy["C5: 寫入 claims 表<br/>SSE: set_claims"]
+    end
+
+    SetStrategy --> WriterLoop
+
+    subgraph Step3["Step 3：書狀撰寫"]
+        WriterLoop["D1: for each section（順序）"]
+        WriterLoop --> BuildCtx["D2: 組裝 3 層上下文"]
+        BuildCtx --> CallClaude["D3: Claude Citations API 撰寫"]
+        CallClaude --> PostProcess["D4: 後處理"]
+        PostProcess --> SaveParagraph["D5: 存入 DB + SSE: add_paragraph"]
+        SaveParagraph --> NextSection{還有段落？}
+        NextSection -- YES --> WriterLoop
+        NextSection -- NO --> Done
+    end
+
+    subgraph Cleanup["收尾"]
+        Done["E1: 所有段落完成"] --> CleanLaws["E2: 清理未引用法條"]
+        CleanLaws --> SaveVersion["E3: 建立版本快照"]
+        SaveVersion --> ReportUsage["E4: 回報 Token 用量"]
+        ReportUsage --> Return["E5: 回傳完成訊息"]
+    end
+```
+
+### 流程圖節點說明
+
+#### 初始化
+
+| 編號 | 節點                     | 實際做什麼                                                                                                                                         | 目的                                             |
+| ---- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| A1   | 載入檔案元資料           | 從 D1 撈出所有 `status='ready'` 的檔案（filename、category、summary）                                                                              | 確認哪些檔案已處理完畢可供 AI 使用               |
+| A2   | 4 個 DB 查詢 + 建立書狀  | `Promise.all` 同時：(1) 查 disputes 表 (2) 查 damages 表 (3) INSERT briefs 建空白書狀 + SSE 通知前端 (4) 查 cases 表拿原告/被告 + `cases.timeline` | 平行取得所有初始資料，建立書狀讓前端先顯示空白頁 |
+| A3   | 三路平行 Check-and-Reuse | `Promise.all` 同時檢查爭點、金額、時間軸是否已存在於 DB，存在則沿用，不存在則呼叫對應工具自動生成                                                  | 省下不必要的 AI 呼叫，三者互不依賴可完全平行     |
+
+#### Step 0：案件確認
+
+| 編號 | 節點                       | 實際做什麼                                                                                                                    | 目的                                                                                                                                           |
+| ---- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| A4   | 沿用既有爭點               | 不呼叫 AI。disputes 轉為 `LegalIssue[]`，caseSummary 用檔案摘要拼接，parties 從 cases 表讀取                                  | 節省 token 費用，已有爭點不需重新分析                                                                                                          |
+| A5   | seedFromOrchestrator()     | 將 caseSummary、parties、timelineSummary、legalIssues、informationGaps 一次寫入 ContextStore                                  | 統一交接點：不管走哪條路徑，後續 Step 1/2/3 都從 ContextStore 讀取                                                                             |
+| A6   | Case Reader                | Gemini 多輪 tool loop：AI 自主決定讀哪些檔案（`read_file`），按優先順序讀取（起訴狀→答辯狀→準備書狀→證據），每份最多 15000 字 | 深度閱讀案件原始檔案，產出結構化摘要：caseSummary、parties、timelineSummary、每份檔案的 fileNotes（關鍵事實、提及法條、各方主張、金額）        |
+| A7   | Issue Analyzer             | Gemini single-shot：輸入 Case Reader 的全部產出（caseSummary + parties + fileNotes），一次性分析                              | 從摘要中辨識法律爭點，為每個爭點產出：雙方立場、事實分類（承認/爭執/自認/推定/主張）、相關證據、提及法條，以及 informationGaps（缺少哪些證據） |
+| A8   | fallback: analyze_disputes | Case Reader 失敗時，改用 `analyze_disputes` 工具（只用檔案摘要，不讀全文）                                                    | 確保即使 AI 閱讀失敗，仍能產出爭點（精度較低，無事實分類）                                                                                     |
+| A9   | 組裝 OrchestratorOutput    | 合併 Case Reader 的 `{ caseSummary, parties, timelineSummary }` + Issue Analyzer 的 `{ legalIssues, informationGaps }`        | 統一格式，傳入 seedFromOrchestrator()                                                                                                          |
+| A10  | fallback: 保留 parties     | Issue Analyzer 失敗時，保留 Case Reader 的 parties/summary，爭點改用 `analyze_disputes` 產生                                  | 不因 Issue Analyzer 失敗而丟失已讀取的檔案資訊                                                                                                 |
+| A11  | 寫入 disputes 表           | 刪除舊爭點，插入新爭點到 D1。發送 SSE `set_disputes`（前端爭點面板）+ `set_parties`（前端原被告顯示）                         | 持久化爭點到 DB，同步更新前端 UI                                                                                                               |
+| A12  | 載入檔案全文 + 既有法條    | 從 D1 載入所有檔案的 `full_text`/`content_md` 到 `fileContentMap`；載入 `law_refs`（識別使用者手動加的法條）                  | Step 3 Writer 需要檔案全文作為 Citation 來源；Strategist 需要知道使用者手動加了哪些法條                                                        |
+
+#### Step 1：法條研究
+
+| 編號 | 節點                          | 實際做什麼                                                                                                                                                       | 目的                                                                                                                  |
+| ---- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| B1   | Research Agent                | Gemini 多輪 tool loop：輸入 legalIssues + caseSummary + briefType。AI 自主決定搜什麼（`search_law` 查 MongoDB 22 萬條法條），同一輪可平行搜多條（`Promise.all`） | 為每個爭點找到相關法條，標記攻防（attack/defense_risk/reference），評估爭點法律強度（strong/moderate/weak/untenable） |
+| B2   | 存入 ContextStore + 快取法條  | `store.research = 結果`；找到的法條用 `upsertManyLawRefs()` 快取到 D1 的 `law_refs` JSON 欄位                                                                    | 供 Step 2 Strategist 和 Step 3 Writer 使用；快取避免後續重複查 MongoDB                                                |
+| B3   | fallback: mentioned_laws 直查 | Research Agent 失敗時，直接用爭點的 `mentioned_laws` 和爭點標題作為查詢字串搜 MongoDB                                                                            | 確保至少有法條可用（但不經 AI 判斷攻防，全標為 attack，精度較低）                                                     |
+
+#### Step 2：論證策略
+
+| 編號 | 節點                 | 實際做什麼                                                                                                              | 目的                                                                                                                                                                            |
+| ---- | -------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1   | Strategist           | Claude Haiku 4.5 single-shot：輸入爭點 + 法條研究結果 + 檔案摘要 + 金額明細 + 時間軸 + 使用者手動法條 + informationGaps | 設計書狀論證結構。產出 (1) Claims 主張圖譜：雙方主張、攻防配對（responds_to）、分配到段落 (2) Sections 段落規劃：每段的論證框架（法律依據 + 事實涵攝 + 結論）、要用的法條和檔案 |
+| C2   | 驗證結構完整？       | `validateStrategyOutput()` 檢查：claims 結構是否完整、sections 引用的 claims 是否存在、覆蓋率是否足夠                   | 防止 AI 產出殘缺的策略（如 claim 沒分配到段落、對方主張沒有反駁）                                                                                                               |
+| C3   | 使用策略結果         | 驗證通過，直接使用                                                                                                      | —                                                                                                                                                                               |
+| C4   | 注入錯誤訊息重試     | 將具體的驗證錯誤（如「our_claim_3 沒有 assigned_section」）注入 prompt，讓 AI 修正                                      | 給 AI 精確的修正指示，而非重新生成整份策略（最多重試 1 次）                                                                                                                     |
+| C5   | 寫入 claims 表 + SSE | `store.setStrategyOutput(claims, sections)`；Claims 寫入 D1（分批 10 筆避免參數上限）；SSE `set_claims` 通知前端        | 持久化主張圖譜，前端可以顯示攻防關係圖                                                                                                                                          |
+
+#### Step 3：書狀撰寫
+
+| 編號 | 節點                      | 實際做什麼                                                                                                                                                                              | 目的                                                                       |
+| ---- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| D1   | for each section（順序）  | 依序處理 Strategist 規劃的每個 section                                                                                                                                                  | 不能平行：後面段落的「回顧層」需要前面段落的全文，才能維持前後一致性       |
+| D2   | 組裝 3 層上下文           | `getContextForSection(i)` 組裝：**背景層**（caseSummary + 完整大綱標記當前段）、**焦點層**（本段 claims + 論證框架 + 法條全文 + 檔案內容 + 事實運用指示）、**回顧層**（已完成段落全文） | 給 Writer 恰好足夠的上下文：知道全局位置、聚焦當前任務、避免與前文重複     |
+| D3   | Claude Citations API 撰寫 | 將法條和檔案分塊後作為 `document` block 傳入 Claude，Claude 撰寫時自動標記引用位置（引用了哪份文件的哪一段原文）                                                                        | 產出帶有精確引用的法律段落，每段 150-400 字                                |
+| D4   | 後處理                    | (1) 去除 Claude 重複輸出的章節標題 (2) 掃描文中提到但沒被 Citation 標記的法條 (3) 從 MongoDB 補查這些法條並快取                                                                         | 確保引用完整性：Claude 有時文中寫了「民法第 184 條」但沒從 document 中引用 |
+| D5   | 存入 DB + SSE             | 段落存入 `briefs.content_structured`；SSE `add_paragraph` 讓前端即時顯示新段落；`store.addDraftSection()` 記錄全文供下一段回顧層用                                                      | 即時更新前端 + 為下一段提供上下文                                          |
+
+#### 收尾
+
+| 編號 | 節點            | 實際做什麼                                                                                                     | 目的                                                                       |
+| ---- | --------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| E1   | 所有段落完成    | Writer 迴圈結束                                                                                                | —                                                                          |
+| E2   | 清理未引用法條  | 刪除研究過但最終沒被書狀引用的法條（保留使用者手動加的 `is_manual=true`）；SSE `set_law_refs` 更新前端法條面板 | 前端法條面板只顯示書狀實際用到的法條，不顯示 Research 階段試搜過但沒用上的 |
+| E3   | 建立版本快照    | 將完成的書狀存入 `brief_versions` 表，label: `'AI 撰寫完成（X 段）'`                                           | 支援版本回溯，使用者可以恢復到 AI 剛寫完的版本                             |
+| E4   | 回報 Token 用量 | 累計所有 Claude 呼叫的 input/output tokens，估算 NTD 成本；SSE `usage` 通知前端                                | 使用者可以看到這次撰寫花了多少 token/費用                                  |
+| E5   | 回傳完成訊息    | 回傳文字：段落數、我方/對方主張數、失敗段落列表（如有）                                                        | 讓 AgentDO 的對話紀錄中有最終結果摘要                                      |
+
+### 為什麼 0a 和 0b 不拆成兩個 Step
+
+前端進度 UI 只有 4 格：`案件確認 → 法條研究 → 論證策略 → 書狀撰寫`。0a（Case Reader）和 0b（Issue Analyzer）是同一個邏輯階段「理解案件」的兩個子任務，合在一個進度格內用子進度（children）顯示細節：
+
+```
+[running] 案件確認
+  閱讀 起訴狀.pdf [done]
+  閱讀 答辯狀.pdf [done]
+  案件摘要 [done]
+  爭點分析 [running]     ← 0b 開始
+```
+
+拆成兩個 Step 的問題：
+
+- 使用者看到 5 格進度條，但「閱讀檔案」和「分析爭點」對使用者來說都是「AI 在看我的案件」，拆開反而增加認知負擔
+- 0b 的輸入完全依賴 0a 的輸出（`caseSummary + parties + fileNotes`），沒有獨立執行的意義
+- 當沿用既有爭點時，整個 Step 0 直接跳過，一個 Step 比兩個好處理
+
+### 平行 vs 順序執行
+
+| 位置                        | 執行方式               | 說明                                                                |
+| --------------------------- | ---------------------- | ------------------------------------------------------------------- |
+| Step 0 初始資料載入         | **平行** `Promise.all` | 4 個 DB 查詢 + 建立書狀同時執行                                     |
+| Step 0 三路 Check-and-Reuse | **平行** `Promise.all` | 爭點/金額/時間軸三者互不依賴，完全平行檢查與生成                    |
+| Step 0 Case Reader 內部     | **順序**               | 多輪對話，每輪等 AI 回應後才執行工具                                |
+| Step 0 → Step 1             | **順序**               | Step 1 需要 Step 0 的 legalIssues                                   |
+| Step 1 Research Agent 內部  | **同輪平行**           | Gemini 同一輪發出多個 `search_law`，以 `Promise.all` 平行查 MongoDB |
+| Step 1 跨輪                 | **順序**               | 每輪等 AI 決定下一步才繼續                                          |
+| Step 1 → Step 2             | **順序**               | Step 2 需要 Step 1 的 research 結果                                 |
+| Step 2 → Step 3             | **順序**               | Step 3 需要 Step 2 的 claims + sections                             |
+| Step 3 各段落之間           | **順序**               | 後面段落的「回顧層」需要前面段落的全文，無法平行                    |
+
+簡單來說：**步驟之間全部順序**（有資料依賴），**步驟內部的 I/O 操作盡量平行**。
+
 ### ContextStore 中央資料庫
 
-各步驟之間透過 `ContextStore`（`contextStore.ts`）傳遞資料：
+各步驟之間透過 `ContextStore`（`contextStore.ts`）傳遞資料。
+
+**重要：ContextStore 不是 Durable Object 的物件。** 它是一個純 JavaScript class（`new ContextStore()`），在 `briefPipeline.ts:124` 建立。生命週期 = 一次 `runBriefPipeline()` 的執行，Pipeline 結束後就被 GC 回收，不持久化。它和 AgentDO 的關係是：AgentDO 呼叫 `write_full_brief` 工具 → 工具內部呼叫 `runBriefPipeline()` → Pipeline 內建立 ContextStore。
+
+**資料流模式：Pipeline 編排代碼寫入，Pipeline 編排代碼讀出。** 不是 AI Agent 自己去存取 ContextStore，而是 `briefPipeline.ts` 的編排邏輯負責：(1) 執行某個 Agent → (2) 拿到 Agent 的輸出 → (3) 寫入 ContextStore → (4) 從 ContextStore 讀出資料 → (5) 組裝成 prompt 傳給下一個 Agent。AI 本身看不到 ContextStore。
 
 ```
-ContextStore
-  |-- caseSummary, parties, timelineSummary    <-- Step 0 寫入
-  |-- legalIssues[], informationGaps[]         <-- Step 0 寫入
-  |-- research[]                               <-- Step 1 寫入
-  |-- claims[], sections[]                     <-- Step 2 寫入
-  |-- draftSections[]                          <-- Step 3 逐段寫入
+ContextStore（生命週期 = 一次 Pipeline 執行）
+│
+├── Step 0 寫入 ──────────────────────────────────
+│   caseSummary: string        案件摘要（< 500 字）
+│   parties: { plaintiff, defendant }
+│   timelineSummary: string    時間軸摘要
+│   briefType: string          書狀類型
+│   legalIssues: LegalIssue[]  爭點列表（含事實分類、mentioned_laws）
+│   informationGaps: InformationGap[]  資訊缺口
+│   damages: DamageItem[]      金額明細（category + description + amount）
+│   timeline: TimelineItem[]   時間軸事件（date + title + description + is_critical）
+│
+├── Step 1 寫入 ──────────────────────────────────
+│   research: ResearchResult[] 每個爭點的法律研究結果
+│     └── found_laws: FoundLaw[]  找到的法條（含 side 攻防標記）
+│
+├── Step 2 寫入 ──────────────────────────────────
+│   claims: Claim[]            主張圖譜（雙方所有 claims）
+│   sections: StrategySection[] 段落規劃（論證框架、分配的 claims）
+│
+└── Step 3 逐段寫入 ──────────────────────────────
+    draftSections: DraftSection[] 已完成段落的全文
+      └── 每寫完一段 push 一筆，供下一段的「回顧層」使用
 ```
 
-關鍵查詢方法：
+**查詢方法**（下游步驟透過這些方法讀取上游資料）：
 
-- `getUnrebutted()`: 找出對方尚未被反駁的主張
-- `getAllFoundLaws()`: 取得所有研究結果中的法條
-- `getContextForSection(index)`: 組裝某段落的 3 層 Writer 上下文
+| 方法                      | 呼叫者        | 用途                                           |
+| ------------------------- | ------------- | ---------------------------------------------- |
+| `getUnrebutted()`         | Step 2 驗證   | 找出對方尚未被反駁的主張                       |
+| `getAllFoundLaws()`       | Step 3 Writer | 取得所有法條，篩選本段需要的                   |
+| `getContextForSection(i)` | Step 3 Writer | 組裝第 i 段的 3 層上下文（背景 + 焦點 + 回顧） |
+
+**寫入方法**：
+
+| 方法                                  | 呼叫者          | 作用                                                    |
+| ------------------------------------- | --------------- | ------------------------------------------------------- |
+| `seedFromOrchestrator(output)`        | Step 0          | 寫入 caseSummary, parties, legalIssues, informationGaps |
+| `seedFromDisputes(list)`              | Step 0 fallback | 從既有 disputes 轉為 legalIssues（精度較低）            |
+| `setStrategyOutput(claims, sections)` | Step 2          | 寫入 claims + sections                                  |
+| `addDraftSection(draft)`              | Step 3          | 逐段追加已完成段落                                      |
+
+#### `seedFromOrchestrator()` 詳解
+
+`seedFromOrchestrator` 是 Step 0 和後續步驟之間的「交接點」，將 Step 0 的產出一次性灌入 ContextStore（`contextStore.ts:111-117`）：
+
+```typescript
+seedFromOrchestrator = (output: OrchestratorOutput) => {
+  this.caseSummary = output.caseSummary; // 案件摘要
+  this.parties = output.parties; // 原告/被告
+  this.timelineSummary = output.timelineSummary; // 時間軸
+  this.legalIssues = output.legalIssues; // 爭點列表
+  this.informationGaps = output.informationGaps; // 資訊缺口
+};
+```
+
+**兩個進入點都會呼叫此方法：**
+
+| 路徑     | 觸發條件        | OrchestratorOutput 的來源                          | 呼叫位置               |
+| -------- | --------------- | -------------------------------------------------- | ---------------------- |
+| 完整路徑 | DB 沒有既有爭點 | CaseReaderOutput + IssueAnalyzerOutput 組裝        | `briefPipeline.ts:319` |
+| 跳過路徑 | DB 已有有效爭點 | disputes 表 + cases 表 + 檔案摘要拼接（不呼叫 AI） | `briefPipeline.ts:207` |
+
+**對比 `seedFromDisputes()`**（`contextStore.ts:91-108`）：這是 Case Reader 完全失敗時的 fallback，只填 `legalIssues`（從 disputes 表轉換），**不填** caseSummary、parties、timelineSummary、informationGaps，精度較低。
+
+#### 步驟間資料依賴總覽
+
+每個步驟執行時，從 ContextStore（及 DB）取得的具體資料：
+
+**Step 0 → Step 1（Research Agent）的輸入**（`briefPipeline.ts:470-483`）：
+
+| 資料欄位                       | 來源                | 用途                              |
+| ------------------------------ | ------------------- | --------------------------------- |
+| `legalIssues[].id`             | Step 0 ContextStore | 研究結果關聯回爭點                |
+| `legalIssues[].title`          | Step 0 ContextStore | AI 理解爭點主題                   |
+| `legalIssues[].our_position`   | Step 0 ContextStore | AI 知道我方立場以搜尋攻擊法條     |
+| `legalIssues[].their_position` | Step 0 ContextStore | AI 知道對方立場以搜尋防禦風險法條 |
+| `legalIssues[].mentioned_laws` | Step 0 ContextStore | AI 優先搜尋這些法條（直接命中）   |
+| `caseSummary`（截斷 4000 字）  | Step 0 ContextStore | AI 理解案件背景                   |
+| `briefType`                    | 使用者指定          | 決定研究策略方向                  |
+
+**Step 0 + Step 1 → Step 2（Strategist）的輸入**（由 `buildStrategistInput()` 組裝）：
+
+| 資料欄位                    | 來源                          | 用途                             |
+| --------------------------- | ----------------------------- | -------------------------------- |
+| `caseSummary`               | Step 0 → ContextStore         | 案件全貌                         |
+| `briefType`                 | 使用者指定                    | 決定書狀結構慣例                 |
+| `legalIssues[]`（含 facts） | Step 0 → ContextStore         | 爭點清單、事實分類               |
+| `research[].found_laws`     | **Step 1** → ContextStore     | 每個爭點找到的法條               |
+| `research[].strength`       | **Step 1** → ContextStore     | 爭點強度評估                     |
+| `research[].attack_points`  | **Step 1** → ContextStore     | 攻擊要點                         |
+| `research[].defense_risks`  | **Step 1** → ContextStore     | 防禦風險                         |
+| `informationGaps[]`         | Step 0 → ContextStore         | 決定哪些論點要保守               |
+| `fileSummaries`             | DB readyFiles                 | 檔案摘要（選擇引用哪些檔案）     |
+| `damages`                   | Step 0 → ContextStore         | 金額計算（起訴狀需要）           |
+| `userAddedLaws`             | DB law_refs（is_manual=true） | 使用者手動加入的法條             |
+| `timeline`                  | Step 0 → ContextStore         | 時間軸事件（建立因果、判斷時效） |
+
+**Step 0 + Step 1 + Step 2 → Step 3（Writer）的輸入**（由 `getContextForSection(i)` 組裝）：
+
+| 資料欄位                                      | 來源                                                                  | 用途                             |
+| --------------------------------------------- | --------------------------------------------------------------------- | -------------------------------- |
+| **背景層**                                    |                                                                       |                                  |
+| `caseSummary`                                 | Step 0 → ContextStore                                                 | 案情摘要                         |
+| `briefType`                                   | 使用者指定                                                            | 文書風格                         |
+| `fullOutline`（所有段落標題 + 標記當前段）    | **Step 2** → `store.sections`                                         | 完整大綱，讓 AI 知道自己在寫哪裡 |
+| **焦點層**                                    |                                                                       |                                  |
+| `claims`（本段負責的主張）                    | **Step 2** → `store.claims` filtered by `assigned_section`            | 本段要論述的 claims              |
+| `argumentation`（法律依據 + 事實涵攝 + 結論） | **Step 2** → `section.argumentation`                                  | 論證框架                         |
+| `laws`（相關法條全文）                        | **Step 1** → `store.getAllFoundLaws()` filtered by `relevant_law_ids` | Claude 引用的法條文件            |
+| `fileIds`（相關檔案 ID）                      | **Step 2** → `section.relevant_file_ids`                              | Claude 引用的案件文件            |
+| `factsToUse`（事實運用指示）                  | **Step 2** → `section.facts_to_use`                                   | 每個事實的 assertion_type 和用法 |
+| **回顧層**                                    |                                                                       |                                  |
+| `completedSections`（已完成段落全文）         | **Step 3 前面的段落** → `store.draftSections.slice(0, i)`             | 維持前後一致性、避免重複         |
 
 ---
 
@@ -120,6 +400,24 @@ Step 0 由兩個 Agent 組成，在同一個進度步驟內以子進度顯示：
 | 超時     | 90 秒                                          |
 | 呼叫方式 | 多輪工具呼叫（streaming）                      |
 
+**為什麼需要多輪？**
+
+Case Reader 是一個**工具呼叫循環（tool-calling loop）**，AI 需要自主決定讀哪些檔案、讀幾份、以什麼順序讀：
+
+1. 系統 prompt 告訴 AI 有哪些檔案（ID + 摘要），並給出閱讀優先順序策略
+2. AI **第一輪**可能呼叫 `read_file` 讀起訴狀 → 拿到全文（最多 15000 字）
+3. AI **第二輪**讀了起訴狀後發現有提到答辯狀的論點，決定再讀答辯狀 → 呼叫 `read_file`
+4. AI **第三輪**可能想讀證據清單 → 呼叫 `read_file`
+5. AI 覺得讀夠了 → **不再呼叫工具**，直接輸出 JSON 結果（觸發退出迴圈）
+
+為什麼不一次讀完所有檔案？
+
+- **Token 成本控制**：每份檔案全文可能 15000 字，一次讀 6 份 = 90000 字 token 會爆
+- **智慧選擇**：AI 可以根據前幾份的內容決定後面需不需要讀，省下不必要的 token
+- **相關性篩選**：有些檔案（如收據、照片說明）可能與爭點無關，不需要讀
+
+退出條件：AI 回應中不包含任何 tool call → 解析最後一輪的文字內容為 JSON 結果。若 JSON 解析失敗，會注入修正 prompt 讓 AI 重試一次（`orchestratorAgent.ts:152-164`）。
+
 **執行流程**：
 
 1. 用 `loadReadyFiles()` 載入所有 `status='ready'` 的檔案元資料
@@ -127,8 +425,9 @@ Step 0 由兩個 Agent 組成，在同一個進度步驟內以子進度顯示：
    - 查詢已有的 disputes
    - 查詢已有的 damages
    - 在 DB 建立空白書狀（`createBriefInDB()`，發送 SSE `create_brief`）
-   - 查詢案件原告/被告
-3. 啟動 Case Reader 多輪循環：
+   - 查詢案件原告/被告 + `cases.timeline`
+3. 三路平行 Check-and-Reuse（`Promise.all`）：爭點、金額、時間軸三者同時檢查是否已存在，不存在則自動生成（詳見「三路平行 Check-and-Reuse 機制」段落）
+4. 若爭點分支需要生成，啟動 Case Reader 多輪循環：
    - 系統提示告訴 AI 閱讀策略：起訴狀/聲請狀 -> 答辯狀 -> 準備書狀 -> 證據清單 -> 其他
    - AI 自主決定讀哪些檔案（呼叫 `read_file`），每讀一份前端顯示子進度
    - AI 跳過重複讀取（同一檔案不會讀第二次）
@@ -241,17 +540,26 @@ Step 0 由兩個 Agent 組成，在同一個進度步驟內以子進度顯示：
 - 載入所有檔案內容到 `fileContentMap`（供 Step 3 Writer 使用）
 - 載入所有既有的 law refs（供 Step 2 Strategist 使用）
 
-#### 跳過機制（節省 Token）
+#### 三路平行 Check-and-Reuse 機制（節省 Token）
 
-如果案件已有爭點（`disputes` 表有資料），**整個 Step 0 會被跳過**：
+Step 0 的初始 DB 查詢完成後，爭點、金額、時間軸三者以 `Promise.all` **完全平行**執行 check-and-reuse：
 
-- 不呼叫 Case Reader 和 Issue Analyzer（省下 2 次 Gemini API 呼叫）
-- 直接從 DB 讀取既有 disputes，轉為 `LegalIssue[]` 並 seed 到 ContextStore
-- `caseSummary` 用檔案摘要拼接（不呼叫 LLM）
-- `parties` 從 `cases` 表讀取
-- 進度 UI 顯示「沿用既有爭點 [done]」
+**爭點分支：**
 
-只有在 **沒有既有爭點** 時，才執行完整的 Case Reader + Issue Analyzer 流程。
+- 若 DB 已有有效爭點（`disputes` 表有資料且 `our_position`/`their_position` 非空）→ 跳過 Case Reader + Issue Analyzer，直接沿用
+- 若無 → 執行完整 Case Reader + Issue Analyzer 流程
+
+**金額分支：**
+
+- 若 DB 已有金額（`damages` 表有資料）→ 直接沿用，進度 UI 顯示「沿用既有金額 [done]」
+- 若無 → 呼叫 `calculate_damages` 工具自動生成，完成後從 DB 重新載入
+
+**時間軸分支：**
+
+- 若 DB 已有時間軸（`cases.timeline` JSON 欄位非空陣列）→ 直接沿用，進度 UI 顯示「沿用既有時間軸 [done]」
+- 若無 → 呼叫 `generate_timeline` 工具自動生成，完成後從 DB 重新載入
+
+三者完成後，金額和時間軸存入 `ContextStore`（`store.damages`、`store.timeline`），供 Step 2 Strategist 使用。
 
 #### 容錯機制
 
@@ -385,6 +693,7 @@ Gemini 經常在一輪中同時發出多個 `search_law` 呼叫（例如一次�
 - Information Gaps
 - 使用者手動加入的法條
 - 損害賠償金額明細
+- 時間軸事件列表（★ 標記關鍵事件，用於建立因果關係、確認時效）
 
 #### 角色定位
 
@@ -405,13 +714,15 @@ Gemini 經常在一輪中同時發出多個 `search_law` 呼叫（例如一次�
 | `statement`        | 一句話描述                                                  |
 | `assigned_section` | 分配到哪個段落（ours 必填，theirs 為 null）                 |
 | `dispute_id`       | 關聯哪個爭點                                                |
-| `responds_to`      | 回應哪個對方主張（rebuttal 必填）                           |
+| `responds_to`      | 回應/輔助哪個 claim（rebuttal + supporting 必填）           |
 
 規則：
 
 - 每個 `ours` claim 必須有 `assigned_section`
 - `theirs` claim 的 `assigned_section` 為 null（由 ours claim 在對應段落中回應）
 - `rebuttal` 必須有 `responds_to`（指向被反駁的 claim）
+- `supporting` 必須有 `responds_to`（指向它輔助的 primary claim）
+- `primary` 的 `responds_to` 為 null
 - 對方每個主要主張都需要有 ours claim 來回應
 
 #### 輸出 Part 2：Sections（段落規劃）
@@ -673,6 +984,59 @@ Agent 在對話中可隨時調用以下 10 個工具：
 
 ---
 
+## analyze_disputes 完整流程
+
+**檔案位置**：`src/server/agent/tools/analyzeDisputes.ts`、`src/server/agent/tools/analysisFactory.ts`
+
+`analyze_disputes` 是獨立的分析工具，不經過 briefPipeline，直接從檔案摘要產生爭點。
+
+```
+1. loadReadyFiles(db, caseId)
+   → 從 D1 撈出所有 status='ready' 的檔案（有 summary 的）
+
+2. buildFileContext(readyFiles, { includeClaims: true })
+   → 把每個檔案組成文字：
+     【01_交通事故初步分析研判表.pdf】(證據資料)
+     摘要：本件交通事故經鑑定...
+     主張：被告違規左轉；原告直行有路權
+
+3. buildPrompt(fileContext)
+   → 將檔案上下文塞進 prompt，請 AI 回傳 JSON 陣列
+
+4. callAnalysisAI(aiEnv, prompt)
+   → 透過 Gemini 2.5 Flash 分析，回傳：
+     [{ number: 1, title: "...", evidence: ["01_交通事故.pdf"], law_refs: ["民法第184條"] }]
+
+5. persistAndNotify(items, caseId, drizzle, sendSSE)
+   → 刪除舊爭點，寫入新爭點到 disputes 表
+   → 發送 SSE set_disputes 到前端
+```
+
+### evidence 和 law_refs 的來源
+
+- `evidence`：AI 從檔案摘要中判斷哪些檔案與該爭點相關，直接填入檔案名稱（純文字標籤）
+- `law_refs`：AI 從檔案摘要中照抄提到的法條，或根據案情推測（**沒有查詢法條資料庫**，可能不精確）
+
+### 與 briefPipeline orchestrator 的關係
+
+兩者本質上**產出重複**（都寫入 `disputes` 表），但有互相利用的機制：
+
+|              | `analyze_disputes`（工具）      | `briefPipeline` orchestrator                                      |
+| ------------ | ------------------------------- | ----------------------------------------------------------------- |
+| **觸發**     | 使用者在聊天中觸發              | 寫書狀時自動執行                                                  |
+| **AI 模型**  | Gemini 2.5 Flash（single-shot） | Gemini 2.5 Flash（Case Reader 多輪 + Issue Analyzer single-shot） |
+| **輸入**     | 檔案摘要（summary + claims）    | 檔案全文（深度閱讀，最多 6 份）                                   |
+| **輸出精度** | 較粗（摘要層級）                | 較細（含事實分類、資訊缺口、mentioned_laws）                      |
+| **存到**     | `disputes` 表                   | `disputes` 表 + `contextStore`                                    |
+
+**共用同一張 `disputes` 表，先跑的那個寫入，後跑的那個複用：**
+
+- 先跑 `analyze_disputes` → 再跑 `write_full_brief` 時，briefPipeline 偵測到 DB 已有爭點，**跳過整個 Step 0**（省 2 次 AI 呼叫）
+- 先跑 `write_full_brief` → orchestrator 產生的爭點也會寫回 `disputes` 表，前端爭點面板顯示
+- **不會同時存在兩套不同的爭點**，後跑的會 `DELETE` 舊的再 `INSERT` 新的
+
+---
+
 ## 主張圖譜（Claim Graph）
 
 主張圖譜在 Step 2 Strategist 階段產生，記錄雙方的法律主張及其攻防關係。
@@ -703,13 +1067,14 @@ our_claim_3 (我方/rebuttal): "原告已提出報價單及修繕費用單據"
 | `statement`        | 一句話描述主張內容                                              |
 | `assigned_section` | 分配到書狀的哪個章節（ours 必填，theirs 為 null）               |
 | `dispute_id`       | 關聯哪個爭點                                                    |
-| `responds_to`      | 回應哪個對方主張的 ID（rebuttal 必填）                          |
+| `responds_to`      | 回應/輔助哪個 claim 的 ID（rebuttal + supporting 必填）         |
 
 ### 設計原則
 
 - 對方每個主要主張都必須有我方 claim 來回應
-- rebuttal claim 必須有 `responds_to` 指向被反駁的 claim
-- supporting claim 補強同段落的主要主張
+- `rebuttal` claim 必須有 `responds_to` 指向被反駁的 claim
+- `supporting` claim 必須有 `responds_to` 指向它輔助的 primary claim
+- `primary` claim 的 `responds_to` 為 null
 - `getUnrebutted()` 可查詢尚未被反駁的對方主張
 
 ---
@@ -761,7 +1126,7 @@ our_claim_3 (我方/rebuttal): "原告已提出報價單及修繕費用單據"
 `pipeline_progress` 事件驅動前端 4 格進度條：
 
 ```
-[done] 案件確認    -- 5 份檔案、3 個爭點
+[done] 案件確認    -- 5 份檔案、3 個爭點、2 項金額、8 個時間事件
 [done] 法條研究    -- 12 條（8 次搜尋）
 [done] 論證策略    -- 6 段、8 項我方主張、5 項對方主張
 [running] 書狀撰寫 3/6 -- 貳 > 一、侵權行為
@@ -769,7 +1134,7 @@ our_claim_3 (我方/rebuttal): "原告已提出報價單及修繕費用單據"
 
 每個步驟還有子進度（children）：
 
-- Step 0：「閱讀 起訴狀.pdf [done]」「案件摘要 [done]」「爭點分析 [running]」
+- Step 0：「閱讀 起訴狀.pdf [done]」「案件摘要 [done]」「爭點分析 [running]」「沿用既有金額 [done]」「分析時間軸 [running]」
 - Step 1：「民法第184條 -> 5 條 [done]」「損害賠償 -> 3 條 [running]」
 
 步驟和子步驟都支援 `error` 狀態（紅色 X 圖標 + 紅色文字）。Pipeline 任何步驟失敗時，`failStep()` 會將錯誤訊息顯示在 UI 中。Research Agent 失敗時，錯誤詳情放在子步驟的 `results` 欄位中，使用者可點擊展開查看完整錯誤訊息。

@@ -165,5 +165,23 @@ export interface ReviewResult {
   issues: ReviewIssue[];
 }
 
+// ── Timeline Item (時間軸事件) ──
+
+export interface TimelineItem {
+  id: string;
+  date: string;
+  title: string;
+  description: string;
+  is_critical: boolean;
+}
+
+// ── Damage Item (金額項目) ──
+
+export interface DamageItem {
+  category: string;
+  description: string | null;
+  amount: number;
+}
+
 // Re-export commonly used types
 export type { Paragraph, Citation, TextSegment };
