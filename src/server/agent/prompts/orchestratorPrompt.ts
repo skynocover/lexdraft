@@ -2,6 +2,7 @@
 // Split into Case Reader (reads files, produces summary) and Issue Analyzer (identifies legal issues).
 
 import type { ToolDef } from '../aiClient';
+import { buildCaseMetaLines, buildInstructionsBlock } from './promptHelpers';
 
 // ── Structured FileNote type ──
 
@@ -66,6 +67,13 @@ export const CASE_READER_SYSTEM_PROMPT = `你是案件摘要員。你的任務�
 // ── Issue Analyzer Prompt ──
 
 export const ISSUE_ANALYZER_SYSTEM_PROMPT = `你是法律爭點分析師。根據提供的案件摘要和檔案筆記，辨識法律爭點、分類事實爭議、找出資訊缺口。
+
+═══ 我方/對方立場判定（重要）═══
+
+案件基本資訊中會標注「我方立場」（原告方或被告方）。
+- 如果我方立場是「原告方」：our_position = 原告的主張，their_position = 被告的主張
+- 如果我方立場是「被告方」：our_position = 被告的主張，their_position = 原告的主張
+- 如果未標注我方立場：根據書狀類型推斷（起訴狀→原告方，答辯狀→被告方）
 
 ═══ 分析重點 ═══
 
@@ -185,6 +193,13 @@ export interface OrchestratorInput {
     summary: string | null;
   }>;
   existingParties: { plaintiff: string | null; defendant: string | null };
+  caseMetadata?: {
+    caseNumber: string;
+    court: string;
+    caseType: string;
+    clientRole: string;
+    caseInstructions: string;
+  };
   briefType: string;
 }
 
@@ -203,10 +218,18 @@ export const buildCaseReaderInput = (input: OrchestratorInput): string => {
       ? `原告：${input.existingParties.plaintiff || '未知'}\n被告：${input.existingParties.defendant || '未知'}`
       : '（尚未確認當事人）';
 
+  const meta = input.caseMetadata;
+  const metaLines = buildCaseMetaLines(meta);
+  const caseMetaText = metaLines.length > 0 ? metaLines.join('\n') : '（尚未填寫）';
+  const instructionsBlock = buildInstructionsBlock(meta?.caseInstructions);
+
   return `請閱讀以下案件的重要文件，產出案件摘要、當事人、時間軸和重點筆記。
 
 [書狀類型] ${input.briefType}
 
+[案件基本資訊]
+${caseMetaText}
+${instructionsBlock}
 [已知當事人]
 ${partiesText}
 
@@ -239,16 +262,28 @@ export const formatFileNotes = (notes: FileNote[]): string => {
 export interface IssueAnalyzerInput {
   caseSummary: string;
   parties: { plaintiff: string; defendant: string };
+  caseMetadata?: {
+    caseNumber: string;
+    court: string;
+    caseType: string;
+    clientRole: string;
+    caseInstructions: string;
+  };
   timelineSummary: string;
   fileNotes: string;
   briefType: string;
 }
 
 export const buildIssueAnalyzerInput = (input: IssueAnalyzerInput): string => {
+  const meta = input.caseMetadata;
+  const metaLines = buildCaseMetaLines(meta);
+  const caseMetaBlock = metaLines.length > 0 ? `\n[案件基本資訊]\n${metaLines.join('\n')}\n` : '';
+  const instructionsBlock = buildInstructionsBlock(meta?.caseInstructions);
+
   return `請根據以下案件資訊，辨識法律爭點、分類事實爭議、找出資訊缺口。
 
 [書狀類型] ${input.briefType}
-
+${caseMetaBlock}${instructionsBlock}
 [當事人]
 原告：${input.parties.plaintiff}
 被告：${input.parties.defendant}

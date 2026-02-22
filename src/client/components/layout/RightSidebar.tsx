@@ -1,22 +1,21 @@
-import { FolderOpen, BarChart3, ChevronsRight } from 'lucide-react';
+import { Info, FolderOpen, BarChart3, ChevronsRight, ChevronRight } from 'lucide-react';
 import { useTabStore } from '../../stores/useTabStore';
-import { useUIStore, type SidebarTab } from '../../stores/useUIStore';
+import { useUIStore, type SidebarTab, type AnalysisSubTab } from '../../stores/useUIStore';
 import { BriefsSection } from './sidebar/BriefsSection';
 import { FilesSection } from './sidebar/FilesSection';
 import { LawRefsSection } from './sidebar/LawRefsSection';
+import { CaseInfoTab } from './sidebar/CaseInfoTab';
 import { DisputesTab } from '../analysis/DisputesTab';
 import { DamagesTab } from '../analysis/DamagesTab';
 import { TimelineTab } from '../analysis/TimelineTab';
-import { PartiesTab } from '../analysis/PartiesTab';
 import { useAnalysisStore } from '../../stores/useAnalysisStore';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useCaseStore } from '../../stores/useCaseStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
-import { ChevronRight } from 'lucide-react';
 
 const SIDEBAR_TABS: { key: SidebarTab; label: string; icon: typeof FolderOpen }[] = [
-  { key: 'case-materials', label: '案件資料', icon: FolderOpen },
+  { key: 'case-info', label: '案件資訊', icon: Info },
+  { key: 'case-materials', label: '卷宗檔案', icon: FolderOpen },
   { key: 'analysis', label: '分析', icon: BarChart3 },
 ];
 
@@ -60,6 +59,7 @@ export const RightSidebar = () => {
         key={sidebarTab}
         className="flex min-h-0 flex-1 flex-col animate-in fade-in duration-150"
       >
+        {sidebarTab === 'case-info' && <CaseInfoTab />}
         {sidebarTab === 'case-materials' && <CaseMaterialsContent />}
         {sidebarTab === 'analysis' && <AnalysisSidebarContent />}
       </div>
@@ -67,7 +67,7 @@ export const RightSidebar = () => {
   );
 };
 
-/* ===================== 案件資料 Tab ===================== */
+/* ===================== 卷宗檔案 Tab ===================== */
 
 const CaseMaterialsContent = () => {
   const panels = useTabStore((s) => s.panels);
@@ -150,102 +150,76 @@ const CollapsibleSection = ({
 
 /* ===================== 分析 Tab ===================== */
 
+const ANALYSIS_SUB_TABS: { key: AnalysisSubTab; label: string }[] = [
+  { key: 'disputes', label: '爭點' },
+  { key: 'damages', label: '金額' },
+  { key: 'timeline', label: '時間軸' },
+];
+
 const AnalysisSidebarContent = () => {
-  const analysisAccordion = useUIStore((s) => s.analysisAccordion);
-  const setAnalysisAccordion = useUIStore((s) => s.setAnalysisAccordion);
+  const analysisSubTab = useUIStore((s) => s.analysisSubTab);
+  const setAnalysisSubTab = useUIStore((s) => s.setAnalysisSubTab);
   const disputes = useAnalysisStore((s) => s.disputes);
   const damages = useAnalysisStore((s) => s.damages);
   const timeline = useAnalysisStore((s) => s.timeline);
 
   const totalDamages = damages.reduce((sum, d) => sum + d.amount, 0);
 
-  const disputesBadge = (() => {
-    if (disputes.length === 0) return null;
-    let miss = 0;
-    for (const d of disputes) {
-      if (!d.evidence || d.evidence.length === 0) miss++;
+  const getBadge = (key: AnalysisSubTab): string | null => {
+    switch (key) {
+      case 'disputes': {
+        if (disputes.length === 0) return null;
+        let miss = 0;
+        for (const d of disputes) {
+          if (!d.evidence || d.evidence.length === 0) miss++;
+        }
+        return miss > 0 ? `${disputes.length} · ${miss} 缺漏` : `${disputes.length}`;
+      }
+      case 'damages':
+        return totalDamages > 0 ? `NT$ ${totalDamages.toLocaleString()}` : null;
+      case 'timeline':
+        return timeline.length > 0 ? `${timeline.length}` : null;
+      default:
+        return null;
     }
-    const label = miss > 0 ? `${disputes.length} 個爭點 · ${miss} 缺漏` : `${disputes.length}`;
-    return label;
-  })();
+  };
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto p-2.5">
-      <Accordion
-        type="multiple"
-        value={analysisAccordion}
-        onValueChange={setAnalysisAccordion}
-        className="flex flex-col gap-2.5"
-      >
-        <AccordionItem
-          value="disputes"
-          className="rounded-xl border border-bd/50 bg-bg-1 px-3.5 shadow-lg shadow-black/25 last:border-b"
-        >
-          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
-            <div className="flex items-center gap-2">
-              <span>爭點分析</span>
-              {disputesBadge && (
-                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[11px] text-t3">
-                  {disputesBadge}
+    <div className="flex flex-1 flex-col">
+      {/* Sub-tab pills */}
+      <div className="sticky top-0 z-10 flex gap-1 border-b border-bd bg-bg-0 px-2.5 py-2">
+        {ANALYSIS_SUB_TABS.map((tab) => {
+          const isActive = analysisSubTab === tab.key;
+          const badge = getBadge(tab.key);
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setAnalysisSubTab(tab.key)}
+              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                isActive ? 'bg-ac/15 text-ac' : 'text-t3 hover:bg-bg-h hover:text-t1'
+              }`}
+            >
+              <span>{tab.label}</span>
+              {badge && (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                    isActive ? 'bg-ac/10 text-ac' : 'bg-bg-3 text-t3'
+                  }`}
+                >
+                  {badge}
                 </span>
               )}
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="pb-2">
-            <DisputesTab />
-          </AccordionContent>
-        </AccordionItem>
+            </button>
+          );
+        })}
+      </div>
 
-        <AccordionItem
-          value="damages"
-          className="rounded-xl border border-bd/50 bg-bg-1 px-3.5 shadow-lg shadow-black/25 last:border-b"
-        >
-          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
-            <div className="flex items-center gap-2">
-              <span>金額計算</span>
-              {totalDamages > 0 && (
-                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[11px] text-t3">
-                  NT$ {totalDamages.toLocaleString()}
-                </span>
-              )}
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="pb-2">
-            <DamagesTab />
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem
-          value="timeline"
-          className="rounded-xl border border-bd/50 bg-bg-1 px-3.5 shadow-lg shadow-black/25 last:border-b"
-        >
-          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
-            <div className="flex items-center gap-2">
-              <span>時間軸</span>
-              {timeline.length > 0 && (
-                <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[11px] text-t3">
-                  {timeline.length}
-                </span>
-              )}
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="pb-2">
-            <TimelineTab />
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem
-          value="parties"
-          className="rounded-xl border border-bd/50 bg-bg-1 px-3.5 shadow-lg shadow-black/25 last:border-b"
-        >
-          <AccordionTrigger className="py-3 text-sm font-medium text-t2 hover:no-underline">
-            當事人
-          </AccordionTrigger>
-          <AccordionContent className="pb-2">
-            <PartiesTab />
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+      {/* Sub-tab content */}
+      <div className="flex-1 overflow-y-auto p-2.5">
+        {analysisSubTab === 'disputes' && <DisputesTab />}
+        {analysisSubTab === 'damages' && <DamagesTab />}
+        {analysisSubTab === 'timeline' && <TimelineTab />}
+      </div>
     </div>
   );
 };

@@ -1,0 +1,1 @@
+ALTER TABLE `cases` ADD `client_role` text;

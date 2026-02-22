@@ -36,6 +36,7 @@ export const callStrategist = async (
   const userMessage = buildStrategistInput({
     caseSummary: store.caseSummary,
     briefType: store.briefType,
+    caseMetadata: store.caseMetadata,
     legalIssues: store.legalIssues,
     research: store.research.map((r) => ({
       issue_id: r.issue_id,
@@ -66,9 +67,12 @@ export const callStrategist = async (
   try {
     strategyOutput = await callStrategyLLM(ctx.aiEnv, userMessage, usage);
   } catch (firstErr) {
-    // Retry once on parse failure
+    // Retry once on parse failure — add correction prompt so LLM knows to fix JSON
+    const correctionMessage =
+      userMessage +
+      '\n\n═══ 修正指示 ═══\n前一次輸出不是有效的 JSON。請只輸出合法 JSON，不要加任何其他文字或 markdown code block。';
     try {
-      strategyOutput = await callStrategyLLM(ctx.aiEnv, userMessage, usage);
+      strategyOutput = await callStrategyLLM(ctx.aiEnv, correctionMessage, usage);
     } catch {
       throw new Error(
         `論證策略規劃失敗：${firstErr instanceof Error ? firstErr.message : '未知錯誤'}`,

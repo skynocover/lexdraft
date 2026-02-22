@@ -2,7 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { nanoid } from 'nanoid';
 import { eq, asc } from 'drizzle-orm';
 import { getDB } from '../db';
-import { messages } from '../db/schema';
+import { messages, cases } from '../db/schema';
 import {
   callAI,
   callAIStreaming,
@@ -242,8 +242,18 @@ export class AgentDO extends DurableObject<Env> {
       .where(eq(messages.case_id, caseId))
       .orderBy(asc(messages.created_at));
 
+    // 2b. Load case_instructions for system prompt injection
+    const caseRows = await db
+      .select({ case_instructions: cases.case_instructions })
+      .from(cases)
+      .where(eq(cases.id, caseId));
+    const caseInstructions = caseRows[0]?.case_instructions?.trim() || '';
+
     // 3. Build OpenAI messages format — inject brief context into system prompt
     let systemPrompt = SYSTEM_PROMPT;
+    if (caseInstructions) {
+      systemPrompt += `\n\n--- 律師處理指引 ---\n${caseInstructions}`;
+    }
     if (briefContext) {
       const paragraphList = briefContext.paragraphs
         .map((p) => {

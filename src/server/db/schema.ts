@@ -22,6 +22,8 @@ export const cases = sqliteTable('cases', {
   case_type: text('case_type'),
   plaintiff: text('plaintiff'),
   defendant: text('defendant'),
+  client_role: text('client_role'), // 'plaintiff' | 'defendant' — 我方立場
+  case_instructions: text('case_instructions'), // 律師 AI 處理指引
   law_refs: text('law_refs'),
   timeline: text('timeline'), // JSON array of timeline events
   created_at: text('created_at'),

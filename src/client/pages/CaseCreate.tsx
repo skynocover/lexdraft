@@ -1,46 +1,47 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router'
-import { api } from '../lib/api'
-import type { Case } from '../stores/useCaseStore'
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { api } from '../lib/api';
+import { CASE_TYPES } from '../lib/caseConstants';
+import type { Case } from '../stores/useCaseStore';
 
 export function CaseCreate() {
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const [form, setForm] = useState({
     title: '',
     case_number: '',
     court: '',
     case_type: '',
+    client_role: '',
     plaintiff: '',
     defendant: '',
-  })
+  });
 
-  const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, [key]: e.target.value }))
+  const set =
+    (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
     if (!form.title.trim()) {
-      setError('案件名稱為必填')
-      return
+      setError('案件名稱為必填');
+      return;
     }
 
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError('');
 
     try {
-      const created = await api.post<Case>('/cases', form)
-      navigate(`/cases/${created.id}`)
+      const created = await api.post<Case>('/cases', form);
+      navigate(`/cases/${created.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '建立失敗')
+      setError(err instanceof Error ? err.message : '建立失敗');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
-
-  const caseTypes = ['損害賠償', '給付貨款', '返還價金', '確認之訴', '租賃糾紛', '勞資爭議', '其他']
+  };
 
   return (
     <div className="flex h-screen flex-col bg-bg-0">
@@ -104,10 +105,36 @@ export function CaseCreate() {
               className="w-full rounded border border-bd bg-bg-3 px-3 py-2 text-sm text-t1 outline-none focus:border-ac"
             >
               <option value="">請選擇</option>
-              {caseTypes.map((t) => (
-                <option key={t} value={t}>{t}</option>
+              {CASE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
               ))}
             </select>
+          </div>
+
+          {/* 我方立場 */}
+          <div>
+            <label className="mb-1.5 block text-sm text-t2">我方立場</label>
+            <div className="flex gap-3">
+              {[
+                { value: 'plaintiff', label: '原告方' },
+                { value: 'defendant', label: '被告方' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, client_role: opt.value }))}
+                  className={`flex-1 rounded border px-4 py-2 text-sm font-medium transition ${
+                    form.client_role === opt.value
+                      ? 'border-ac bg-ac/15 text-ac'
+                      : 'border-bd text-t3 hover:border-t3 hover:text-t1'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* 原告 + 被告 */}
@@ -153,5 +180,5 @@ export function CaseCreate() {
         </form>
       </div>
     </div>
-  )
+  );
 }

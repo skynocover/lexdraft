@@ -9,6 +9,8 @@ export interface Case {
   case_type: string | null;
   plaintiff: string | null;
   defendant: string | null;
+  client_role: 'plaintiff' | 'defendant' | null;
+  case_instructions: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +36,10 @@ interface CaseState {
   setCases: (cases: Case[]) => void;
   setCurrentCase: (c: Case | null) => void;
   setFiles: (files: CaseFile[]) => void;
+  updateCase: (
+    caseId: string,
+    data: Partial<Omit<Case, 'id' | 'created_at' | 'updated_at'>>,
+  ) => Promise<void>;
   deleteCase: (caseId: string) => Promise<void>;
 }
 
@@ -44,6 +50,13 @@ export const useCaseStore = create<CaseState>((set, get) => ({
   setCases: (cases) => set({ cases }),
   setCurrentCase: (currentCase) => set({ currentCase }),
   setFiles: (files) => set({ files }),
+  updateCase: async (caseId, data) => {
+    const res = await api.put<Case>(`/cases/${caseId}`, data);
+    set((s) => ({
+      currentCase: res,
+      cases: s.cases.map((c) => (c.id === caseId ? res : c)),
+    }));
+  },
   deleteCase: async (caseId: string) => {
     await api.delete(`/cases/${caseId}`);
     set({ cases: get().cases.filter((c) => c.id !== caseId) });

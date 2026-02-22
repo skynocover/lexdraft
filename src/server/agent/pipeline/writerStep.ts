@@ -5,6 +5,7 @@ import { callClaudeWithCitations, type ClaudeDocument, type ClaudeUsage } from '
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
 import { fetchAndCacheUncitedMentions, repairAndGetRefs } from '../../lib/lawRefService';
 import { parseJsonField } from '../toolHelpers';
+import { buildCaseMetaLines } from '../prompts/promptHelpers';
 import type { StrategyOutput } from './types';
 import type { PipelineContext } from '../briefPipeline';
 import type { ContextStore } from '../contextStore';
@@ -209,10 +210,17 @@ export const writeSectionV3 = async (
           .join('\n\n')
       : '';
 
+  const meta = store.caseMetadata;
+  const caseMetaLines = buildCaseMetaLines(meta, '  ').join('\n');
+
+  const instructionsLine = meta.caseInstructions
+    ? `\n  律師處理指引：${meta.caseInstructions}`
+    : '';
+
   let instruction = `你是台灣資深訴訟律師。請根據提供的論證結構和來源文件，撰寫法律書狀段落。
 
 [書狀全局資訊]
-  書狀類型：${writerCtx.briefType}
+  書狀類型：${writerCtx.briefType}${caseMetaLines ? '\n' + caseMetaLines : ''}${instructionsLine}
   完整大綱：
 ${outlineText}
 

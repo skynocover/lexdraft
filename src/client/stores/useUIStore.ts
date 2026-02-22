@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
-export type SidebarTab = 'case-materials' | 'analysis';
+export type SidebarTab = 'case-info' | 'case-materials' | 'analysis';
+export type AnalysisSubTab = 'disputes' | 'damages' | 'timeline';
 
 interface UIState {
   // 左側 Chat（保留現有）
@@ -9,7 +10,7 @@ interface UIState {
   // 右側 Sidebar
   sidebarOpen: boolean;
   sidebarTab: SidebarTab;
-  analysisAccordion: string[];
+  analysisSubTab: AnalysisSubTab;
 
   // 案件資料 Tab 內的收合狀態
   caseMaterialSections: {
@@ -28,7 +29,7 @@ interface UIState {
   setSidebarOpen: (open: boolean) => void;
   setSidebarTab: (tab: SidebarTab) => void;
   toggleSidebarTab: (tab: SidebarTab) => void;
-  setAnalysisAccordion: (items: string[]) => void;
+  setAnalysisSubTab: (tab: AnalysisSubTab) => void;
   setCaseMaterialSection: (section: keyof UIState['caseMaterialSections'], open: boolean) => void;
   toggleRightFiles: () => void;
   toggleRightLawRefs: () => void;
@@ -39,7 +40,7 @@ export const useUIStore = create<UIState>((set) => ({
 
   sidebarOpen: true,
   sidebarTab: 'case-materials',
-  analysisAccordion: [],
+  analysisSubTab: 'disputes',
 
   caseMaterialSections: {
     briefs: true,
@@ -61,7 +62,7 @@ export const useUIStore = create<UIState>((set) => ({
       }
       return { sidebarTab: tab, sidebarOpen: true };
     }),
-  setAnalysisAccordion: (items) => set({ analysisAccordion: items }),
+  setAnalysisSubTab: (tab) => set({ analysisSubTab: tab }),
   setCaseMaterialSection: (section, open) =>
     set((s) => ({
       caseMaterialSections: { ...s.caseMaterialSections, [section]: open },

@@ -51,10 +51,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
 
     useUIStore.getState().setSidebarTab('analysis');
     useUIStore.getState().setSidebarOpen(true);
-    const acc = useUIStore.getState().analysisAccordion;
-    if (!acc.includes('disputes')) {
-      useUIStore.getState().setAnalysisAccordion([...acc, 'disputes']);
-    }
+    useUIStore.getState().setAnalysisSubTab('disputes');
     useAnalysisStore.getState().setHighlightDisputeId(disputeId);
 
     setTimeout(() => {

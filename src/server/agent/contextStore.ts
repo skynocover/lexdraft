@@ -14,10 +14,25 @@ import type {
 } from './pipeline/types';
 import type { OrchestratorOutput } from './orchestratorAgent';
 
+export interface CaseMetadata {
+  caseNumber: string;
+  court: string;
+  caseType: string;
+  clientRole: string; // 'plaintiff' | 'defendant' | ''
+  caseInstructions: string;
+}
+
 export class ContextStore {
   // Step 1: Orchestrator 產出 (Phase 3 — currently seeded from existing data)
   caseSummary = '';
   parties: { plaintiff: string; defendant: string } = { plaintiff: '', defendant: '' };
+  caseMetadata: CaseMetadata = {
+    caseNumber: '',
+    court: '',
+    caseType: '',
+    clientRole: '',
+    caseInstructions: '',
+  };
   timelineSummary = '';
   briefType = '';
   legalIssues: LegalIssue[] = [];

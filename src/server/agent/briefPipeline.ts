@@ -142,10 +142,29 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       ctx.drizzle.select().from(damages).where(eq(damages.case_id, ctx.caseId)),
       createBriefInDB(ctx),
       ctx.drizzle
-        .select({ plaintiff: cases.plaintiff, defendant: cases.defendant })
+        .select({
+          plaintiff: cases.plaintiff,
+          defendant: cases.defendant,
+          case_number: cases.case_number,
+          court: cases.court,
+          case_type: cases.case_type,
+          client_role: cases.client_role,
+          case_instructions: cases.case_instructions,
+        })
         .from(cases)
         .where(eq(cases.id, ctx.caseId))
-        .then((rows) => rows[0] || { plaintiff: null, defendant: null }),
+        .then(
+          (rows) =>
+            rows[0] || {
+              plaintiff: null,
+              defendant: null,
+              case_number: null,
+              court: null,
+              case_type: null,
+              client_role: null,
+              case_instructions: null,
+            },
+        ),
     ]);
 
     // Set up progress children for file reads
@@ -163,6 +182,13 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     });
 
     store.briefType = ctx.briefType;
+    store.caseMetadata = {
+      caseNumber: caseRow.case_number || '',
+      court: caseRow.court || '',
+      caseType: caseRow.case_type || '',
+      clientRole: caseRow.client_role || '',
+      caseInstructions: caseRow.case_instructions || '',
+    };
 
     // ── Branch: skip Step 0 if disputes already exist (save tokens) ──
     let orchestratorOutput: OrchestratorOutput | null = null;
@@ -220,6 +246,13 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
           summary: f.parsedSummary,
         })),
         existingParties: { plaintiff: caseRow.plaintiff, defendant: caseRow.defendant },
+        caseMetadata: {
+          caseNumber: caseRow.case_number || '',
+          court: caseRow.court || '',
+          caseType: caseRow.case_type || '',
+          clientRole: caseRow.client_role || '',
+          caseInstructions: caseRow.case_instructions || '',
+        },
         briefType: ctx.briefType,
       };
 
@@ -289,6 +322,7 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
             caseReaderOutput,
             ctx.briefType,
             ctx.signal,
+            store.caseMetadata,
           );
         } catch (issueErr) {
           console.error('Issue Analyzer failed, falling back to analyze_disputes:', issueErr);

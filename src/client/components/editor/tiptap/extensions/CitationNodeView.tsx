@@ -1,4 +1,5 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { ExternalLink } from 'lucide-react';
@@ -14,6 +15,9 @@ const stripMarkdownHeaders = (text: string): string => text.replace(/^#{1,3}\s+/
 export function CitationNodeView({ node }: NodeViewProps) {
   const [showPopover, setShowPopover] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const badgeRef = useRef<HTMLSpanElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const highlightCitationId = useBriefStore((s) => s.highlightCitationId);
 
   const handleMouseEnter = useCallback(() => {
@@ -30,6 +34,48 @@ export function CitationNodeView({ node }: NodeViewProps) {
       closeTimer.current = null;
     }, POPOVER_CLOSE_DELAY);
   }, []);
+
+  // Position the popover relative to the badge using fixed positioning
+  useEffect(() => {
+    if (!showPopover || !badgeRef.current) return;
+
+    const updatePosition = () => {
+      const badge = badgeRef.current;
+      if (!badge) return;
+      const rect = badge.getBoundingClientRect();
+      const popoverWidth = 320;
+      const popoverHeight = popoverRef.current?.offsetHeight ?? 300;
+      const margin = 8;
+
+      // Prefer above; fall back to below if not enough space
+      const spaceAbove = rect.top;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const placeAbove = spaceAbove >= popoverHeight + margin || spaceAbove > spaceBelow;
+
+      let top: number;
+      if (placeAbove) {
+        top = rect.top - popoverHeight - margin;
+      } else {
+        top = rect.bottom + margin;
+      }
+
+      // Horizontal: center on badge, clamp to viewport
+      let left = rect.left + rect.width / 2 - popoverWidth / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - popoverWidth - 8));
+
+      setPopoverStyle({
+        position: 'fixed',
+        top,
+        left,
+        width: popoverWidth,
+        zIndex: 9999,
+      });
+    };
+
+    // Run immediately + after a frame (so popoverRef.current has height)
+    updatePosition();
+    requestAnimationFrame(updatePosition);
+  }, [showPopover]);
 
   const {
     citationId,
@@ -96,148 +142,109 @@ export function CitationNodeView({ node }: NodeViewProps) {
       className={`citation-badge ${typeClass}${highlightClass}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      ref={badgeRef}
     >
       {index != null ? index + 1 : label}
-      {showPopover && (
-        <div
-          className="citation-popover"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          {/* Header: type badge + label + range + status */}
+      {showPopover &&
+        createPortal(
           <div
-            style={{
-              marginBottom: 6,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              flexWrap: 'wrap',
-            }}
+            ref={popoverRef}
+            className="citation-popover"
+            style={popoverStyle}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
           >
-            <span
-              style={{
-                padding: '1px 6px',
-                borderRadius: 3,
-                fontSize: 10,
-                fontWeight: 600,
-                background: isLaw ? 'rgba(139,92,246,0.15)' : 'rgba(59,130,246,0.15)',
-                color: isLaw ? '#6d28d9' : '#1d4ed8',
-              }}
-            >
-              {isLaw ? '法條' : '文件'}
-            </span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#111' }}>{label}</span>
-            {rangeLabel && <span style={{ fontSize: 9, color: '#9ca3af' }}>{rangeLabel}</span>}
-            {isPending && (
-              <span
-                style={{
-                  padding: '1px 4px',
-                  borderRadius: 3,
-                  fontSize: 9,
-                  background: 'rgba(234,179,8,0.15)',
-                  color: '#a16207',
-                }}
-              >
-                待確認
-              </span>
-            )}
-          </div>
-
-          {/* Quoted text */}
-          {quotedText && (
+            {/* Header: type badge + label + range + status */}
             <div
               style={{
-                background: '#f9fafb',
-                borderRadius: 4,
-                padding: 8,
-                maxHeight: 200,
-                overflowY: 'auto',
+                marginBottom: 6,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                flexWrap: 'wrap',
               }}
             >
-              <p
+              <span
                 style={{
-                  whiteSpace: 'pre-wrap',
-                  fontSize: 11,
-                  lineHeight: '18px',
-                  color: '#374151',
-                  borderLeft: '2px solid #93c5fd',
-                  paddingLeft: 8,
-                  margin: 0,
-                  textIndent: 0,
+                  padding: '1px 6px',
+                  borderRadius: 3,
+                  fontSize: 10,
+                  fontWeight: 600,
+                  background: isLaw ? 'rgba(139,92,246,0.15)' : 'rgba(59,130,246,0.15)',
+                  color: isLaw ? '#6d28d9' : '#1d4ed8',
                 }}
               >
-                {stripMarkdownHeaders(quotedText)}
-              </p>
+                {isLaw ? '法條' : '文件'}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#111' }}>{label}</span>
+              {rangeLabel && <span style={{ fontSize: 9, color: '#9ca3af' }}>{rangeLabel}</span>}
+              {isPending && (
+                <span
+                  style={{
+                    padding: '1px 4px',
+                    borderRadius: 3,
+                    fontSize: 9,
+                    background: 'rgba(234,179,8,0.15)',
+                    color: '#a16207',
+                  }}
+                >
+                  待確認
+                </span>
+              )}
             </div>
-          )}
 
-          {/* Open file button for file citations */}
-          {isFile && fileId && (
-            <button
-              onClick={handleOpenFile}
-              style={{
-                marginTop: 8,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '4px 8px',
-                borderRadius: 4,
-                fontSize: 11,
-                fontWeight: 500,
-                color: '#1d4ed8',
-                background: 'rgba(59,130,246,0.08)',
-                border: 'none',
-                cursor: 'pointer',
-                width: '100%',
-                justifyContent: 'center',
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = 'rgba(59,130,246,0.18)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'rgba(59,130,246,0.08)';
-              }}
-            >
-              <ExternalLink size={12} />
-              開啟來源文件
-            </button>
-          )}
+            {/* Quoted text */}
+            {quotedText && (
+              <div
+                style={{
+                  background: '#f9fafb',
+                  borderRadius: 4,
+                  padding: 8,
+                  maxHeight: 200,
+                  overflowY: 'auto',
+                }}
+              >
+                <p
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    fontSize: 11,
+                    lineHeight: '18px',
+                    color: '#374151',
+                    borderLeft: '2px solid #93c5fd',
+                    paddingLeft: 8,
+                    margin: 0,
+                    textIndent: 0,
+                  }}
+                >
+                  {stripMarkdownHeaders(quotedText)}
+                </p>
+              </div>
+            )}
 
-          {/* Open law button for law citations */}
-          {isLaw && (
-            <button
-              onClick={handleOpenLaw}
-              style={{
-                marginTop: 8,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '4px 8px',
-                borderRadius: 4,
-                fontSize: 11,
-                fontWeight: 500,
-                color: '#6d28d9',
-                background: 'rgba(139,92,246,0.08)',
-                border: 'none',
-                cursor: 'pointer',
-                width: '100%',
-                justifyContent: 'center',
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = 'rgba(139,92,246,0.18)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'rgba(139,92,246,0.08)';
-              }}
-            >
-              <ExternalLink size={12} />
-              開啟法條
-            </button>
-          )}
+            {/* Open file button for file citations */}
+            {isFile && fileId && (
+              <button
+                onClick={handleOpenFile}
+                className="citation-popover-btn citation-popover-btn--file"
+              >
+                <ExternalLink size={12} />
+                開啟來源文件
+              </button>
+            )}
 
-          <div className="citation-popover-arrow" />
-        </div>
-      )}
+            {/* Open law button for law citations */}
+            {isLaw && (
+              <button
+                onClick={handleOpenLaw}
+                className="citation-popover-btn citation-popover-btn--law"
+              >
+                <ExternalLink size={12} />
+                開啟法條
+              </button>
+            )}
+          </div>,
+          document.body,
+        )}
     </NodeViewWrapper>
   );
 }

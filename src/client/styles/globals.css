@@ -401,19 +401,13 @@ body {
   border: 1px dashed #a16207;
 }
 
-/* Citation popover */
+/* Citation popover (rendered via portal, position: fixed set in JS) */
 .citation-popover {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 320px;
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 50;
   font-size: 12px;
   line-height: 1.5;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -421,13 +415,37 @@ body {
   font-weight: normal;
 }
 
-.citation-popover-arrow {
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  transform: translateX(-50%);
-  border: 5px solid transparent;
-  border-top-color: #e5e7eb;
+/* Citation popover action buttons */
+.citation-popover-btn {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.citation-popover-btn--file {
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.08);
+}
+.citation-popover-btn--file:hover {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.citation-popover-btn--law {
+  color: #6d28d9;
+  background: rgba(139, 92, 246, 0.08);
+}
+.citation-popover-btn--law:hover {
+  background: rgba(139, 92, 246, 0.18);
 }
 
 /* ---- Highlight paragraph (dispute bidirectional link) ---- */

@@ -1,3 +1,5 @@
+import { buildCaseMetaLines, buildInstructionsBlock } from './promptHelpers';
+
 // ── 論證策略 Step — System Prompt ──
 
 export const STRATEGIST_SYSTEM_PROMPT = `你是一位資深台灣訴訟律師。你的任務是根據案件事實和法律研究結果，提取雙方主張（claims），設計每個段落的論證策略，並將每個主張分配到具體段落。
@@ -147,6 +149,13 @@ export const STRATEGIST_SYSTEM_PROMPT = `你是一位資深台灣訴訟律師。
 export interface StrategistInput {
   caseSummary: string;
   briefType: string;
+  caseMetadata?: {
+    caseNumber: string;
+    court: string;
+    caseType: string;
+    clientRole: string;
+    caseInstructions: string;
+  };
   legalIssues: Array<{
     id: string;
     title: string;
@@ -254,9 +263,14 @@ export const buildStrategistInput = (input: StrategistInput): string => {
           .join('\n')
       : '無';
 
+  const meta = input.caseMetadata;
+  const metaLines = buildCaseMetaLines(meta);
+  const caseMetaBlock = metaLines.length > 0 ? `\n[案件基本資訊]\n${metaLines.join('\n')}\n` : '';
+  const instructionsBlock = buildInstructionsBlock(meta?.caseInstructions);
+
   return `[案件全貌]
 ${input.caseSummary || '（尚未整合）'}
-
+${caseMetaBlock}${instructionsBlock}
 [書狀類型] ${input.briefType}
 
 [爭點清單]

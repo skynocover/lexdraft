@@ -52,6 +52,8 @@ casesRouter.post('/', async (c) => {
     case_type?: string;
     plaintiff?: string;
     defendant?: string;
+    client_role?: string;
+    case_instructions?: string;
   }>();
 
   const title = requireString(body.title, '案件名稱');
@@ -68,6 +70,8 @@ casesRouter.post('/', async (c) => {
     case_type: body.case_type?.trim() || null,
     plaintiff: body.plaintiff?.trim() || null,
     defendant: body.defendant?.trim() || null,
+    client_role: body.client_role?.trim() || null,
+    case_instructions: body.case_instructions?.trim() || null,
     created_at: now,
     updated_at: now,
   };
@@ -99,6 +103,8 @@ casesRouter.put('/:id', async (c) => {
     case_type?: string;
     plaintiff?: string;
     defendant?: string;
+    client_role?: string;
+    case_instructions?: string;
   }>();
 
   const db = getDB(c.env.DB);
@@ -113,6 +119,9 @@ casesRouter.put('/:id', async (c) => {
   if (body.case_type !== undefined) updates.case_type = body.case_type.trim() || null;
   if (body.plaintiff !== undefined) updates.plaintiff = body.plaintiff.trim() || null;
   if (body.defendant !== undefined) updates.defendant = body.defendant.trim() || null;
+  if (body.client_role !== undefined) updates.client_role = body.client_role.trim() || null;
+  if (body.case_instructions !== undefined)
+    updates.case_instructions = body.case_instructions.trim() || null;
 
   await db.update(cases).set(updates).where(eq(cases.id, id));
 

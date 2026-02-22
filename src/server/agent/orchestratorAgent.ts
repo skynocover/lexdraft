@@ -234,6 +234,13 @@ export const runIssueAnalyzer = async (
   caseReaderOutput: CaseReaderOutput,
   briefType: string,
   signal: AbortSignal,
+  caseMetadata?: {
+    caseNumber: string;
+    court: string;
+    caseType: string;
+    clientRole: string;
+    caseInstructions: string;
+  },
 ): Promise<IssueAnalyzerOutput> => {
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => timeoutController.abort(), ISSUE_ANALYZER_TIMEOUT_MS);
@@ -250,6 +257,7 @@ export const runIssueAnalyzer = async (
     const userMessage = buildIssueAnalyzerInput({
       caseSummary: caseReaderOutput.caseSummary,
       parties: caseReaderOutput.parties,
+      caseMetadata,
       timelineSummary: caseReaderOutput.timelineSummary,
       fileNotes: formatFileNotes(caseReaderOutput.fileNotes),
       briefType,
