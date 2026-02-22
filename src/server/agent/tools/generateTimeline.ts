@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 import { cases } from '../../db/schema';
 import {
   toolError,
@@ -10,6 +11,7 @@ import {
 import type { ToolHandler, ToolContext, ToolResult } from './types';
 
 interface TimelineItem {
+  id?: string;
   date: string;
   title: string;
   description: string;
@@ -77,8 +79,11 @@ export const handleGenerateTimeline: ToolHandler = async (
     return { result: '未能從檔案中識別出時間軸事件。', success: false };
   }
 
-  // 4. Sort by date
+  // 4. Sort by date & assign IDs
   items.sort((a, b) => a.date.localeCompare(b.date));
+  items.forEach((item) => {
+    if (!item.id) item.id = nanoid();
+  });
 
   // 5. Persist to cases.timeline JSON column
   await drizzle

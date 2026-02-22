@@ -10,6 +10,7 @@ import { briefsRouter } from './server/routes/briefs';
 import { damagesRouter } from './server/routes/damages';
 import { briefVersionsRouter } from './server/routes/briefVersions';
 import { lawRouter } from './server/routes/law';
+import { timelineRouter } from './server/routes/timeline';
 import { inlineAIRouter } from './server/routes/inlineAI';
 import { processFileMessage } from './server/queue/fileProcessor';
 
@@ -55,6 +56,9 @@ api.route('/', damagesRouter);
 
 // 法條搜尋（包含 /law/search 和 /cases/:caseId/law-refs 路由）
 api.route('/', lawRouter);
+
+// 時間軸（包含 /cases/:caseId/timeline CRUD 路由）
+api.route('/', timelineRouter);
 
 // Inline AI（段落級 AI 操作）
 api.route('/', inlineAIRouter);

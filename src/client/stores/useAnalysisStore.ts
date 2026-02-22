@@ -29,12 +29,12 @@ export interface Damage {
   description: string | null;
   amount: number;
   basis: string | null;
-  evidence_refs: string[];
   dispute_id: string | null;
   created_at: string;
 }
 
 export interface TimelineEvent {
+  id: string;
   date: string;
   title: string;
   description: string;
@@ -58,6 +58,11 @@ export interface ClaimGraph {
   responds_to: string | null;
 }
 
+type TimelineInput = Omit<TimelineEvent, 'id'>;
+type DamageInput = Omit<Damage, 'id' | 'case_id' | 'created_at' | 'dispute_id'> & {
+  dispute_id?: string | null;
+};
+
 interface AnalysisState {
   disputes: Dispute[];
   damages: Damage[];
@@ -78,6 +83,20 @@ interface AnalysisState {
   loadTimeline: (caseId: string) => Promise<void>;
   loadParties: (caseId: string) => Promise<void>;
   loadClaims: (caseId: string) => Promise<void>;
+
+  // Timeline CRUD
+  addTimelineEvent: (caseId: string, data: TimelineInput) => Promise<void>;
+  updateTimelineEvent: (
+    caseId: string,
+    eventId: string,
+    updates: Partial<TimelineInput>,
+  ) => Promise<void>;
+  removeTimelineEvent: (caseId: string, eventId: string) => Promise<void>;
+
+  // Damages CRUD
+  addDamage: (caseId: string, data: DamageInput) => Promise<void>;
+  updateDamage: (damageId: string, updates: Partial<DamageInput>) => Promise<void>;
+  removeDamage: (damageId: string) => Promise<void>;
 }
 
 const makeLoader =
@@ -91,7 +110,7 @@ const makeLoader =
     }
   };
 
-export const useAnalysisStore = create<AnalysisState>((set) => ({
+export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   disputes: [],
   damages: [],
   timeline: [],
@@ -111,4 +130,40 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   loadTimeline: makeLoader<TimelineEvent>('timeline', 'timeline', set),
   loadParties: makeLoader<Party>('parties', 'parties', set),
   loadClaims: makeLoader<ClaimGraph>('claims', 'claims', set),
+
+  // Timeline CRUD
+  addTimelineEvent: async (caseId, data) => {
+    const created = await api.post<TimelineEvent>(`/cases/${caseId}/timeline`, data);
+    const timeline = [...get().timeline, created].sort((a, b) => a.date.localeCompare(b.date));
+    set({ timeline });
+  },
+
+  updateTimelineEvent: async (caseId, eventId, updates) => {
+    const updated = await api.put<TimelineEvent>(`/cases/${caseId}/timeline/${eventId}`, updates);
+    const timeline = get()
+      .timeline.map((e) => (e.id === eventId ? updated : e))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    set({ timeline });
+  },
+
+  removeTimelineEvent: async (caseId, eventId) => {
+    await api.delete(`/cases/${caseId}/timeline/${eventId}`);
+    set({ timeline: get().timeline.filter((e) => e.id !== eventId) });
+  },
+
+  // Damages CRUD
+  addDamage: async (caseId, data) => {
+    const created = await api.post<Damage>(`/cases/${caseId}/damages`, data);
+    set({ damages: [...get().damages, created] });
+  },
+
+  updateDamage: async (damageId, updates) => {
+    const updated = await api.put<Damage>(`/damages/${damageId}`, updates);
+    set({ damages: get().damages.map((d) => (d.id === damageId ? updated : d)) });
+  },
+
+  removeDamage: async (damageId) => {
+    await api.delete(`/damages/${damageId}`);
+    set({ damages: get().damages.filter((d) => d.id !== damageId) });
+  },
 }));

@@ -88,22 +88,6 @@ lawRouter.get('/cases/:caseId/claims', async (c) => {
   return c.json(rows);
 });
 
-// GET /api/cases/:caseId/timeline — read from cases.timeline JSON
-lawRouter.get('/cases/:caseId/timeline', async (c) => {
-  const caseId = c.req.param('caseId');
-  const db = getDB(c.env.DB);
-
-  const [row] = await db
-    .select({ timeline: cases.timeline })
-    .from(cases)
-    .where(eq(cases.id, caseId));
-
-  if (!row) throw notFound('案件');
-
-  const items = row.timeline ? JSON.parse(row.timeline) : [];
-  return c.json(items);
-});
-
 // GET /api/cases/:caseId/parties — parties from case record
 lawRouter.get('/cases/:caseId/parties', async (c) => {
   const caseId = c.req.param('caseId');

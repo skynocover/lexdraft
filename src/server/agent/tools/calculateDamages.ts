@@ -8,7 +8,6 @@ interface DamageItem {
   description: string;
   amount: number;
   basis: string;
-  evidence_refs: string[];
 }
 
 export const handleCalculateDamages = createAnalysisTool<DamageItem>({
@@ -23,15 +22,17 @@ ${fileContext}
 請以 JSON 格式回傳金額項目列表，格式如下：
 [
   {
-    "category": "貨款",
-    "description": "合約貨款尾款",
-    "amount": 1200000,
-    "basis": "依系爭買賣合約第5條",
-    "evidence_refs": ["原證二"]
+    "category": "財產上損害",
+    "description": "醫療費用",
+    "amount": 41550,
+    "basis": "因交通事故受傷所生之醫療費用，依診斷證明書與損害賠償明細請求",
   }
 ]
 
-金額 category 常見分類：貨款、利息、違約金、精神慰撫金、損害賠償、其他。
+category 只能是以下兩種之一：
+- "財產上損害"：醫療費用、交通費用、工作損失、財物損害、貨款、利息、違約金等
+- "非財產上損害"：精神慰撫金等
+description 為該項目的具體名稱。
 amount 為整數，以新台幣元計。
 重要：絕對不要使用 emoji 或特殊符號（如 ✅❌🔷📄⚖️💰🔨 等），只用純中文文字和標點符號。
 只回傳 JSON 陣列，不要其他文字。`,
@@ -49,7 +50,7 @@ amount 為整數，以新台幣元計。
       description: d.description || null,
       amount: d.amount,
       basis: d.basis || null,
-      evidence_refs: JSON.stringify(d.evidence_refs || []),
+      evidence_refs: null,
       dispute_id: null,
       created_at: new Date().toISOString(),
     }));
@@ -62,10 +63,7 @@ amount 為整數，以新台幣元計。
       type: 'brief_update',
       brief_id: '',
       action: 'set_damages',
-      data: records.map((r) => ({
-        ...r,
-        evidence_refs: JSON.parse(r.evidence_refs),
-      })),
+      data: records,
     });
 
     const totalAmount = records.reduce((sum, d) => sum + d.amount, 0);

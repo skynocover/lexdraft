@@ -1,127 +1,165 @@
 import { useState } from 'react';
-import { CircleDollarSign } from 'lucide-react';
+import { CircleDollarSign, Plus } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useAnalysisStore, type Damage } from '../../stores/useAnalysisStore';
 import { useChatStore } from '../../stores/useChatStore';
 import { useCaseStore } from '../../stores/useCaseStore';
-import { cleanText } from '../../lib/textUtils';
-
-function formatAmount(amount: number): string {
-  return `NT$ ${amount.toLocaleString()}`;
-}
+import { DamageGroup } from './DamageGroup';
+import { DamageFormDialog } from './DamageFormDialog';
+import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
+import { formatAmount } from '../../lib/textUtils';
 
 export function DamagesTab() {
   const damages = useAnalysisStore((s) => s.damages);
+  const addDamage = useAnalysisStore((s) => s.addDamage);
+  const updateDamage = useAnalysisStore((s) => s.updateDamage);
+  const removeDamage = useAnalysisStore((s) => s.removeDamage);
   const isStreaming = useChatStore((s) => s.isStreaming);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const currentCase = useCaseStore((s) => s.currentCase);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingDamage, setEditingDamage] = useState<Damage | null>(null);
+  const [deletingDamage, setDeletingDamage] = useState<Damage | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleGenerate = () => {
     if (!currentCase || isStreaming) return;
     sendMessage(currentCase.id, '請幫我計算案件請求金額');
   };
 
-  if (damages.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-4">
-        <CircleDollarSign className="h-8 w-8 text-t3" />
-        <p className="text-center text-xs text-t3">尚未計算金額</p>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!currentCase || isStreaming}
-          onClick={handleGenerate}
-        >
-          {isStreaming ? 'AI 分析中...' : 'AI 自動計算金額'}
-        </Button>
-      </div>
-    );
-  }
+  const handleAdd = () => {
+    setEditingDamage(null);
+    setFormOpen(true);
+  };
 
-  // Group by category
-  const grouped = damages.reduce<Record<string, Damage[]>>((acc, d) => {
-    const key = d.category;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(d);
-    return acc;
-  }, {});
+  const handleEdit = (damage: Damage) => {
+    setEditingDamage(damage);
+    setFormOpen(true);
+  };
+
+  const handleDelete = (damage: Damage) => {
+    setDeletingDamage(damage);
+  };
+
+  const handleSubmit = async (data: {
+    category: string;
+    description: string;
+    amount: number;
+    basis: string;
+  }) => {
+    if (!currentCase) return;
+    setLoading(true);
+    try {
+      if (editingDamage) {
+        await updateDamage(editingDamage.id, data);
+      } else {
+        await addDamage(currentCase.id, data);
+      }
+      setFormOpen(false);
+    } catch (err) {
+      console.error('Damage save error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingDamage) return;
+    try {
+      await removeDamage(deletingDamage.id);
+    } catch (err) {
+      console.error('Damage delete error:', err);
+    } finally {
+      setDeletingDamage(null);
+    }
+  };
+
+  // Group by fixed categories
+  const grouped = damages.reduce<Record<string, Damage[]>>(
+    (acc, d) => {
+      const key = d.category === '非財產上損害' ? '非財產上損害' : '財產上損害';
+      acc[key].push(d);
+      return acc;
+    },
+    { 財產上損害: [], 非財產上損害: [] },
+  );
 
   const totalAmount = damages.reduce((sum, d) => sum + d.amount, 0);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex-1 space-y-2 overflow-y-auto">
-        {Object.entries(grouped).map(([category, items]) => (
-          <DamageGroup key={category} category={category} items={items} />
-        ))}
-      </div>
-
-      {/* Total bar */}
-      <div className="mt-2 shrink-0 rounded border border-ac/30 bg-ac/10 px-3 py-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-ac">請求總額</span>
-          <span className="text-sm font-bold text-ac">{formatAmount(totalAmount)}</span>
+    <>
+      {damages.length === 0 ? (
+        <div className="flex h-full flex-col items-center justify-center gap-3 px-4">
+          <CircleDollarSign className="h-8 w-8 text-t3" />
+          <p className="text-center text-xs text-t3">尚未計算金額</p>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleAdd}>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              手動新增
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!currentCase || isStreaming}
+              onClick={handleGenerate}
+            >
+              {isStreaming ? 'AI 分析中...' : 'AI 自動計算'}
+            </Button>
+          </div>
         </div>
-      </div>
-    </div>
-  );
-}
+      ) : (
+        <div className="flex h-full flex-col">
+          {/* Header */}
+          <div className="mb-2 flex items-center justify-end">
+            <button
+              onClick={handleAdd}
+              className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+              title="新增金額項目"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
 
-function DamageGroup({ category, items }: { category: string; items: Damage[] }) {
-  const groupTotal = items.reduce((sum, d) => sum + d.amount, 0);
+          <div className="flex-1 space-y-2 overflow-y-auto">
+            {Object.entries(grouped)
+              .filter(([, items]) => items.length > 0)
+              .map(([category, items]) => (
+                <DamageGroup
+                  key={category}
+                  category={category}
+                  items={items}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+          </div>
 
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium text-t3">{cleanText(category)}</span>
-        <span className="text-xs text-t3">{formatAmount(groupTotal)}</span>
-      </div>
-      {items.map((d) => (
-        <DamageCard key={d.id} damage={d} />
-      ))}
-    </div>
-  );
-}
-
-function DamageCard({ damage }: { damage: Damage }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className="rounded border border-bd bg-bg-2">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-bg-h"
-      >
-        <span className="flex-1 truncate text-sm text-t1">
-          {cleanText(damage.description || damage.category)}
-        </span>
-        <span className="shrink-0 text-sm font-medium text-ac">{formatAmount(damage.amount)}</span>
-        <span className="shrink-0 text-xs text-t3">{expanded ? '▾' : '▸'}</span>
-      </button>
-
-      {expanded && (
-        <div className="space-y-2 border-t border-bd px-3 py-2.5">
-          {damage.basis && (
-            <div>
-              <span className="text-xs font-medium text-t3">依據</span>
-              <p className="mt-0.5 text-sm leading-relaxed text-t2">{cleanText(damage.basis)}</p>
+          {/* Total bar */}
+          <div className="mt-2 shrink-0 rounded border border-ac/30 bg-ac/10 px-3 py-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-ac">請求總額</span>
+              <span className="text-sm font-bold text-ac">{formatAmount(totalAmount)}</span>
             </div>
-          )}
-
-          {damage.evidence_refs && damage.evidence_refs.length > 0 && (
-            <div>
-              <span className="text-xs font-medium text-t3">證據</span>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {damage.evidence_refs.map((e, i) => (
-                  <span key={i} className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2">
-                    {cleanText(e)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       )}
-    </div>
+
+      <DamageFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        damage={editingDamage}
+        onSubmit={handleSubmit}
+        loading={loading}
+      />
+
+      {deletingDamage && (
+        <ConfirmDialog
+          message={`確定刪除金額項目「${deletingDamage.description || deletingDamage.category}」？`}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeletingDamage(null)}
+        />
+      )}
+    </>
   );
 }
