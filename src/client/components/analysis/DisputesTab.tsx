@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { useAnalysisStore, type ClaimGraph, type Dispute } from '../../stores/useAnalysisStore';
 import { cleanText } from '../../lib/textUtils';
 import { FactList } from './FactList';
@@ -12,10 +12,15 @@ const STATUS_STYLE: Record<EvidenceStatus, { label: string; cls: string }> = {
   miss: { label: '缺漏', cls: 'bg-rd/20 text-rd' },
 };
 
-const TYPE_BADGE: Record<ClaimGraph['claim_type'], { label: string; cls: string }> = {
-  primary: { label: '主張', cls: 'bg-ac/20 text-ac' },
-  rebuttal: { label: '反駁', cls: 'bg-or/20 text-or' },
-  supporting: { label: '輔助', cls: 'bg-cy/20 text-cy' },
+const CLAIM_TYPE_LABEL: Record<ClaimGraph['claim_type'], string> = {
+  primary: '主張',
+  rebuttal: '反駁',
+  supporting: '輔助',
+};
+
+const SIDE_STYLE: Record<'ours' | 'theirs', string> = {
+  ours: 'bg-ac/20 text-ac',
+  theirs: 'bg-or/20 text-or',
 };
 
 const getEvidenceStatus = (evidence: string[] | null): EvidenceStatus => {
@@ -23,28 +28,73 @@ const getEvidenceStatus = (evidence: string[] | null): EvidenceStatus => {
   return evidence.length >= 2 ? 'ok' : 'warn';
 };
 
-const ClaimCard = ({ claim, allClaims }: { claim: ClaimGraph; allClaims: ClaimGraph[] }) => {
-  const badge = TYPE_BADGE[claim.claim_type];
-  const target = claim.responds_to ? allClaims.find((c) => c.id === claim.responds_to) : null;
+/** 根據 responds_to 攻防鏈排序：我方主張 → 輔助 → 對方主張 → 我方反駁 → … */
+const sortClaimsByThread = (claims: ClaimGraph[]): ClaimGraph[] => {
+  const idSet = new Set(claims.map((c) => c.id));
+  const childrenMap = new Map<string, ClaimGraph[]>();
+  const roots: ClaimGraph[] = [];
+
+  for (const c of claims) {
+    if (c.responds_to && idSet.has(c.responds_to)) {
+      if (!childrenMap.has(c.responds_to)) childrenMap.set(c.responds_to, []);
+      childrenMap.get(c.responds_to)!.push(c);
+    } else {
+      roots.push(c);
+    }
+  }
+
+  // 根節點排序：我方 primary → 我方 supporting → 對方 primary → 對方 supporting
+  const rootOrder = (c: ClaimGraph) => {
+    const s = c.side === 'ours' ? 0 : 2;
+    const t = c.claim_type === 'primary' ? 0 : 1;
+    return s + t;
+  };
+  roots.sort((a, b) => rootOrder(a) - rootOrder(b));
+
+  const result: ClaimGraph[] = [];
+  const visited = new Set<string>();
+
+  const traverse = (claim: ClaimGraph) => {
+    if (visited.has(claim.id)) return;
+    visited.add(claim.id);
+    result.push(claim);
+    const children = childrenMap.get(claim.id) ?? [];
+    for (const child of children) {
+      traverse(child);
+    }
+  };
+
+  for (const root of roots) {
+    traverse(root);
+  }
+
+  return result;
+};
+
+const ClaimCard = ({ claim, side }: { claim: ClaimGraph; side?: 'ours' | 'theirs' }) => {
+  const sideLabel =
+    claim.claim_type === 'supporting'
+      ? ''
+      : side === 'ours'
+        ? '我方'
+        : side === 'theirs'
+          ? '對方'
+          : '';
+  const typeLabel = CLAIM_TYPE_LABEL[claim.claim_type];
+  const badgeCls = side ? SIDE_STYLE[side] : 'bg-bg-3 text-t2';
+  const borderCls = side === 'ours' ? 'border-l-ac' : side === 'theirs' ? 'border-l-or' : '';
 
   return (
-    <div className="rounded border border-bd/50 bg-bg-1 px-2.5 py-1.5">
+    <div className={`rounded border-l-2 bg-bg-1 px-2.5 py-1.5 ${borderCls}`}>
       <div className="flex items-start gap-1.5">
         <span
-          className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${badge.cls}`}
+          className={`mt-0.5 inline-flex shrink-0 ${sideLabel ? 'flex-col items-center' : 'items-center'} rounded px-1.5 py-0.5 text-xs font-medium leading-tight ${badgeCls}`}
         >
-          {badge.label}
+          {sideLabel && <span>{sideLabel}</span>}
+          <span>{typeLabel}</span>
         </span>
         <p className="flex-1 text-sm leading-relaxed text-t1">{claim.statement}</p>
       </div>
-      {target && (
-        <div className="mt-1 flex items-center gap-1 pl-7 text-xs text-t3">
-          <ArrowRight size={12} className="shrink-0" />
-          <span className="truncate">
-            回應：{target.id}「{target.statement.slice(0, 50)}」
-          </span>
-        </div>
-      )}
     </div>
   );
 };
@@ -103,7 +153,6 @@ export const DisputesTab = () => {
           key={d.id}
           dispute={d}
           claims={claimsByDispute.get(d.id) ?? []}
-          allClaims={claims}
           isHighlighted={d.id === highlightDisputeId}
         />
       ))}
@@ -113,7 +162,7 @@ export const DisputesTab = () => {
           <div className="px-3 py-2.5 text-sm font-medium text-t3">未分類主張</div>
           <div className="space-y-1.5 border-t border-bd px-3 py-2.5">
             {unclassifiedClaims.map((c) => (
-              <ClaimCard key={c.id} claim={c} allClaims={claims} />
+              <ClaimCard key={c.id} claim={c} />
             ))}
           </div>
         </div>
@@ -125,12 +174,10 @@ export const DisputesTab = () => {
 const DisputeCard = ({
   dispute,
   claims,
-  allClaims,
   isHighlighted,
 }: {
   dispute: Dispute;
   claims: ClaimGraph[];
-  allClaims: ClaimGraph[];
   isHighlighted?: boolean;
 }) => {
   const [expanded, setExpanded] = useState(false);
@@ -141,6 +188,7 @@ const DisputeCard = ({
 
   const ourClaims = claims.filter((c) => c.side === 'ours');
   const theirClaims = claims.filter((c) => c.side === 'theirs');
+  const sortedClaims = useMemo(() => sortClaimsByThread(claims), [claims]);
 
   useEffect(() => {
     if (isHighlighted) {
@@ -172,11 +220,20 @@ const DisputeCard = ({
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-bg-h"
       >
-        <span className="shrink-0 rounded bg-ac/20 px-1.5 py-0.5 text-xs font-medium text-ac">
-          {dispute.number}
-        </span>
-        <span className="flex-1 truncate text-sm font-medium text-t1">
-          {cleanText(dispute.title || '未命名爭點')}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex-1 truncate text-sm font-medium text-t1">
+                {cleanText(dispute.title || '未命名爭點')}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-72">
+              {cleanText(dispute.title || '未命名爭點')}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <span className="shrink-0 text-xs text-t3">
+          我方 {ourClaims.length} / 對方 {theirClaims.length}
         </span>
         <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${statusStyle.cls}`}>
           {statusStyle.label}
@@ -185,31 +242,14 @@ const DisputeCard = ({
       </button>
 
       {expanded && (
-        <div className="space-y-2.5 border-t border-bd px-3 py-2.5">
-          {/* 我方主張 */}
-          {(dispute.our_position || ourClaims.length > 0) && (
+        <div className="space-y-2 border-t border-bd px-3 py-2.5">
+          {/* 主張列表 — 依攻防鏈排序，左色條區分我方/對方 */}
+          {sortedClaims.length > 0 && (
             <div className="space-y-1.5">
-              <span className="text-xs font-medium text-ac">我方主張</span>
-              {dispute.our_position && (
-                <p className="text-sm leading-relaxed text-t2">{cleanText(dispute.our_position)}</p>
-              )}
-              {ourClaims.map((c) => (
-                <ClaimCard key={c.id} claim={c} allClaims={allClaims} />
-              ))}
-            </div>
-          )}
-
-          {/* 對方主張 */}
-          {(dispute.their_position || theirClaims.length > 0) && (
-            <div className="space-y-1.5">
-              <span className="text-xs font-medium text-or">對方主張</span>
-              {dispute.their_position && (
-                <p className="text-sm leading-relaxed text-t2">
-                  {cleanText(dispute.their_position)}
-                </p>
-              )}
-              {theirClaims.map((c) => (
-                <ClaimCard key={c.id} claim={c} allClaims={allClaims} />
+              {sortedClaims.map((c) => (
+                <div key={c.id} className={c.claim_type === 'supporting' ? 'ml-4' : ''}>
+                  <ClaimCard claim={c} side={c.side} />
+                </div>
               ))}
             </div>
           )}
@@ -217,31 +257,20 @@ const DisputeCard = ({
           {/* 事實爭議 */}
           {dispute.facts && dispute.facts.length > 0 && <FactList facts={dispute.facts} />}
 
-          {/* 證據 */}
-          {dispute.evidence && dispute.evidence.length > 0 && (
-            <div>
-              <span className="text-xs font-medium text-t3">證據</span>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {dispute.evidence.map((e, i) => (
-                  <span key={i} className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2">
-                    {cleanText(e)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 法條 */}
-          {dispute.law_refs && dispute.law_refs.length > 0 && (
-            <div>
-              <span className="text-xs font-medium text-t3">法條</span>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {dispute.law_refs.map((l, i) => (
-                  <span key={i} className="rounded bg-cy/10 px-1.5 py-0.5 text-xs text-cy">
-                    {cleanText(l)}
-                  </span>
-                ))}
-              </div>
+          {/* 證據 + 法條合併 tag 列 */}
+          {((dispute.evidence && dispute.evidence.length > 0) ||
+            (dispute.law_refs && dispute.law_refs.length > 0)) && (
+            <div className="flex flex-wrap gap-1">
+              {dispute.evidence?.map((e, i) => (
+                <span key={`ev-${i}`} className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2">
+                  {cleanText(e)}
+                </span>
+              ))}
+              {dispute.law_refs?.map((l, i) => (
+                <span key={`law-${i}`} className="rounded bg-cy/10 px-1.5 py-0.5 text-xs text-cy">
+                  {cleanText(l)}
+                </span>
+              ))}
             </div>
           )}
 

@@ -34,7 +34,8 @@ export const STRATEGIST_SYSTEM_PROMPT = `你是一位資深台灣訴訟律師。
 - dispute_id：連結到對應爭點的 ID，若 claim 與特定爭點相關則填入
 - responds_to：攻防配對，填入所回應的 claim ID
   - rebuttal claim 必須有 responds_to（指向被反駁的 claim）
-  - primary / supporting claim 的 responds_to 為 null
+  - supporting claim 必須有 responds_to（指向它輔助的 primary claim）
+  - primary claim 的 responds_to 為 null
 - 每個 theirs 的 primary/rebuttal claim 應有對應的 ours rebuttal claim 來回應
 
 ═══ 段落設計規則 ═══
