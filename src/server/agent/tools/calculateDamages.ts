@@ -69,9 +69,6 @@ amount 為整數，以新台幣元計。
     });
 
     const totalAmount = records.reduce((sum, d) => sum + d.amount, 0);
-    const summary = records
-      .map((d) => `- ${d.category}：NT$ ${d.amount.toLocaleString()}`)
-      .join('\n');
-    return `已計算 ${records.length} 項金額：\n${summary}\n\n請求總額：NT$ ${totalAmount.toLocaleString()}`;
+    return `已計算 ${records.length} 項金額，請求總額 NT$ ${totalAmount.toLocaleString()}`;
   },
 });

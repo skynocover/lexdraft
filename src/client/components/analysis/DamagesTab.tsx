@@ -1,5 +1,9 @@
 import { useState } from 'react';
+import { CircleDollarSign } from 'lucide-react';
+import { Button } from '../ui/button';
 import { useAnalysisStore, type Damage } from '../../stores/useAnalysisStore';
+import { useChatStore } from '../../stores/useChatStore';
+import { useCaseStore } from '../../stores/useCaseStore';
 import { cleanText } from '../../lib/textUtils';
 
 function formatAmount(amount: number): string {
@@ -8,11 +12,28 @@ function formatAmount(amount: number): string {
 
 export function DamagesTab() {
   const damages = useAnalysisStore((s) => s.damages);
+  const isStreaming = useChatStore((s) => s.isStreaming);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const currentCase = useCaseStore((s) => s.currentCase);
+
+  const handleGenerate = () => {
+    if (!currentCase || isStreaming) return;
+    sendMessage(currentCase.id, '請幫我計算案件請求金額');
+  };
 
   if (damages.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-xs text-t3">尚未計算金額，透過 AI 助理計算</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-4">
+        <CircleDollarSign className="h-8 w-8 text-t3" />
+        <p className="text-center text-xs text-t3">尚未計算金額</p>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!currentCase || isStreaming}
+          onClick={handleGenerate}
+        >
+          {isStreaming ? 'AI 分析中...' : 'AI 自動計算金額'}
+        </Button>
       </div>
     );
   }
