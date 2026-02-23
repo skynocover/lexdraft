@@ -1,8 +1,5 @@
-import { useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
 import { useCaseStore, type CaseFile } from '../../../stores/useCaseStore';
 import { useBriefStore } from '../../../stores/useBriefStore';
-import { useAuthStore } from '../../../stores/useAuthStore';
 import { api } from '../../../lib/api';
 import { FileGroup } from './FileGroup';
 
@@ -16,13 +13,9 @@ const FILE_GROUPS: { key: Category; label: string }[] = [
 ];
 
 export const FilesSection = () => {
-  const currentCase = useCaseStore((s) => s.currentCase);
   const caseFiles = useCaseStore((s) => s.files);
   const setFiles = useCaseStore((s) => s.setFiles);
   const rebuttalTargetFileIds = useBriefStore((s) => s.rebuttalTargetFileIds);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
 
   const grouped = FILE_GROUPS.map((g) => ({
     ...g,
@@ -37,37 +30,6 @@ export const FilesSection = () => {
   const processingFiles = caseFiles.filter(
     (f) => f.status === 'pending' || f.status === 'processing',
   ).length;
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList || !currentCase) return;
-
-    setUploading(true);
-    for (const file of Array.from(fileList)) {
-      if (file.type !== 'application/pdf') continue;
-      if (file.size > 20 * 1024 * 1024) continue;
-
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const token = useAuthStore.getState().token;
-      try {
-        const res = await fetch(`/api/cases/${currentCase.id}/files`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
-        if (res.ok) {
-          const newFile = (await res.json()) as CaseFile;
-          setFiles([...useCaseStore.getState().files, newFile]);
-        }
-      } catch (err) {
-        console.error('Upload failed:', err);
-      }
-    }
-    setUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
 
   const handleCategoryChange = async (fileId: string, category: string) => {
     try {
@@ -93,29 +55,6 @@ export const FilesSection = () => {
 
   return (
     <div>
-      <div className="flex items-center justify-end px-3 pt-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/pdf"
-          multiple
-          onChange={handleUpload}
-          className="hidden"
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac disabled:opacity-50"
-          title="上傳檔案"
-        >
-          {uploading ? (
-            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-ac border-t-transparent" />
-          ) : (
-            <Plus size={16} />
-          )}
-        </button>
-      </div>
-
       {processingFiles > 0 && (
         <div className="mx-4 mb-2">
           <div className="flex items-center justify-between mb-1">

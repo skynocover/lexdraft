@@ -1,4 +1,5 @@
-import { Info, FolderOpen, BarChart3, ChevronsRight, ChevronRight } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Info, FolderOpen, BarChart3, ChevronsRight, ChevronRight, Plus } from 'lucide-react';
 import { useTabStore } from '../../stores/useTabStore';
 import { useUIStore, type SidebarTab, type AnalysisSubTab } from '../../stores/useUIStore';
 import { BriefsSection } from './sidebar/BriefsSection';
@@ -10,7 +11,8 @@ import { DamagesTab } from '../analysis/DamagesTab';
 import { TimelineTab } from '../analysis/TimelineTab';
 import { useAnalysisStore } from '../../stores/useAnalysisStore';
 import { useBriefStore } from '../../stores/useBriefStore';
-import { useCaseStore } from '../../stores/useCaseStore';
+import { useCaseStore, type CaseFile } from '../../stores/useCaseStore';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 
 const SIDEBAR_TABS: { key: SidebarTab; label: string; icon: typeof FolderOpen }[] = [
@@ -76,7 +78,6 @@ const CaseMaterialsContent = () => {
   const setCaseMaterialSection = useUIStore((s) => s.setCaseMaterialSection);
   const briefs = useBriefStore((s) => s.briefs);
   const files = useCaseStore((s) => s.files);
-  const lawRefs = useBriefStore((s) => s.lawRefs);
 
   const focusedPanel = panels.find((p) => p.id === focusedPanelId);
   const activeTabId = focusedPanel?.activeTabId ?? null;
@@ -99,6 +100,7 @@ const CaseMaterialsContent = () => {
         count={files.length}
         open={caseMaterialSections.files}
         onOpenChange={(open) => setCaseMaterialSection('files', open)}
+        action={<FileUploadButton />}
       >
         <FilesSection />
       </CollapsibleSection>
@@ -106,13 +108,79 @@ const CaseMaterialsContent = () => {
       {/* 法條引用 */}
       <CollapsibleSection
         title="法條引用"
-        count={lawRefs.length}
         open={caseMaterialSections.lawRefs}
         onOpenChange={(open) => setCaseMaterialSection('lawRefs', open)}
       >
         <LawRefsSection />
       </CollapsibleSection>
     </div>
+  );
+};
+
+/* ===================== File Upload Button ===================== */
+
+const FileUploadButton = () => {
+  const currentCase = useCaseStore((s) => s.currentCase);
+  const setFiles = useCaseStore((s) => s.setFiles);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || !currentCase) return;
+
+    setUploading(true);
+    const token = useAuthStore.getState().token;
+    for (const file of Array.from(fileList)) {
+      if (file.type !== 'application/pdf') continue;
+      if (file.size > 20 * 1024 * 1024) continue;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch(`/api/cases/${currentCase.id}/files`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        if (res.ok) {
+          const newFile = (await res.json()) as CaseFile;
+          setFiles([...useCaseStore.getState().files, newFile]);
+        }
+      } catch (err) {
+        console.error('Upload failed:', err);
+      }
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  return (
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf"
+        multiple
+        onChange={handleUpload}
+        className="hidden"
+      />
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          fileInputRef.current?.click();
+        }}
+        disabled={uploading}
+        className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac disabled:opacity-50"
+        title="上傳檔案"
+      >
+        {uploading ? (
+          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-ac border-t-transparent" />
+        ) : (
+          <Plus size={16} />
+        )}
+      </button>
+    </>
   );
 };
 
@@ -123,26 +191,31 @@ const CollapsibleSection = ({
   count,
   open,
   onOpenChange,
+  action,
   children,
 }: {
   title: string;
   count?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) => {
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger className="flex w-full items-center gap-2 border-b border-bd px-4 py-2.5 text-xs font-medium text-t2 transition hover:bg-bg-h">
-        <ChevronRight
-          size={14}
-          className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
-        />
-        <span>{title}</span>
-        {count !== undefined && count > 0 && (
-          <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[10px] text-t3">{count}</span>
-        )}
-      </CollapsibleTrigger>
+      <div className="flex items-center border-b border-bd">
+        <CollapsibleTrigger className="flex flex-1 items-center gap-2 px-4 py-2.5 text-xs font-medium text-t2 transition hover:bg-bg-h">
+          <ChevronRight
+            size={14}
+            className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+          />
+          <span>{title}</span>
+          {count !== undefined && count > 0 && (
+            <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[10px] text-t3">{count}</span>
+          )}
+        </CollapsibleTrigger>
+        {action && <div className="pr-3">{action}</div>}
+      </div>
       <CollapsibleContent>{children}</CollapsibleContent>
     </Collapsible>
   );
