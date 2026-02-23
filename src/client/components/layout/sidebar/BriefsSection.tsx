@@ -3,7 +3,13 @@ import { Trash2 } from 'lucide-react';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
+import { BRIEF_TYPE_CONFIG, getBriefBadge } from '../../../lib/briefTypeConfig';
+
+const formatDate = (dateStr: string): string => {
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) => {
   const briefs = useBriefStore((s) => s.briefs);
@@ -16,6 +22,7 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
     id: string;
     title: string;
   } | null>(null);
+  const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
 
   const handleDeleteBrief = async () => {
     if (!confirmDelete) return;
@@ -46,67 +53,75 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
           <p className="text-xs text-t3">尚無書狀</p>
         </div>
       ) : (
-        <div className="px-3 py-2 space-y-1">
-          {briefs.map((b) => {
-            const tabId = `brief:${b.id}`;
-            const isActive = activeTabId === tabId;
-            const title = b.title || b.brief_type;
-            return (
-              <div
-                key={b.id}
-                className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${
-                  isActive ? 'bg-ac/8' : 'hover:bg-bg-2'
-                }`}
-              >
-                <button
-                  onClick={() => openBriefTab(b.id, title)}
-                  className="flex flex-1 items-center gap-3 min-w-0"
+        <div className="space-y-1 px-3 py-2">
+          {[...briefs]
+            .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+            .map((b) => {
+              const tabId = `brief:${b.id}`;
+              const isActive = activeTabId === tabId;
+              const title = b.title || b.brief_type;
+              const badge = getBriefBadge(b.brief_type);
+              return (
+                <div
+                  key={b.id}
+                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${
+                    isActive ? 'bg-ac/8' : 'hover:bg-bg-2'
+                  }`}
                 >
-                  {/* DOC icon badge */}
-                  <span
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border text-xs font-bold ${
-                      isActive ? 'border-ac bg-ac/10 text-ac' : 'border-bd text-t3'
-                    }`}
+                  {/* Badge with Popover */}
+                  <Popover
+                    open={openPopoverId === b.id}
+                    onOpenChange={(open) => setOpenPopoverId(open ? b.id : null)}
                   >
-                    DOC
-                  </span>
-                  <div className="flex-1 min-w-0">
+                    <PopoverTrigger asChild>
+                      <button
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${
+                          isActive ? 'bg-ac/15 text-ac' : 'bg-ac/10 text-ac'
+                        }`}
+                      >
+                        {badge}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-36 p-1" side="bottom" align="start">
+                      {Object.entries(BRIEF_TYPE_CONFIG).map(([key, config]) => (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            updateBriefType(b.id, key);
+                            setOpenPopoverId(null);
+                          }}
+                          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm transition hover:bg-bg-2 ${
+                            b.brief_type === key ? 'text-ac' : 'text-t1'
+                          }`}
+                        >
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ac/10 text-xs font-bold text-ac">
+                            {config.badge}
+                          </span>
+                          {config.label}
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+
+                  <button onClick={() => openBriefTab(b.id, title)} className="min-w-0 flex-1">
                     <p
-                      className={`truncate text-sm font-medium ${isActive ? 'text-ac' : 'text-t1'}`}
+                      className={`truncate text-left text-sm font-medium ${isActive ? 'text-ac' : 'text-t1'}`}
                     >
                       {b.title || '書狀'}
                     </p>
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      onPointerDown={(e) => e.stopPropagation()}
-                    >
-                      <Select
-                        value={b.brief_type}
-                        onValueChange={(val) => updateBriefType(b.id, val)}
-                      >
-                        <SelectTrigger className="h-auto border-none bg-transparent p-0 text-xs text-t3 shadow-none focus:ring-0">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="complaint">起訴狀</SelectItem>
-                          <SelectItem value="defense">答辯狀</SelectItem>
-                          <SelectItem value="preparation">準備書狀</SelectItem>
-                          <SelectItem value="appeal">上訴狀</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setConfirmDelete({ id: b.id, title })}
-                  className="shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
-                  title="刪除書狀"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            );
-          })}
+                    <p className="text-left text-xs text-t3">{formatDate(b.updated_at)}</p>
+                  </button>
+
+                  <button
+                    onClick={() => setConfirmDelete({ id: b.id, title })}
+                    className="shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
+                    title="刪除書狀"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
         </div>
       )}
     </div>

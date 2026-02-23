@@ -2,6 +2,8 @@ import { useSortable, SortableContext, horizontalListSortingStrategy } from '@dn
 import { CSS } from '@dnd-kit/utilities';
 import { Columns2 } from 'lucide-react';
 import { useTabStore, type TabData } from '../../stores/useTabStore';
+import { useBriefStore } from '../../stores/useBriefStore';
+import { getBriefBadge, getBriefLabel } from '../../lib/briefTypeConfig';
 
 interface TabBarProps {
   panelId: string;
@@ -34,9 +36,16 @@ const SortableTab = ({
   const isBrief = tabData.type === 'brief';
   const isVersion = tabData.type === 'version-preview';
   const isLaw = tabData.type === 'law';
+
+  const briefType = useBriefStore((s) =>
+    isBrief
+      ? s.briefs.find((b) => b.id === (tabData as { briefId: string }).briefId)?.brief_type
+      : undefined,
+  );
+
   const label =
     tabData.type === 'brief'
-      ? tabData.title || '書狀'
+      ? tabData.title || getBriefLabel(briefType ?? '')
       : tabData.type === 'version-preview'
         ? tabData.label
         : tabData.type === 'law'
@@ -50,7 +59,13 @@ const SortableTab = ({
       : isLaw
         ? 'bg-pu/20 text-pu'
         : 'bg-rd/20 text-rd';
-  const badgeText = isBrief ? 'DOC' : isVersion ? 'VER' : isLaw ? 'LAW' : 'PDF';
+  const badgeText = isBrief
+    ? getBriefBadge(briefType ?? '')
+    : isVersion
+      ? 'VER'
+      : isLaw
+        ? 'LAW'
+        : 'PDF';
 
   return (
     <button
