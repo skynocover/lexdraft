@@ -25,3 +25,4 @@ Important:
 - Only review code that is part of the uncommitted diff or new untracked files. Do NOT review unchanged code.
 - Focus on meaningful improvements, not cosmetic preferences.
 - Respect the project conventions in CLAUDE.md (arrow functions, single quotes, Tailwind spacing scale, no `any`, etc.)
+- 所有輸出一律使用繁體中文說明。
