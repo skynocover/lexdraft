@@ -6,7 +6,7 @@
 - [兩種撰寫模式](#兩種撰寫模式)
 - [write_full_brief Pipeline 深入解析](#write_full_brief-pipeline-深入解析)
   - [架構總覽](#架構總覽)
-  - [完整流程圖（Mermaid）](#完整流程圖mermaid)
+  - [分步流程圖與節點說明](#分步流程圖與節點說明)
   - [ContextStore 中央資料庫](#contextstore-中央資料庫)
     - [`seedFromOrchestrator()` 詳解](#seedfromorchestrator-詳解)
     - [步驟間資料依賴總覽](#步驟間資料依賴總覽)
@@ -85,7 +85,11 @@ Step 3: Writer (Claude Haiku 4.5 + Citations API)
       逐段撰寫、自動引用、後處理
 ```
 
-### 完整流程圖（Mermaid）
+### 分步流程圖與節點說明
+
+以下將流程圖依步驟拆分，每個步驟的流程圖後緊接其節點說明，方便對照閱讀。
+
+#### 初始化 + 三路平行
 
 ```mermaid
 flowchart TD
@@ -97,21 +101,8 @@ flowchart TD
     subgraph ThreeWay["三路平行 Check-and-Reuse (Promise.all)"]
         subgraph DisputeBranch["爭點分支"]
             CheckDisputes{"已有<br/>有效爭點？"}
-            CheckDisputes -- "YES" --> A4["A4: 沿用既有爭點<br/>disputes → LegalIssue[]"]
-            A4 --> A5seed["A5: seedFromOrchestrator()"]
-
-            CheckDisputes -- "NO" --> A6["A6: Case Reader<br/>Gemini 多輪 tool loop"]
-            A6 --> A6ok{成功？}
-            A6ok -- "YES" --> A7["A7: Issue Analyzer<br/>Gemini single-shot"]
-            A6ok -- "NO" --> A8["A8: fallback<br/>analyze_disputes"]
-            A8 --> A5seed2["seedFromDisputes()"]
-
-            A7 --> A7ok{成功？}
-            A7ok -- "YES" --> A9["A9: 組裝 OrchestratorOutput"]
-            A7ok -- "NO" --> A10["A10: 保留 Case Reader 產出<br/>爭點 fallback analyze_disputes"]
-            A10 --> A9
-            A9 --> A5seed3["A5: seedFromOrchestrator()"]
-            A5seed3 --> A11["A11: 寫入 disputes 表 + SSE"]
+            CheckDisputes -- "YES" --> A4["A4: 沿用既有爭點"]
+            CheckDisputes -- "NO" --> Step0["→ 詳見 Step 0 流程圖"]
         end
 
         subgraph DamageBranch["金額分支"]
@@ -128,60 +119,36 @@ flowchart TD
     end
 
     ThreeWay --> StoreResults["存入 ContextStore<br/>damages + timeline"]
-    StoreResults --> MergePoint["A12: 載入檔案全文 + 既有法條"]
-
-    MergePoint --> ResearchAgent
-
-    subgraph Step1["Step 1：法條研究"]
-        ResearchAgent["B1: Research Agent<br/>Gemini 多輪, search_law 平行"]
-        ResearchAgent --> RASuccess{成功？}
-        RASuccess -- YES --> StoreResearch["B2: 存入 ContextStore<br/>快取法條到 D1"]
-        RASuccess -- NO --> FallbackResearch["B3: fallback<br/>mentioned_laws 直查 MongoDB"]
-        FallbackResearch --> StoreResearch
-    end
-
-    StoreResearch --> Strategist
-
-    subgraph Step2["Step 2：論證策略"]
-        Strategist["C1: Strategist<br/>Claude Haiku 4.5 single-shot"]
-        Strategist --> Validate{"C2: 驗證<br/>結構完整？"}
-        Validate -- YES --> UseStrategy["C3: 使用策略結果"]
-        Validate -- NO --> Retry["C4: 注入錯誤訊息重試"]
-        Retry --> UseStrategy
-        UseStrategy --> SetStrategy["C5: 寫入 claims 表<br/>SSE: set_claims"]
-    end
-
-    SetStrategy --> WriterLoop
-
-    subgraph Step3["Step 3：書狀撰寫"]
-        WriterLoop["D1: for each section（順序）"]
-        WriterLoop --> BuildCtx["D2: 組裝 3 層上下文"]
-        BuildCtx --> CallClaude["D3: Claude Citations API 撰寫"]
-        CallClaude --> PostProcess["D4: 後處理"]
-        PostProcess --> SaveParagraph["D5: 存入 DB + SSE: add_paragraph"]
-        SaveParagraph --> NextSection{還有段落？}
-        NextSection -- YES --> WriterLoop
-        NextSection -- NO --> Done
-    end
-
-    subgraph Cleanup["收尾"]
-        Done["E1: 所有段落完成"] --> CleanLaws["E2: 清理未引用法條"]
-        CleanLaws --> SaveVersion["E3: 建立版本快照"]
-        SaveVersion --> ReportUsage["E4: 回報 Token 用量"]
-        ReportUsage --> Return["E5: 回傳完成訊息"]
-    end
+    StoreResults --> NextStep["→ Step 1：法條研究"]
 ```
-
-### 流程圖節點說明
-
-#### 初始化 + 三路平行
 
 | 編號 | 節點                     | 實際做什麼                                                                                                                                                                              | 目的                                                    |
 | ---- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| A1   | 初始化（`Promise.all`）  | 一次平行執行：(1) 載入所有 `status='ready'` 的檔案元資料 (2) 查 disputes 表 (3) 查 damages 表 (4) INSERT briefs 建空白書狀 + SSE 通知前端 (5) 查 cases 表拿原告/被告 + `cases.timeline` | 單次 `Promise.all` 取得所有初始資料，任何查詢之間無依賴 |
+| A1   | 初始化（`Promise.all`）  | 一次平行執行：(1) 載入所有 `status='ready'` 的檔案元資料 (2) 查 disputes 表 (3) 查 damages 表 (4) INSERT briefs 建空白書狀 + SSE 通知前端 (5) 查 cases 表拿原告/被告 + `cases.timeline` (6) 載入所有檔案全文（`full_text`/`content_md`）到 `fileContentMap` (7) 載入既有 `law_refs`（識別使用者手動加的法條） | 單次 `Promise.all` 取得所有初始資料 + 後續步驟需要的檔案全文和法條，任何查詢之間無依賴。其中 `fileContentMap` 供 Step 3 Writer Citations API 使用；`allLawRefRows` 供 Step 2 Strategist 識別使用者手動法條 |
 | —    | 三路平行 Check-and-Reuse | 用 A1 撈出的記憶體變數（`existingDisputes`、`existingDamages`、`existingTimeline`）做 `if` 判斷，三者以 `Promise.all` 平行：存在就沿用，不存在就呼叫對應工具生成                        | 省下不必要的 AI 呼叫，三者互不依賴可完全平行            |
 
 #### Step 0：案件確認（爭點分支內部）
+
+```mermaid
+flowchart TD
+    CheckDisputes{"已有<br/>有效爭點？"}
+
+    CheckDisputes -- "YES" --> A4["A4: 沿用既有爭點<br/>disputes → LegalIssue[]"]
+    A4 --> A5seed["A5: seedFromOrchestrator()"]
+
+    CheckDisputes -- "NO" --> A6["A6: Case Reader<br/>Gemini 多輪 tool loop"]
+    A6 --> A6ok{成功？}
+    A6ok -- "YES" --> A7["A7: Issue Analyzer<br/>Gemini single-shot"]
+    A6ok -- "NO" --> A8["A8: fallback<br/>analyze_disputes"]
+    A8 --> A5seed2["seedFromDisputes()"]
+
+    A7 --> A7ok{成功？}
+    A7ok -- "YES" --> A9["A9: 組裝 OrchestratorOutput"]
+    A7ok -- "NO" --> A10["A10: 保留 Case Reader 產出<br/>爭點 fallback analyze_disputes"]
+    A10 --> A9
+    A9 --> A5seed3["A5: seedFromOrchestrator()"]
+    A5seed3 --> A11["A11: 寫入 disputes 表 + SSE"]
+```
 
 | 編號 | 節點                       | 實際做什麼                                                                                                                    | 目的                                                                                                                                           |
 | ---- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -193,9 +160,18 @@ flowchart TD
 | A9   | 組裝 OrchestratorOutput    | 合併 Case Reader 的 `{ caseSummary, parties, timelineSummary }` + Issue Analyzer 的 `{ legalIssues, informationGaps }`        | 統一格式，傳入 seedFromOrchestrator()                                                                                                          |
 | A10  | fallback: 保留 parties     | Issue Analyzer 失敗時，保留 Case Reader 的 parties/summary，爭點改用 `analyze_disputes` 產生                                  | 不因 Issue Analyzer 失敗而丟失已讀取的檔案資訊                                                                                                 |
 | A11  | 寫入 disputes 表           | 刪除舊爭點，插入新爭點到 D1。發送 SSE `set_disputes`（前端爭點面板）+ `set_parties`（前端原被告顯示）                         | 持久化爭點到 DB，同步更新前端 UI                                                                                                               |
-| A12  | 載入檔案全文 + 既有法條    | 從 D1 載入所有檔案的 `full_text`/`content_md` 到 `fileContentMap`；載入 `law_refs`（識別使用者手動加的法條）                  | Step 3 Writer 需要檔案全文作為 Citation 來源；Strategist 需要知道使用者手動加了哪些法條                                                        |
 
 #### Step 1：法條研究
+
+```mermaid
+flowchart TD
+    ResearchAgent["B1: Research Agent<br/>Gemini 多輪, search_law 平行"]
+    ResearchAgent --> RASuccess{成功？}
+    RASuccess -- YES --> StoreResearch["B2: 存入 ContextStore<br/>快取法條到 D1"]
+    RASuccess -- NO --> FallbackResearch["B3: fallback<br/>mentioned_laws 直查 MongoDB"]
+    FallbackResearch --> StoreResearch
+    StoreResearch --> NextStep["→ Step 2：論證策略"]
+```
 
 | 編號 | 節點                          | 實際做什麼                                                                                                                                                       | 目的                                                                                                                  |
 | ---- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -204,6 +180,17 @@ flowchart TD
 | B3   | fallback: mentioned_laws 直查 | Research Agent 失敗時，直接用爭點的 `mentioned_laws` 和爭點標題作為查詢字串搜 MongoDB                                                                            | 確保至少有法條可用（但不經 AI 判斷攻防，全標為 attack，精度較低）                                                     |
 
 #### Step 2：論證策略
+
+```mermaid
+flowchart TD
+    Strategist["C1: Strategist<br/>Claude Haiku 4.5 single-shot"]
+    Strategist --> Validate{"C2: 驗證<br/>結構完整？"}
+    Validate -- YES --> UseStrategy["C3: 使用策略結果"]
+    Validate -- NO --> Retry["C4: 注入錯誤訊息重試"]
+    Retry --> UseStrategy
+    UseStrategy --> SetStrategy["C5: 寫入 claims 表<br/>SSE: set_claims"]
+    SetStrategy --> NextStep["→ Step 3：書狀撰寫"]
+```
 
 | 編號 | 節點                 | 實際做什麼                                                                                                              | 目的                                                                                                                                                                            |
 | ---- | -------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -215,6 +202,18 @@ flowchart TD
 
 #### Step 3：書狀撰寫
 
+```mermaid
+flowchart TD
+    WriterLoop["D1: for each section（順序）"]
+    WriterLoop --> BuildCtx["D2: 組裝 3 層上下文"]
+    BuildCtx --> CallClaude["D3: Claude Citations API 撰寫"]
+    CallClaude --> PostProcess["D4: 後處理"]
+    PostProcess --> SaveParagraph["D5: 存入 DB + SSE: add_paragraph"]
+    SaveParagraph --> NextSection{還有段落？}
+    NextSection -- YES --> WriterLoop
+    NextSection -- NO --> Done["→ 收尾"]
+```
+
 | 編號 | 節點                      | 實際做什麼                                                                                                                                                                              | 目的                                                                       |
 | ---- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | D1   | for each section（順序）  | 依序處理 Strategist 規劃的每個 section                                                                                                                                                  | 不能平行：後面段落的「回顧層」需要前面段落的全文，才能維持前後一致性       |
@@ -224,6 +223,14 @@ flowchart TD
 | D5   | 存入 DB + SSE             | 段落存入 `briefs.content_structured`；SSE `add_paragraph` 讓前端即時顯示新段落；`store.addDraftSection()` 記錄全文供下一段回顧層用                                                      | 即時更新前端 + 為下一段提供上下文                                          |
 
 #### 收尾
+
+```mermaid
+flowchart TD
+    Done["E1: 所有段落完成"] --> CleanLaws["E2: 清理未引用法條"]
+    CleanLaws --> SaveVersion["E3: 建立版本快照"]
+    SaveVersion --> ReportUsage["E4: 回報 Token 用量"]
+    ReportUsage --> Return["E5: 回傳完成訊息"]
+```
 
 | 編號 | 節點            | 實際做什麼                                                                                                     | 目的                                                                       |
 | ---- | --------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -542,8 +549,7 @@ Case Reader 是一個**工具呼叫循環（tool-calling loop）**，AI 需要�
 - 將爭點寫入 `disputes` 表（刪舊插新）
 - 發送 SSE `set_disputes` 和 `set_parties` 給前端
 - 結果存入 `ContextStore`（`store.seedFromOrchestrator()`）
-- 載入所有檔案內容到 `fileContentMap`（供 Step 3 Writer 使用）
-- 載入所有既有的 law refs（供 Step 2 Strategist 使用）
+- 檔案全文（`fileContentMap`）和既有法條（`allLawRefRows`）已在 A1 初始化時一併載入，無需額外查詢
 
 #### 三路平行 Check-and-Reuse 機制（節省 Token）
 

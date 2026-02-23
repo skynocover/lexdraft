@@ -132,8 +132,23 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
 
     let readyFiles: Awaited<ReturnType<typeof loadReadyFiles>>;
     let existingDisputes, existingDamages, briefId, caseRow;
+    let allFileContents: {
+      id: string;
+      filename: string;
+      full_text: string | null;
+      content_md: string | null;
+    }[];
+    let allLawRefRows: LawRefItem[];
     try {
-      [readyFiles, existingDisputes, existingDamages, briefId, caseRow] = await Promise.all([
+      [
+        readyFiles,
+        existingDisputes,
+        existingDamages,
+        briefId,
+        caseRow,
+        allFileContents,
+        allLawRefRows,
+      ] = await Promise.all([
         loadReadyFiles(ctx.db, ctx.caseId),
         ctx.drizzle.select().from(disputes).where(eq(disputes.case_id, ctx.caseId)),
         ctx.drizzle.select().from(damages).where(eq(damages.case_id, ctx.caseId)),
@@ -164,6 +179,18 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
                 timeline: null,
               },
           ),
+        // File full text for Step 3 Writer (Citations API document blocks)
+        ctx.drizzle
+          .select({
+            id: files.id,
+            filename: files.filename,
+            full_text: files.full_text,
+            content_md: files.content_md,
+          })
+          .from(files)
+          .where(eq(files.case_id, ctx.caseId)),
+        // Existing law refs for Step 2 Strategist (user-added laws)
+        readLawRefs(ctx.drizzle, ctx.caseId),
       ]);
     } catch (e) {
       // loadReadyFiles throws a ToolResult when no files are ready
@@ -173,6 +200,9 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
 
     // Parse existing timeline from DB
     const existingTimeline = parseJsonField<TimelineItem[]>(caseRow.timeline, []);
+
+    // Build file content map for Step 3 Writer (Citations API)
+    const fileContentMap = new Map<string, FileRow>(allFileContents.map((f) => [f.id, f]));
 
     // Set up progress children for file reads
     const readChildren: PipelineStepChild[] = [];
@@ -523,21 +553,6 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     if (childrenChanged) {
       await progress.setStepChildren(STEP_CASE, [...readChildren]);
     }
-
-    // Load file contents for Writers
-    const allFiles = await ctx.drizzle
-      .select({
-        id: files.id,
-        filename: files.filename,
-        full_text: files.full_text,
-        content_md: files.content_md,
-      })
-      .from(files)
-      .where(eq(files.case_id, ctx.caseId));
-    const fileContentMap = new Map<string, FileRow>(allFiles.map((f) => [f.id, f]));
-
-    // Load all existing law refs (user-added ones will be passed to Strategist)
-    const allLawRefRows = await readLawRefs(ctx.drizzle, ctx.caseId);
 
     // Build step content
     const criticalGaps = orchestratorOutput
