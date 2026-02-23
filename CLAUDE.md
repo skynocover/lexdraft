@@ -12,6 +12,7 @@ npm run deploy           # wrangler deploy to Cloudflare
 npm run db:generate      # Generate Drizzle migrations from schema
 npm run db:migrate:local # Apply migrations to local D1
 npx tsc --noEmit         # Type-check (no test framework configured)
+node scripts/law-search-test/search-test.mjs  # Law search regression test (needs MongoDB)
 ```
 
 ## Architecture Overview
@@ -77,10 +78,46 @@ The `optimizeDeps.esbuildOptions.plugins` entry fixes `mongodb → whatwg-url �
 
 - **DB**: `lawdb.articles` (221,061 articles), index `law_search`, analyzer `lucene.smartcn`
 - **Env var**: `MONGO_URL` (mongodb+srv:// connection string)
-- **Document fields**: `_id` (`{pcode}-{條號}`), `pcode`, `law_name`, `nature`, `category`, `chapter`, `article_no`, `content`, `aliases`, `last_update`
+- **Document fields**: `_id` (`{pcode}-{number}`，如 `B0000001-184`), `pcode`, `law_name`, `nature`, `category`, `chapter`, `article_no`（如 `第 184 條`）, `content`, `aliases`, `last_update`
 - **Synonyms**: 137 groups in `synonyms` collection (e.g., 勞基法↔勞動基準法). Only works on smartcn-analyzed fields, not keyword fields. Cannot combine `fuzzy` + `synonyms`.
 - **Law URL pattern**: `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode={pcode}`
 - Keyword search only (not semantic) — concept queries have low precision
+
+### 搜尋策略與已知限制（`lawSearch.ts`）
+
+`searchWithCollection()` 有 3 層 fallback：
+
+1. **Strategy 0 — `_id` 直查 O(1)**：搜尋「民法第184條」→ 解析出 `B0000001-184` → `findOne({ _id })`，~25ms
+2. **Strategy 1 — regex 查詢**：Strategy 0 查不到時（如 PCODE_MAP 沒收錄的法規），用 `law_name` + `article_no` regex 匹配，~1000ms+
+3. **Strategy 2 — Atlas Search 全文搜尋**：非條號查詢（如「民法 損害賠償」）走 compound query，~30ms
+   - `buildLawClause()`: PCODE_MAP 有的法規用 `filter: pcode` 精確匹配，沒有的才 fallback `text` match on `law_name`
+   - `article_no` 用 `phrase` match（不是 `text`，`text` 會因 smartcn 分詞匹配所有條文）
+   - 0 結果時自動移除 `synonyms` 重搜一次
+
+### 搜尋測試腳本
+
+`scripts/law-search-test/search-test.mjs` — 52 個測試案例，驗證所有搜尋策略。修改 `lawSearch.ts` 或 `lawConstants.ts` 後務必跑一次。詳見 `scripts/law-search-test/README.md`。
+
+注意：測試腳本中的 `PCODE_MAP` 和 `ALIAS_MAP` 是從 `lawConstants.ts` 複製的，修改 `lawConstants.ts` 後需同步更新測試腳本。
+
+### `PCODE_MAP` 維護（`lawConstants.ts`）
+
+- 來源：`/Users/ericwu/Documents/mojLawSplitJSON/FalVMingLing/` 中的 JSON（全國法規資料庫），檔名即 pcode
+- 目前收錄 78 部常用法規，涵蓋民刑商勞行政稅法等領域
+- 新增法規時從 FalVMingLing JSON 確認正確 pcode，不要猜測
+
+### 概念搜尋已知限制
+
+Atlas Search + smartcn 的概念搜尋對關鍵字選擇很敏感：
+
+| 能搜到 | 搜不到 | 原因 |
+|--------|--------|------|
+| `民法 侵權行為` | `民法 精神慰撫金` | 法條用「慰撫金」不用「精神慰撫金」 |
+| `民法 損害賠償` | `民法 不能工作 損失` | 法條用「勞動能力」不用「不能工作」 |
+| `民法 毀損` | `民法 物之毀損` | 「物之」干擾 tokenization |
+| `與有過失` | `過失傷害 賠償責任` | 純概念搜尋 recall 極低 |
+
+優化方向：用更短、更接近法條原文的關鍵字；避免口語化的複合詞
 
 ## Critical Rules
 

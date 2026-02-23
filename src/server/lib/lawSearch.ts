@@ -1,5 +1,5 @@
 import { MongoClient } from 'mongodb';
-import { resolveAlias, normalizeArticleNo, buildArticleId } from './lawConstants';
+import { resolveAlias, normalizeArticleNo, buildArticleId, PCODE_MAP } from './lawConstants';
 
 export interface LawArticle {
   _id: string;
@@ -24,6 +24,39 @@ const LAW_CONCEPT_REGEX = /^([\u4e00-\u9fff]+(?:法|規則|條例|辦法|細則)
 
 const buildUrl = (pcode: string): string =>
   `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${pcode}`;
+
+/** Atlas Search compound query 的法規篩選子句：有 pcode 用 filter，沒有則 fallback text match */
+const buildLawClause = (name: string): { filter?: unknown[]; must?: unknown[] } => {
+  const pcode = PCODE_MAP[name];
+  if (pcode) {
+    return { filter: [{ text: { query: pcode, path: 'pcode' } }] };
+  }
+  return {
+    must: [
+      {
+        text: {
+          query: name,
+          path: ['law_name', 'aliases'],
+          synonyms: 'law_synonyms',
+        },
+      },
+    ],
+  };
+};
+
+/** 遞迴移除物件中所有 `synonyms` 欄位（用於 fallback 重搜） */
+const stripSynonyms = (obj: unknown): unknown => {
+  if (Array.isArray(obj)) return obj.map(stripSynonyms);
+  if (obj && typeof obj === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === 'synonyms') continue;
+      out[k] = stripSynonyms(v);
+    }
+    return out;
+  }
+  return obj;
+};
 
 const MONGO_OPTS = {
   maxPoolSize: 1,
@@ -63,13 +96,20 @@ const searchWithCollection = async (
   const articleMatch = query.match(ARTICLE_REGEX);
   const lawConceptMatch = !articleMatch ? query.match(LAW_CONCEPT_REGEX) : null;
 
-  // ── Strategy 0: Direct _id Lookup (O(1)) ──
+  // Pre-parse article match fields once (shared by S0, S1, S2)
+  let artResolvedName: string | undefined;
+  let artRawArticle: string | undefined;
+  let artNormalized: string | undefined;
+
   if (articleMatch) {
-    const rawLawName = articleMatch[1].trim();
-    const rawArticle = articleMatch[2].trim();
-    const resolvedName = resolveAlias(rawLawName);
-    const normalizedArticle = normalizeArticleNo(rawArticle);
-    const articleId = buildArticleId(resolvedName, normalizedArticle);
+    artResolvedName = resolveAlias(articleMatch[1].trim());
+    artRawArticle = articleMatch[2].trim();
+    artNormalized = normalizeArticleNo(artRawArticle);
+  }
+
+  // ── Strategy 0: Direct _id Lookup (O(1)) ──
+  if (articleMatch && artResolvedName && artNormalized) {
+    const articleId = buildArticleId(artResolvedName, artNormalized);
 
     if (articleId) {
       const doc = await coll.findOne({ _id: articleId } as Record<string, unknown>);
@@ -86,11 +126,8 @@ const searchWithCollection = async (
   }
 
   // ── Strategy 1: Exact article with regex (e.g. "民法第213條") ──
-  if (articleMatch) {
-    const rawLawName = articleMatch[1].trim();
-    const articleQuery = articleMatch[2].trim();
-    const resolvedName = resolveAlias(rawLawName);
-    const numMatch = articleQuery.match(/第\s*(\d+)\s*(條.*)/);
+  if (articleMatch && artResolvedName && artRawArticle) {
+    const numMatch = artRawArticle.match(/第\s*(\d+)\s*(條.*)/);
     if (numMatch) {
       const articleNum = numMatch[1];
       const suffix = numMatch[2].replace(/條|\s+/g, '');
@@ -99,7 +136,7 @@ const searchWithCollection = async (
         : new RegExp(`第\\s*${articleNum}\\s*條(?!\\s*之)(?!.*-)`);
       const directResults = await coll
         .find({
-          $or: [{ law_name: resolvedName }, { aliases: { $regex: resolvedName } }],
+          $or: [{ law_name: artResolvedName }, { aliases: { $regex: artResolvedName } }],
           article_no: { $regex: articleRegex },
         })
         .limit(safeLimit)
@@ -118,36 +155,17 @@ const searchWithCollection = async (
   // ── Build Atlas Search compound query ──
   let compound: Record<string, unknown>;
 
-  if (articleMatch) {
-    const rawLawName = articleMatch[1].trim();
-    const articleQuery = articleMatch[2].trim();
-    const resolvedName = resolveAlias(rawLawName);
+  if (articleMatch && artResolvedName && artNormalized) {
     compound = {
-      must: [
-        {
-          text: {
-            query: resolvedName,
-            path: ['law_name', 'aliases'],
-            synonyms: 'law_synonyms',
-          },
-        },
-      ],
-      should: [{ text: { query: articleQuery, path: 'article_no' } }],
+      ...buildLawClause(artResolvedName),
+      should: [{ phrase: { query: artNormalized, path: 'article_no' } }],
     };
   } else if (lawConceptMatch) {
     const rawLawName = lawConceptMatch[1];
     const resolvedName = resolveAlias(rawLawName);
     const concept = lawConceptMatch[2];
     compound = {
-      must: [
-        {
-          text: {
-            query: resolvedName,
-            path: ['law_name', 'aliases'],
-            synonyms: 'law_synonyms',
-          },
-        },
-      ],
+      ...buildLawClause(resolvedName),
       should: [
         {
           text: {
@@ -183,7 +201,7 @@ const searchWithCollection = async (
             query,
             path: ['law_name', 'aliases'],
             synonyms: 'law_synonyms',
-            score: { boost: { value: 5 } },
+            score: { boost: { value: 1.5 } },
           },
         },
         {
@@ -215,35 +233,45 @@ const searchWithCollection = async (
   }
 
   if (nature) {
-    compound.filter = [{ text: { query: nature, path: 'nature' } }];
+    const existing = (compound.filter as unknown[]) || [];
+    compound.filter = [...existing, { text: { query: nature, path: 'nature' } }];
   }
 
-  const results = await coll
-    .aggregate([
-      { $search: { index: 'law_search', compound } },
-      { $limit: safeLimit },
-      {
-        $project: {
-          _id: 1,
-          pcode: 1,
-          law_name: 1,
-          nature: 1,
-          category: 1,
-          chapter: 1,
-          article_no: 1,
-          content: 1,
-          aliases: 1,
-          last_update: 1,
-          url: {
-            $concat: ['https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=', '$pcode'],
+  const runAtlasSearch = async (c: Record<string, unknown>): Promise<LawArticle[]> =>
+    coll
+      .aggregate([
+        { $search: { index: 'law_search', compound: c } },
+        { $limit: safeLimit },
+        {
+          $project: {
+            _id: 1,
+            pcode: 1,
+            law_name: 1,
+            nature: 1,
+            category: 1,
+            chapter: 1,
+            article_no: 1,
+            content: 1,
+            aliases: 1,
+            last_update: 1,
+            url: {
+              $concat: ['https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=', '$pcode'],
+            },
+            score: { $meta: 'searchScore' },
           },
-          score: { $meta: 'searchScore' },
         },
-      },
-    ])
-    .toArray();
+      ])
+      .toArray() as unknown as Promise<LawArticle[]>;
 
-  return results as unknown as LawArticle[];
+  const results = await runAtlasSearch(compound);
+
+  // Fallback: if concept search returns 0 results, retry without synonyms.
+  // Synonyms can sometimes reduce recall by redirecting to unrelated terms.
+  if (results.length === 0 && !articleMatch) {
+    return runAtlasSearch(stripSynonyms(compound) as Record<string, unknown>);
+  }
+
+  return results;
 };
 
 // ── Public APIs (manage MongoClient lifecycle, delegate to core) ──
