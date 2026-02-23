@@ -42,7 +42,6 @@ interface FileMessage {
 
 interface ClassificationResult {
   category: 'ours' | 'theirs' | 'court' | 'evidence' | 'other';
-  doc_type: string;
   doc_date: string | null;
   summary: {
     type: string;
@@ -59,9 +58,8 @@ interface ClassificationResult {
 const CLASSIFY_PROMPT = `你是法律文件分類助手。根據以下檔案名稱和內容，判斷：
 
 1. category: ours（我方書狀）| theirs（對方書狀）| court（法院文件）| evidence（證據）| other
-2. doc_type: complaint | defense | preparation | transcript | ruling | notice | evidence | other
-3. doc_date: 文件日期（YYYY-MM-DD），如無法判斷則 null
-4. summary: 結構化摘要
+2. doc_date: 文件日期（YYYY-MM-DD），如無法判斷則 null
+3. summary: 結構化摘要
 
 分類依據：
 - ours：包含「起訴狀」「準備狀」「準備○狀」且為我方
@@ -77,7 +75,6 @@ const CLASSIFY_PROMPT = `你是法律文件分類助手。根據以下檔案名�
 回傳純 JSON，不要包含 markdown 標記。格式：
 {
   "category": "...",
-  "doc_type": "...",
   "doc_date": "..." or null,
   "summary": {
     "type": "文件類型（繁體中文，如「民事起訴狀」「答辯狀」「言詞辯論筆錄」）",
@@ -220,7 +217,6 @@ export const processFileMessage = async (
         full_text: fullText,
         content_md: contentMd,
         category: classification.category,
-        doc_type: classification.doc_type,
         doc_date: classification.doc_date,
         summary: JSON.stringify(classification.summary),
         updated_at: new Date().toISOString(),
@@ -240,35 +236,37 @@ export const processFileMessage = async (
   }
 };
 
+const CATEGORY_TYPE_LABEL: Record<string, string> = {
+  ours: '我方書狀',
+  theirs: '對方書狀',
+  court: '法院文件',
+  evidence: '證據',
+  other: '其他文件',
+};
+
 /** 無 API key 時的 fallback 分類（純靠檔名） */
 const fallbackClassify = (filename: string): ClassificationResult => {
   const name = filename.toLowerCase();
   let category: ClassificationResult['category'] = 'other';
-  let doc_type = 'other';
 
   if (name.includes('起訴') || name.includes('準備')) {
     category = 'ours';
-    doc_type = name.includes('起訴') ? 'complaint' : 'preparation';
   } else if (name.includes('答辯') || name.includes('爭點')) {
     category = 'theirs';
-    doc_type = 'defense';
-  } else if (name.includes('筆錄')) {
+  } else if (
+    name.includes('筆錄') ||
+    name.includes('裁定') ||
+    name.includes('判決') ||
+    name.includes('通知')
+  ) {
     category = 'court';
-    doc_type = 'transcript';
-  } else if (name.includes('裁定') || name.includes('判決')) {
-    category = 'court';
-    doc_type = 'ruling';
-  } else if (name.includes('通知')) {
-    category = 'court';
-    doc_type = 'notice';
   }
 
   return {
     category,
-    doc_type,
     doc_date: null,
     summary: {
-      type: doc_type,
+      type: CATEGORY_TYPE_LABEL[category] || '其他文件',
       party: category === 'ours' ? 'plaintiff' : category === 'theirs' ? 'defendant' : null,
       summary: '（無 AI API Key，僅依檔名分類）',
       key_claims: [],

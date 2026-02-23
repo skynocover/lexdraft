@@ -3,17 +3,12 @@ import { Trash2 } from 'lucide-react';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { ConfirmDialog } from './ConfirmDialog';
-
-const BRIEF_TYPE_LABEL: Record<string, string> = {
-  complaint: '起訴狀',
-  defense: '答辯狀',
-  preparation: '準備書狀',
-  appeal: '上訴狀',
-};
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 
 export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) => {
   const briefs = useBriefStore((s) => s.briefs);
   const deleteBrief = useBriefStore((s) => s.deleteBrief);
+  const updateBriefType = useBriefStore((s) => s.updateBriefType);
   const openBriefTab = useTabStore((s) => s.openBriefTab);
   const closeTab = useTabStore((s) => s.closeTab);
 
@@ -81,9 +76,25 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
                     >
                       {b.title || '書狀'}
                     </p>
-                    <p className="text-xs text-t3">
-                      {BRIEF_TYPE_LABEL[b.brief_type] || b.brief_type}
-                    </p>
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <Select
+                        value={b.brief_type}
+                        onValueChange={(val) => updateBriefType(b.id, val)}
+                      >
+                        <SelectTrigger className="h-auto border-none bg-transparent p-0 text-xs text-t3 shadow-none focus:ring-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="complaint">起訴狀</SelectItem>
+                          <SelectItem value="defense">答辯狀</SelectItem>
+                          <SelectItem value="preparation">準備書狀</SelectItem>
+                          <SelectItem value="appeal">上訴狀</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </button>
                 <button

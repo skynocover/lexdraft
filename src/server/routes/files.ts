@@ -56,7 +56,6 @@ filesRouter.post('/cases/:caseId/files', async (c) => {
     mime_type: 'application/pdf',
     status: 'pending',
     category: null,
-    doc_type: null,
     doc_date: null,
     full_text: null,
     summary: null,
@@ -97,7 +96,6 @@ filesRouter.get('/cases/:caseId/files/status', async (c) => {
       filename: files.filename,
       status: files.status,
       category: files.category,
-      doc_type: files.doc_type,
     })
     .from(files)
     .where(eq(files.case_id, c.req.param('caseId')));
@@ -115,7 +113,6 @@ filesRouter.put('/files/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json<{
     category?: string;
-    doc_type?: string;
     doc_date?: string;
   }>();
 
@@ -125,7 +122,6 @@ filesRouter.put('/files/:id', async (c) => {
 
   const updates: Record<string, string | null> = { updated_at: new Date().toISOString() };
   if (body.category !== undefined) updates.category = body.category;
-  if (body.doc_type !== undefined) updates.doc_type = body.doc_type;
   if (body.doc_date !== undefined) updates.doc_date = body.doc_date;
 
   await db.update(files).set(updates).where(eq(files.id, id));

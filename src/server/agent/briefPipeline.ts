@@ -130,44 +130,46 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     if (ctx.signal.aborted) return toolError('已取消');
     await progress.startStep(STEP_CASE);
 
-    let readyFiles;
+    let readyFiles: Awaited<ReturnType<typeof loadReadyFiles>>;
+    let existingDisputes, existingDamages, briefId, caseRow;
     try {
-      readyFiles = await loadReadyFiles(ctx.db, ctx.caseId);
+      [readyFiles, existingDisputes, existingDamages, briefId, caseRow] = await Promise.all([
+        loadReadyFiles(ctx.db, ctx.caseId),
+        ctx.drizzle.select().from(disputes).where(eq(disputes.case_id, ctx.caseId)),
+        ctx.drizzle.select().from(damages).where(eq(damages.case_id, ctx.caseId)),
+        createBriefInDB(ctx),
+        ctx.drizzle
+          .select({
+            plaintiff: cases.plaintiff,
+            defendant: cases.defendant,
+            case_number: cases.case_number,
+            court: cases.court,
+            case_type: cases.case_type,
+            client_role: cases.client_role,
+            case_instructions: cases.case_instructions,
+            timeline: cases.timeline,
+          })
+          .from(cases)
+          .where(eq(cases.id, ctx.caseId))
+          .then(
+            (rows) =>
+              rows[0] || {
+                plaintiff: null,
+                defendant: null,
+                case_number: null,
+                court: null,
+                case_type: null,
+                client_role: null,
+                case_instructions: null,
+                timeline: null,
+              },
+          ),
+      ]);
     } catch (e) {
-      return e as ToolResult;
+      // loadReadyFiles throws a ToolResult when no files are ready
+      if (e && typeof e === 'object' && 'result' in e) return e as unknown as ToolResult;
+      throw e;
     }
-
-    const [existingDisputes, existingDamages, briefId, caseRow] = await Promise.all([
-      ctx.drizzle.select().from(disputes).where(eq(disputes.case_id, ctx.caseId)),
-      ctx.drizzle.select().from(damages).where(eq(damages.case_id, ctx.caseId)),
-      createBriefInDB(ctx),
-      ctx.drizzle
-        .select({
-          plaintiff: cases.plaintiff,
-          defendant: cases.defendant,
-          case_number: cases.case_number,
-          court: cases.court,
-          case_type: cases.case_type,
-          client_role: cases.client_role,
-          case_instructions: cases.case_instructions,
-          timeline: cases.timeline,
-        })
-        .from(cases)
-        .where(eq(cases.id, ctx.caseId))
-        .then(
-          (rows) =>
-            rows[0] || {
-              plaintiff: null,
-              defendant: null,
-              case_number: null,
-              court: null,
-              case_type: null,
-              client_role: null,
-              case_instructions: null,
-              timeline: null,
-            },
-        ),
-    ]);
 
     // Parse existing timeline from DB
     const existingTimeline = parseJsonField<TimelineItem[]>(caseRow.timeline, []);

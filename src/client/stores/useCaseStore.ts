@@ -23,7 +23,6 @@ export interface CaseFile {
   mime_type: string | null;
   status: 'pending' | 'processing' | 'ready' | 'error';
   category: 'ours' | 'theirs' | 'court' | 'evidence' | 'other' | null;
-  doc_type: string | null;
   doc_date: string | null;
   summary: string | null;
   created_at: string;

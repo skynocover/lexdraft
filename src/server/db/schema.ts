@@ -44,7 +44,6 @@ export const files = sqliteTable('files', {
   // AI 處理結果
   status: text('status').default('pending'), // pending | processing | ready | error
   category: text('category'), // ours | theirs | court | evidence | other
-  doc_type: text('doc_type'), // complaint | defense | preparation | transcript | ruling | notice | evidence | other
   doc_date: text('doc_date'),
   full_text: text('full_text'),
   content_md: text('content_md'), // AI-generated markdown (for citation chunking)

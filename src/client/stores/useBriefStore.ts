@@ -102,6 +102,7 @@ interface BriefState {
   ) => void;
   removeCitation: (paragraphId: string, citationId: string) => void;
   removeLawRef: (lawRefId: string) => Promise<void>;
+  updateBriefType: (briefId: string, briefType: string) => Promise<void>;
   deleteBrief: (briefId: string) => Promise<void>;
   saveBrief: () => Promise<void>;
 
@@ -389,6 +390,21 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       await api.delete(`/cases/${caseId}/law-refs/${lawRefId}`);
     } catch (err) {
       console.error('removeLawRef error:', err);
+    }
+  },
+
+  updateBriefType: async (briefId: string, briefType: string) => {
+    try {
+      await api.put<Brief>(`/briefs/${briefId}`, { brief_type: briefType });
+      set((s) => ({
+        briefs: s.briefs.map((b) => (b.id === briefId ? { ...b, brief_type: briefType } : b)),
+        currentBrief:
+          s.currentBrief?.id === briefId
+            ? { ...s.currentBrief, brief_type: briefType }
+            : s.currentBrief,
+      }));
+    } catch (err) {
+      console.error('updateBriefType error:', err);
     }
   },
 
