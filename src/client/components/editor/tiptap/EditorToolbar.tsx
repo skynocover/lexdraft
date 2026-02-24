@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import type { Editor } from '@tiptap/react';
 import { Undo2, Redo2 } from 'lucide-react';
 import { useBriefStore } from '../../../stores/useBriefStore';
@@ -45,6 +45,42 @@ export const EditorToolbar = ({
 }: EditorToolbarProps) => {
   const currentBrief = useBriefStore((s) => s.currentBrief);
 
+  const detectBlockType = useCallback((): string => {
+    if (!editor) return 'paragraph';
+    if (editor.isActive('heading', { level: 2 })) return 'h2';
+    if (editor.isActive('heading', { level: 3 })) return 'h3';
+    return 'paragraph';
+  }, [editor]);
+
+  const [blockType, setBlockType] = useState<string>(() => detectBlockType());
+
+  useEffect(() => {
+    if (!editor) return;
+    const update = () => {
+      const next = detectBlockType();
+      setBlockType((prev) => (prev === next ? prev : next));
+    };
+    editor.on('transaction', update);
+    return () => {
+      editor.off('transaction', update);
+    };
+  }, [editor, detectBlockType]);
+
+  const handleBlockTypeChange = (value: string) => {
+    if (!editor) return;
+    switch (value) {
+      case 'h2':
+        editor.chain().focus().toggleHeading({ level: 2 }).run();
+        break;
+      case 'h3':
+        editor.chain().focus().toggleHeading({ level: 3 }).run();
+        break;
+      default:
+        editor.chain().focus().setParagraph().run();
+        break;
+    }
+  };
+
   const charCount = useMemo(() => {
     if (!currentBrief?.content_structured?.paragraphs) return 0;
     return countChars(currentBrief.content_structured.paragraphs);
@@ -77,6 +113,20 @@ export const EditorToolbar = ({
       </button>
       <span className="mx-2 h-4 w-px bg-bd" />
 
+      {/* Block type selector */}
+      <select
+        value={blockType}
+        onChange={(e) => handleBlockTypeChange(e.target.value)}
+        disabled={!editor}
+        className="h-6 rounded border border-bd bg-bg-2 px-1.5 text-xs text-t2 outline-none hover:border-t3 focus:border-ac disabled:opacity-30"
+      >
+        <option value="paragraph">內文</option>
+        <option value="h2">大標題</option>
+        <option value="h3">小標題</option>
+      </select>
+
+      <span className="mx-2 h-4 w-px bg-bd" />
+
       {/* Content status: Citation + Char count */}
       {stats.confirmed > 0 || stats.pending > 0 ? (
         <button
@@ -98,6 +148,8 @@ export const EditorToolbar = ({
         <>
           <span className="text-xs text-t3">·</span>
           <span className="text-xs text-t3">{charCount.toLocaleString()} 字</span>
+          <span className="text-xs text-t3">·</span>
+          <span className="text-xs text-t3">約 {Math.max(1, Math.ceil(charCount / 850))} 頁</span>
         </>
       )}
 

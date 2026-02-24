@@ -8,8 +8,9 @@ import type { Paragraph, Citation, TextSegment } from '../../../stores/useBriefS
  * Mapping:
  *   section change   → heading level:2 (attrs: sectionName)
  *   subsection change → heading level:3 (attrs: subsectionName)
- *   paragraph         → paragraph node with inline text + citation atoms
- *   newlines in text  → hardBreak nodes
+ *   paragraph         → one or more paragraph nodes (split at \n\n boundaries)
+ *   single \n in text → hardBreak node (= Shift+Enter in Word)
+ *   double \n\n       → separate <p> node (= Enter in Word, each gets text-indent)
  */
 export function contentStructuredToTiptapDoc(
   content: { paragraphs: Paragraph[] } | null,
@@ -45,15 +46,10 @@ export function contentStructuredToTiptapDoc(
       prevSubsection = p.subsection;
     }
 
-    // Paragraph node
-    const inlineContent = buildInlineContent(p, citationCounter);
-    citationCounter = inlineContent.nextCounter;
-
-    nodes.push({
-      type: 'paragraph',
-      attrs: { paragraphId: p.id, disputeId: p.dispute_id },
-      content: inlineContent.nodes.length > 0 ? inlineContent.nodes : undefined,
-    });
+    // Paragraph node(s) — split at \n\n boundaries into separate <p> nodes
+    const pResult = buildParagraphNodes(p, citationCounter);
+    citationCounter = pResult.nextCounter;
+    nodes.push(...pResult.nodes);
   }
 
   return { type: 'doc', content: nodes };
@@ -158,6 +154,100 @@ function pushTextWithBreaks(nodes: JSONContent[], text: string) {
     }
   }
 }
+
+/**
+ * Split inline nodes at consecutive hardBreak boundaries (\n\n).
+ * Single hardBreaks (\n) are preserved as soft line breaks within a group.
+ * Returns an array of node groups — each group becomes a separate <p>.
+ */
+const splitAtParagraphBoundaries = (nodes: JSONContent[]): JSONContent[][] => {
+  const groups: JSONContent[][] = [[]];
+
+  for (let i = 0; i < nodes.length; i++) {
+    if (
+      nodes[i].type === 'hardBreak' &&
+      i + 1 < nodes.length &&
+      nodes[i + 1].type === 'hardBreak'
+    ) {
+      // Consecutive hardBreaks → paragraph boundary
+      groups.push([]);
+      i++; // skip second hardBreak
+      // Skip any additional consecutive hardBreaks (\n\n\n etc.)
+      while (i + 1 < nodes.length && nodes[i + 1].type === 'hardBreak') {
+        i++;
+      }
+    } else {
+      groups[groups.length - 1].push(nodes[i]);
+    }
+  }
+
+  // Trim leading/trailing hardBreaks from each group, then filter empty groups
+  return groups
+    .map((g) => {
+      let start = 0;
+      let end = g.length;
+      while (start < end && g[start].type === 'hardBreak') start++;
+      while (end > start && g[end - 1].type === 'hardBreak') end--;
+      return g.slice(start, end);
+    })
+    .filter((g) => g.length > 0);
+};
+
+/**
+ * Build one or more Tiptap paragraph nodes from a single Paragraph object.
+ * If the inline content contains \n\n (consecutive hardBreaks), it is split
+ * into separate <p> nodes so each gets its own CSS text-indent (like Word's Enter).
+ */
+const buildParagraphNodes = (
+  p: Paragraph,
+  startCounter: number,
+): { nodes: JSONContent[]; nextCounter: number } => {
+  const inlineContent = buildInlineContent(p, startCounter);
+
+  // Fast path: no consecutive hardBreaks → single <p>
+  const hasDoubleBreak = inlineContent.nodes.some(
+    (n, i, arr) => n.type === 'hardBreak' && arr[i + 1]?.type === 'hardBreak',
+  );
+
+  if (!hasDoubleBreak) {
+    return {
+      nodes: [
+        {
+          type: 'paragraph',
+          attrs: { paragraphId: p.id, disputeId: p.dispute_id },
+          content: inlineContent.nodes.length > 0 ? inlineContent.nodes : undefined,
+        },
+      ],
+      nextCounter: inlineContent.nextCounter,
+    };
+  }
+
+  // Split into multiple <p> nodes
+  const groups = splitAtParagraphBoundaries(inlineContent.nodes);
+
+  if (groups.length === 0) {
+    return {
+      nodes: [
+        {
+          type: 'paragraph',
+          attrs: { paragraphId: p.id, disputeId: p.dispute_id },
+        },
+      ],
+      nextCounter: inlineContent.nextCounter,
+    };
+  }
+
+  const paragraphNodes: JSONContent[] = groups.map((group, i) => ({
+    type: 'paragraph',
+    attrs: {
+      paragraphId: i === 0 ? p.id : nanoid(),
+      disputeId: p.dispute_id,
+    },
+    content: group,
+  }));
+
+  return { nodes: paragraphNodes, nextCounter: inlineContent.nextCounter };
+};
 
 function citationToNode(c: Citation, index: number): JSONContent {
   return {
