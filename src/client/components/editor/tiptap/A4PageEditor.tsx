@@ -17,6 +17,7 @@ import { PrintPreviewModal } from './PrintPreviewModal';
 import { VersionPanel } from '../VersionPanel';
 import { EditorToolbar } from './EditorToolbar';
 import { SelectionToolbar } from './SelectionToolbar';
+import { usePageInfo } from '../../../hooks/usePageInfo';
 
 export function A4PageEditor({ content }: BriefEditorProps) {
   const currentBrief = useBriefStore((s) => s.currentBrief);
@@ -33,6 +34,10 @@ export function A4PageEditor({ content }: BriefEditorProps) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const pageInfo = usePageInfo(scrollContainerRef, contentRef, !!content);
 
   // Flag to prevent loop: when we update store from editor, don't re-sync editor
   const isInternalUpdate = useRef(false);
@@ -170,19 +175,20 @@ export function A4PageEditor({ content }: BriefEditorProps) {
         saving={saving}
         hasContent={!!content}
         versionPanelOpen={versionPanelOpen}
+        pageInfo={pageInfo}
         onCitationReview={() => setCitationReviewOpen(true)}
         onPrintPreview={() => setPrintPreviewOpen(true)}
         onToggleVersionPanel={() => setVersionPanelOpen((v) => !v)}
       />
 
       {/* A4 Editor Area */}
-      <div className="a4-editor-container min-h-0 flex-1 overflow-y-auto">
+      <div ref={scrollContainerRef} className="a4-editor-container min-h-0 flex-1 overflow-y-auto">
         {!content ? (
           <div className="flex items-center justify-center py-20">
             <p className="text-sm text-t3">尚無書狀內容</p>
           </div>
         ) : (
-          <div className="a4-editor-content">
+          <div ref={contentRef} className="a4-editor-content">
             {/* Title — inside A4 page, editable on double-click */}
             <div className="a4-title" onDoubleClick={handleTitleDoubleClick}>
               {editingTitle ? (

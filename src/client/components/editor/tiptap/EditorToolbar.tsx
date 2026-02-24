@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/react';
 import { Undo2, Redo2 } from 'lucide-react';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { exportBriefToDocx } from './exportDocx';
+import type { PageInfo } from '../../../hooks/usePageInfo';
 
 const countChars = (
   paragraphs: { content_md: string; segments?: { text: string }[] }[],
@@ -27,6 +28,7 @@ interface EditorToolbarProps {
   saving: boolean;
   hasContent: boolean;
   versionPanelOpen: boolean;
+  pageInfo: PageInfo;
   onCitationReview: () => void;
   onPrintPreview: () => void;
   onToggleVersionPanel: () => void;
@@ -39,6 +41,7 @@ export const EditorToolbar = ({
   saving,
   hasContent,
   versionPanelOpen,
+  pageInfo,
   onCitationReview,
   onPrintPreview,
   onToggleVersionPanel,
@@ -149,7 +152,9 @@ export const EditorToolbar = ({
           <span className="text-xs text-t3">·</span>
           <span className="text-xs text-t3">{charCount.toLocaleString()} 字</span>
           <span className="text-xs text-t3">·</span>
-          <span className="text-xs text-t3">約 {Math.max(1, Math.ceil(charCount / 850))} 頁</span>
+          <span className="text-xs text-t3">
+            第 {pageInfo.currentPage} / {pageInfo.totalPages} 頁
+          </span>
         </>
       )}
 
