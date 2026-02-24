@@ -12,6 +12,7 @@ import {
 } from '../agent/aiClient';
 import { TOOL_DEFINITIONS, executeTool } from '../agent/tools';
 import { parseOpenAIStream, type OpenAIChunk } from '../agent/sseParser';
+import { parseLLMJsonArray } from '../agent/toolHelpers';
 
 const VALID_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((t) => t.function.name));
 import type { SSEEvent } from '../../shared/types';
@@ -564,19 +565,16 @@ ${paragraphList}
         const recentMessages = chatMessages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
           .slice(-6);
-        const suggestResult = await callAI(aiEnv, [
-          { role: 'system', content: SUGGEST_PROMPT },
-          ...recentMessages,
-        ]);
-        // Try direct parse, fallback to extracting from markdown code block
-        let raw = suggestResult.content.trim();
-        const codeBlockMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (codeBlockMatch) raw = codeBlockMatch[1].trim();
-        const actions = JSON.parse(raw) as {
-          label: string;
-          prompt: string;
-        }[];
-        if (Array.isArray(actions) && actions.length > 0) {
+        const suggestResult = await callAI(
+          aiEnv,
+          [{ role: 'system', content: SUGGEST_PROMPT }, ...recentMessages],
+          { responseFormat: { type: 'json_object' }, maxTokens: 512 },
+        );
+        const actions = parseLLMJsonArray<{ label: string; prompt: string }>(
+          suggestResult.content,
+          '建議操作格式不正確',
+        );
+        if (actions.length > 0) {
           await sendSSE({
             type: 'suggested_actions',
             actions: actions.slice(0, 3),
