@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Columns2 } from 'lucide-react';
 import { useTabStore, type TabData } from '../../stores/useTabStore';
 import { useBriefStore } from '../../stores/useBriefStore';
-import { getBriefBadge, getBriefLabel } from '../../lib/briefTypeConfig';
+import { getBriefLabel } from '../../lib/briefTypeConfig';
 
 interface TabBarProps {
   panelId: string;
@@ -34,8 +34,6 @@ const SortableTab = ({
   };
 
   const isBrief = tabData.type === 'brief';
-  const isVersion = tabData.type === 'version-preview';
-  const isLaw = tabData.type === 'law';
 
   const briefType = useBriefStore((s) =>
     isBrief
@@ -52,21 +50,6 @@ const SortableTab = ({
           ? `${tabData.lawName} ${tabData.article}`
           : tabData.filename;
 
-  const badgeClass = isBrief
-    ? 'bg-ac/20 text-ac'
-    : isVersion
-      ? 'bg-pp/20 text-pp'
-      : isLaw
-        ? 'bg-pu/20 text-pu'
-        : 'bg-rd/20 text-rd';
-  const badgeText = isBrief
-    ? getBriefBadge(briefType ?? '')
-    : isVersion
-      ? 'VER'
-      : isLaw
-        ? 'LAW'
-        : 'PDF';
-
   return (
     <button
       ref={setNodeRef}
@@ -78,9 +61,6 @@ const SortableTab = ({
         isActive ? 'border-b-2 border-b-ac bg-bg-0 text-t1' : 'text-t3 hover:bg-bg-h hover:text-t2'
       }`}
     >
-      <span className={`shrink-0 rounded px-1 py-0.5 text-[11px] font-semibold ${badgeClass}`}>
-        {badgeText}
-      </span>
       <span className="truncate">{label}</span>
       <span
         onClick={(e) => {
