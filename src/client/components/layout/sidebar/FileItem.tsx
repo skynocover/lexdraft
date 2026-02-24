@@ -4,20 +4,22 @@ import type { CaseFile } from '../../../stores/useCaseStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { CATEGORY_CONFIG } from '../../../lib/categoryConfig';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 
 export function FileItem({
   file,
-  groupKey,
   isRebuttalTarget,
   onDelete,
+  onCategoryChange,
 }: {
   file: CaseFile;
-  groupKey: string;
   isRebuttalTarget: boolean;
   onDelete: (id: string) => void;
+  onCategoryChange: (fileId: string, category: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const openFileTab = useTabStore((s) => s.openFileTab);
   const summary = file.summary ? JSON.parse(file.summary) : null;
 
@@ -33,30 +35,47 @@ export function FileItem({
   };
 
   const isProcessing = file.status === 'pending' || file.status === 'processing';
-  const badge = CATEGORY_CONFIG[groupKey];
-
-  const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('text/file-id', file.id);
-    e.dataTransfer.effectAllowed = 'move';
-  };
+  const categoryKey = file.category || 'other';
+  const badge = CATEGORY_CONFIG[categoryKey] || CATEGORY_CONFIG.other;
 
   return (
     <div>
       <div
-        draggable
-        onDragStart={handleDragStart}
-        className={`group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition cursor-grab active:cursor-grabbing ${
+        className={`group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition ${
           isRebuttalTarget ? 'bg-yl/8' : isFileActive ? 'bg-ac/8' : 'hover:bg-bg-2'
         }`}
       >
-        {/* Icon badge */}
-        {badge && (
-          <span
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${badge.badgeCls}`}
-          >
-            {badge.badge}
-          </span>
-        )}
+        {/* Badge with Popover */}
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <PopoverTrigger asChild>
+            <button
+              className={`flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm font-bold transition hover:ring-2 hover:ring-current/25 ${badge.badgeCls}`}
+            >
+              {badge.badge}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-36 p-1" side="bottom" align="start">
+            {Object.entries(CATEGORY_CONFIG).map(([key, config]) => (
+              <button
+                key={key}
+                onClick={() => {
+                  onCategoryChange(file.id, key);
+                  setPopoverOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm transition hover:bg-bg-2 ${
+                  categoryKey === key ? 'text-ac' : 'text-t1'
+                }`}
+              >
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${config.badgeCls}`}
+                >
+                  {config.badge}
+                </span>
+                {config.label}
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
 
         <button onClick={handleClick} className="flex-1 min-w-0 text-left">
           <p

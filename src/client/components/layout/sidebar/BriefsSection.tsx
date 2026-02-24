@@ -75,7 +75,7 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
                   >
                     <PopoverTrigger asChild>
                       <button
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${
+                        className={`flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm font-bold transition hover:ring-2 hover:ring-ac/25 ${
                           isActive ? 'bg-ac/15 text-ac' : 'bg-ac/10 text-ac'
                         }`}
                       >

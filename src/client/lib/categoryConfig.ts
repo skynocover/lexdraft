@@ -7,7 +7,7 @@ export interface CategoryInfo {
 
 export const CATEGORY_CONFIG: Record<string, CategoryInfo> = {
   ours: { badge: '我', label: '我方', badgeCls: 'bg-ac/10 text-ac', tagCls: 'bg-ac/20 text-ac' },
-  theirs: { badge: '他', label: '對方', badgeCls: 'bg-rd/10 text-rd', tagCls: 'bg-or/20 text-or' },
+  theirs: { badge: '對', label: '對方', badgeCls: 'bg-rd/10 text-rd', tagCls: 'bg-or/20 text-or' },
   court: { badge: '法', label: '法院', badgeCls: 'bg-pu/10 text-pu', tagCls: 'bg-pu/20 text-pu' },
   evidence: {
     badge: '證',

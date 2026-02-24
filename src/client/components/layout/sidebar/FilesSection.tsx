@@ -1,29 +1,26 @@
 import { useCaseStore, type CaseFile } from '../../../stores/useCaseStore';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { api } from '../../../lib/api';
-import { FileGroup } from './FileGroup';
+import { FileItem } from './FileItem';
 
-type Category = 'ours' | 'theirs' | 'court' | 'evidence' | 'other';
-
-const FILE_GROUPS: { key: Category; label: string }[] = [
-  { key: 'ours', label: '我方書狀' },
-  { key: 'theirs', label: '對方書狀' },
-  { key: 'court', label: '法院文件' },
-  { key: 'evidence', label: '證據資料' },
-];
+const CATEGORY_ORDER: Record<string, number> = {
+  ours: 0,
+  theirs: 1,
+  court: 2,
+  evidence: 3,
+  other: 4,
+};
 
 export const FilesSection = () => {
   const caseFiles = useCaseStore((s) => s.files);
   const setFiles = useCaseStore((s) => s.setFiles);
   const rebuttalTargetFileIds = useBriefStore((s) => s.rebuttalTargetFileIds);
 
-  const grouped = FILE_GROUPS.map((g) => ({
-    ...g,
-    files: caseFiles.filter((f) => f.category === g.key),
-  }));
-  const otherFiles = caseFiles.filter(
-    (f) => !f.category || !FILE_GROUPS.some((g) => g.key === f.category),
-  );
+  const sortedFiles = [...caseFiles].sort((a, b) => {
+    const oa = CATEGORY_ORDER[a.category || 'other'] ?? 4;
+    const ob = CATEGORY_ORDER[b.category || 'other'] ?? 4;
+    return oa - ob;
+  });
 
   const totalFiles = caseFiles.length;
   const readyFiles = caseFiles.filter((f) => f.status === 'ready').length;
@@ -38,10 +35,6 @@ export const FilesSection = () => {
     } catch (err) {
       console.error('Category update failed:', err);
     }
-  };
-
-  const handleDropFile = async (fileId: string, newCategory: string) => {
-    await handleCategoryChange(fileId, newCategory);
   };
 
   const handleDelete = async (fileId: string) => {
@@ -74,26 +67,19 @@ export const FilesSection = () => {
         </div>
       )}
 
-      {grouped.map((g) => (
-        <FileGroup
-          key={g.key}
-          label={g.label}
-          groupKey={g.key}
-          files={g.files}
-          rebuttalTargetIds={rebuttalTargetFileIds}
-          onDelete={handleDelete}
-          onDropFile={handleDropFile}
-        />
-      ))}
-
-      <FileGroup
-        label="其他"
-        groupKey="other"
-        files={otherFiles}
-        rebuttalTargetIds={rebuttalTargetFileIds}
-        onDelete={handleDelete}
-        onDropFile={handleDropFile}
-      />
+      {sortedFiles.length > 0 && (
+        <div className="px-3 space-y-0.5">
+          {sortedFiles.map((f) => (
+            <FileItem
+              key={f.id}
+              file={f}
+              isRebuttalTarget={rebuttalTargetFileIds.includes(f.id)}
+              onDelete={handleDelete}
+              onCategoryChange={handleCategoryChange}
+            />
+          ))}
+        </div>
+      )}
 
       {caseFiles.length === 0 && (
         <div className="px-4 py-3">
