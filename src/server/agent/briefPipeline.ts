@@ -25,7 +25,7 @@ import type { ToolResult } from './tools/types';
 import type { Paragraph } from '../../client/stores/useBriefStore';
 import type { AIEnv } from './aiClient';
 import type { SSEEvent, PipelineStep, PipelineStepChild } from '../../shared/types';
-import { callStrategist } from './pipeline/strategyStep';
+import { callStrategist, type StrategyProgressCallback } from './pipeline/strategyStep';
 import { writeSectionV3, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
 import type { FileRow } from './pipeline/writerStep';
 
@@ -723,6 +723,53 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
         content: r.full_text,
       }));
 
+    // Track strategy children for progress UI
+    const strategyChildren: PipelineStepChild[] = [];
+
+    const strategyProgress: StrategyProgressCallback = {
+      onPrepareInput: async () => {
+        strategyChildren.push({ label: '整理案件資料', status: 'running' });
+        await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
+      },
+      onLLMStart: async (attempt) => {
+        // 完成上一個 running child
+        const lastRunning = strategyChildren.findLastIndex((c) => c.status === 'running');
+        if (lastRunning >= 0) {
+          strategyChildren[lastRunning] = { ...strategyChildren[lastRunning], status: 'done' };
+        }
+        const label = attempt === 1 ? 'AI 規劃論證架構' : `AI 重新規劃（第 ${attempt} 次）`;
+        strategyChildren.push({ label, status: 'running' });
+        await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
+      },
+      onLLMDone: async () => {
+        const idx = strategyChildren.findLastIndex((c) => c.status === 'running');
+        if (idx >= 0) {
+          strategyChildren[idx] = { ...strategyChildren[idx], status: 'done' };
+          await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
+        }
+      },
+      onValidateStart: async () => {
+        strategyChildren.push({ label: '驗證策略結構', status: 'running' });
+        await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
+      },
+      onValidateDone: async (valid, errors) => {
+        const idx = strategyChildren.findLastIndex((c) => c.label === '驗證策略結構');
+        if (idx >= 0) {
+          strategyChildren[idx] = {
+            ...strategyChildren[idx],
+            status: valid ? 'done' : 'error',
+            detail: valid ? '通過' : `${errors?.length ?? 0} 項問題`,
+            results: valid ? undefined : errors,
+          };
+          await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
+        }
+      },
+      onRetry: async (_attempt, reason) => {
+        strategyChildren.push({ label: reason, status: 'running' });
+        await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
+      },
+    };
+
     const strategyOutput = await callStrategist(
       ctx,
       store,
@@ -731,6 +778,7 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       totalUsage,
       userAddedLaws,
       finalTimeline,
+      strategyProgress,
     );
 
     // Set strategy in ContextStore

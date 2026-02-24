@@ -15,6 +15,15 @@ import type { TimelineItem, DamageItem } from './types';
 
 // ── Step 3: 論證策略 helpers ──
 
+export interface StrategyProgressCallback {
+  onPrepareInput: () => Promise<void>;
+  onLLMStart: (attempt: number) => Promise<void>;
+  onLLMDone: () => Promise<void>;
+  onValidateStart: () => Promise<void>;
+  onValidateDone: (valid: boolean, errors?: string[]) => Promise<void>;
+  onRetry: (attempt: number, reason: string) => Promise<void>;
+}
+
 export const callStrategist = async (
   ctx: PipelineContext,
   store: ContextStore,
@@ -23,7 +32,10 @@ export const callStrategist = async (
   usage: ClaudeUsage,
   userAddedLaws: Array<{ id: string; law_name: string; article_no: string; content: string }>,
   timelineList: TimelineItem[] = [],
+  progress?: StrategyProgressCallback,
 ): Promise<StrategyOutput> => {
+  await progress?.onPrepareInput();
+
   const fileSummaries = readyFiles.map((f) => {
     const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
     return {
@@ -63,10 +75,14 @@ export const callStrategist = async (
   // First attempt
   let strategyOutput: StrategyOutput;
   try {
+    await progress?.onLLMStart(1);
     strategyOutput = await callStrategyLLM(ctx.aiEnv, userMessage, usage);
+    await progress?.onLLMDone();
   } catch (firstErr) {
     const errMsg = firstErr instanceof Error ? firstErr.message : '未知錯誤';
     const isTruncation = errMsg.includes('截斷');
+
+    await progress?.onRetry(2, isTruncation ? '回應過長，精簡後重試' : 'JSON 格式修正');
 
     // Retry with appropriate correction prompt
     const correctionMessage = isTruncation
@@ -81,24 +97,35 @@ export const callStrategist = async (
       : userMessage +
         '\n\n═══ 修正指示 ═══\n前一次輸出不是有效的 JSON。請只輸出合法 JSON，不要加任何其他文字或 markdown code block。';
     try {
+      await progress?.onLLMStart(2);
       strategyOutput = await callStrategyLLM(ctx.aiEnv, correctionMessage, usage);
+      await progress?.onLLMDone();
     } catch {
       throw new Error(`論證策略規劃失敗：${errMsg}`);
     }
   }
 
   // Validate structure
+  await progress?.onValidateStart();
   const validation = validateStrategyOutput(strategyOutput, store.legalIssues);
+  await progress?.onValidateDone(
+    validation.valid,
+    validation.valid ? undefined : validation.errors,
+  );
 
   if (!validation.valid) {
     // Retry with error injection — let LLM fix specific issues
     try {
+      await progress?.onRetry(3, '結構驗證未通過，修正中');
+
       const retryMessage =
         userMessage +
         `\n\n═══ 修正指示 ═══\n你上一次的輸出有以下結構問題，請修正後重新輸出完整 JSON：\n` +
         validation.errors.map((e, i) => `${i + 1}. ${e}`).join('\n');
 
+      await progress?.onLLMStart(3);
       strategyOutput = await callStrategyLLM(ctx.aiEnv, retryMessage, usage);
+      await progress?.onLLMDone();
 
       // Validate again — if still fails, use as-is
       const retryValidation = validateStrategyOutput(strategyOutput, store.legalIssues);
