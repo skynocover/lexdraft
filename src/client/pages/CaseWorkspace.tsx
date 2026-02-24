@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { PanelLeft, PanelRight } from 'lucide-react';
@@ -20,6 +20,7 @@ import { ChatPanel } from '../components/layout/ChatPanel';
 import { RightSidebar } from '../components/layout/RightSidebar';
 import { EditorPanel } from '../components/editor/EditorPanel';
 import { useUIStore } from '../stores/useUIStore';
+import { OnboardingUploadDialog } from '../components/case/OnboardingUploadDialog';
 
 export function CaseWorkspace() {
   const { caseId } = useParams();
@@ -45,6 +46,8 @@ export function CaseWorkspace() {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const pollingRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const initialTabRef = useRef(new URLSearchParams(window.location.search).get('tab'));
+  const onboardingShownForRef = useRef<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -144,6 +147,12 @@ export function CaseWorkspace() {
       // fallback: 開啟第一個書狀
       if (briefs.length > 0) {
         openBriefTab(briefs[0].id, briefs[0].title || briefs[0].brief_type);
+      }
+
+      // 若無檔案，顯示上傳引導
+      if (loadedFiles.length === 0 && onboardingShownForRef.current !== caseId) {
+        onboardingShownForRef.current = caseId!;
+        setShowOnboarding(true);
       }
     });
 
@@ -256,6 +265,12 @@ export function CaseWorkspace() {
           <SidebarStrip side="right" onClick={() => useUIStore.getState().setSidebarOpen(true)} />
         )}
       </div>
+
+      <OnboardingUploadDialog
+        open={showOnboarding}
+        onOpenChange={setShowOnboarding}
+        caseId={caseId!}
+      />
     </div>
   );
 }

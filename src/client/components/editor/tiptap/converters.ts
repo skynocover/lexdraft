@@ -7,7 +7,7 @@ import type { Paragraph, Citation, TextSegment } from '../../../stores/useBriefS
  *
  * Mapping:
  *   section change   → heading level:2 (attrs: sectionName)
- *   subsection change → heading level:3 (attrs: subsectionName)
+ *   subsection change → heading level:2 (attrs: subsectionName)
  *   paragraph         → one or more paragraph nodes (split at \n\n boundaries)
  *   single \n in text → hardBreak node (= Shift+Enter in Word)
  *   double \n\n       → separate <p> node (= Enter in Word, each gets text-indent)
@@ -40,7 +40,7 @@ export function contentStructuredToTiptapDoc(
     if (p.subsection && p.subsection !== prevSubsection) {
       nodes.push({
         type: 'heading',
-        attrs: { level: 3, sectionName: null, subsectionName: p.subsection },
+        attrs: { level: 2, sectionName: null, subsectionName: p.subsection },
         content: [{ type: 'text', text: p.subsection }],
       });
       prevSubsection = p.subsection;
@@ -271,9 +271,9 @@ function citationToNode(c: Citation, index: number): JSONContent {
  * Convert Tiptap JSONContent document → content_structured { paragraphs: Paragraph[] }.
  *
  * Walks the document:
- *   heading level:2 → track current section
- *   heading level:3 → track current subsection
- *   paragraph node  → build a Paragraph with segments from inline content
+ *   heading with sectionName attr   → track current section
+ *   heading with subsectionName attr → track current subsection
+ *   paragraph node                   → build a Paragraph with segments from inline content
  */
 export function tiptapDocToContentStructured(doc: JSONContent): {
   paragraphs: Paragraph[];
@@ -286,13 +286,16 @@ export function tiptapDocToContentStructured(doc: JSONContent): {
 
   for (const node of doc.content) {
     if (node.type === 'heading') {
-      const level = node.attrs?.level;
       const text = extractText(node);
-      if (level === 2) {
-        currentSection = node.attrs?.sectionName || text;
+      if (node.attrs?.sectionName) {
+        currentSection = node.attrs.sectionName;
         currentSubsection = '';
-      } else if (level === 3) {
-        currentSubsection = node.attrs?.subsectionName || text;
+      } else if (node.attrs?.subsectionName) {
+        currentSubsection = node.attrs.subsectionName;
+      } else {
+        // Heading without attrs: treat as section
+        currentSection = text;
+        currentSubsection = '';
       }
       continue;
     }

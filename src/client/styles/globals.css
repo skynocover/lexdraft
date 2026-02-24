@@ -342,15 +342,8 @@ body {
   outline: none;
 }
 
-/* Headings inside A4 editor */
-.a4-editor-content h2 {
-  font-size: 16pt;
-  font-weight: bold;
-  margin-top: 1.5em;
-  margin-bottom: 0.5em;
-  text-indent: 0;
-}
-
+/* Headings inside A4 editor — 統一標題樣式，與內文同字級，靠粗體區分 */
+.a4-editor-content h2,
 .a4-editor-content h3 {
   font-size: 14pt;
   font-weight: bold;

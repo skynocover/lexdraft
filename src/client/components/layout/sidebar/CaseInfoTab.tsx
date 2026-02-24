@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useCaseStore } from '../../../stores/useCaseStore';
 import { Loader2 } from 'lucide-react';
-import { CASE_TYPES } from '../../../lib/caseConstants';
+import { CASE_TYPES, COURTS } from '../../../lib/caseConstants';
 
 interface FormData {
   title: string;
@@ -118,26 +118,28 @@ export const CaseInfoTab = () => {
           />
         </div>
 
-        {/* 案號 */}
-        <div>
-          <label className="mb-1 block text-xs text-t2">案號</label>
-          <input
-            value={form.case_number}
-            onChange={set('case_number')}
-            placeholder="114年度雄簡字第○○號"
-            className={inputClass}
-          />
-        </div>
-
-        {/* 法院 */}
-        <div>
-          <label className="mb-1 block text-xs text-t2">法院</label>
-          <input
-            value={form.court}
-            onChange={set('court')}
-            placeholder="高雄地方法院鳳山簡易庭"
-            className={inputClass}
-          />
+        {/* 案號 + 法院 */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="mb-1 block text-xs text-t2">案號</label>
+            <input
+              value={form.case_number}
+              onChange={set('case_number')}
+              placeholder="114年度雄簡字第○○號"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-t2">法院</label>
+            <select value={form.court} onChange={set('court')} className={inputClass}>
+              <option value="">請選擇</option>
+              {COURTS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* 案件類型 */}

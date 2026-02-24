@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { useCaseStore, type Case } from '../stores/useCaseStore';
 import { api } from '../lib/api';
 import { ConfirmDialog } from '../components/layout/sidebar/ConfirmDialog';
+import { NewCaseDialog } from '../components/case/NewCaseDialog';
 
 export function CaseList() {
   const cases = useCaseStore((s) => s.cases);
@@ -14,6 +15,7 @@ export function CaseList() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<Case | null>(null);
+  const [showNewCase, setShowNewCase] = useState(false);
 
   useEffect(() => {
     api
@@ -54,7 +56,7 @@ export function CaseList() {
           <div className="mb-6 flex items-center justify-between">
             <h1 className="text-lg font-semibold text-t1">我的案件</h1>
             <button
-              onClick={() => navigate('/cases/new')}
+              onClick={() => setShowNewCase(true)}
               className="rounded bg-ac px-4 py-2 text-sm font-medium text-bg-0 transition hover:opacity-90"
             >
               ＋ 新建案件
@@ -126,6 +128,8 @@ export function CaseList() {
           </p>
         </ConfirmDialog>
       )}
+
+      <NewCaseDialog open={showNewCase} onOpenChange={setShowNewCase} />
     </div>
   );
 }

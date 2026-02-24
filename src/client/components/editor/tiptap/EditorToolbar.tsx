@@ -50,8 +50,7 @@ export const EditorToolbar = ({
 
   const detectBlockType = useCallback((): string => {
     if (!editor) return 'paragraph';
-    if (editor.isActive('heading', { level: 2 })) return 'h2';
-    if (editor.isActive('heading', { level: 3 })) return 'h3';
+    if (editor.isActive('heading')) return 'heading';
     return 'paragraph';
   }, [editor]);
 
@@ -71,16 +70,10 @@ export const EditorToolbar = ({
 
   const handleBlockTypeChange = (value: string) => {
     if (!editor) return;
-    switch (value) {
-      case 'h2':
-        editor.chain().focus().toggleHeading({ level: 2 }).run();
-        break;
-      case 'h3':
-        editor.chain().focus().toggleHeading({ level: 3 }).run();
-        break;
-      default:
-        editor.chain().focus().setParagraph().run();
-        break;
+    if (value === 'heading') {
+      editor.chain().focus().setHeading({ level: 2 }).run();
+    } else {
+      editor.chain().focus().setParagraph().run();
     }
   };
 
@@ -116,17 +109,24 @@ export const EditorToolbar = ({
       </button>
       <span className="mx-2 h-4 w-px bg-bd" />
 
-      {/* Block type selector */}
-      <select
-        value={blockType}
-        onChange={(e) => handleBlockTypeChange(e.target.value)}
-        disabled={!editor}
-        className="h-6 rounded border border-bd bg-bg-2 px-1.5 text-xs text-t2 outline-none hover:border-t3 focus:border-ac disabled:opacity-30"
-      >
-        <option value="paragraph">內文</option>
-        <option value="h2">大標題</option>
-        <option value="h3">小標題</option>
-      </select>
+      {/* Block type tabs */}
+      <div className="flex rounded border border-bd bg-bg-2">
+        {[
+          { value: 'paragraph', label: '內文' },
+          { value: 'heading', label: '標題' },
+        ].map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => handleBlockTypeChange(opt.value)}
+            disabled={!editor}
+            className={`px-2 py-0.5 text-xs transition ${
+              blockType === opt.value ? 'bg-bg-3 text-t1 font-medium' : 'text-t3 hover:text-t1'
+            } disabled:opacity-30`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
 
       <span className="mx-2 h-4 w-px bg-bd" />
 

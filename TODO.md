@@ -21,7 +21,8 @@
 
 ### C. Agent 架構 & 自動化
 
-- [ ] 案件 Onboarding + AI 一鍵初始化：引導流程（填寫資料 → 上傳檔案 → AI 分析產生爭點/時間軸/當事人）
+- [x] 案件 Onboarding 輕量建立 + 上傳引導：NewCaseDialog（快速建立）+ OnboardingUploadDialog（拖拽上傳引導）
+- [ ] AI 一鍵初始化：上傳檔案後 AI 自動分析產生爭點/時間軸/當事人
 - [x] Sub Agent 架構：write_full_brief pipeline（Planner + Writer sub-agents），一次工具呼叫完成整份書狀
 - [x] Pipeline v3 Phase 1a：論證策略 Step + Writer Context 改善（ContextStore、Claim Graph、3層 Writer Context、策略驗證 + Retry）
 - [x] Pipeline v3 Phase 1b：前端進度 UI 調整（ReviewContent、攻/防/參 badges、step children、策略 renderer）

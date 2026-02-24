@@ -2,7 +2,6 @@ import { Routes, Route, Navigate } from 'react-router';
 import { useAuthStore } from './stores/useAuthStore';
 import { TokenLogin } from './pages/TokenLogin';
 import { CaseList } from './pages/CaseList';
-import { CaseCreate } from './pages/CaseCreate';
 import { CaseWorkspace } from './pages/CaseWorkspace';
 import { Toaster } from './components/ui/sonner';
 
@@ -25,14 +24,6 @@ export function App() {
           element={
             <ProtectedRoute>
               <CaseList />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/cases/new"
-          element={
-            <ProtectedRoute>
-              <CaseCreate />
             </ProtectedRoute>
           }
         />
