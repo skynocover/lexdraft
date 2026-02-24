@@ -1,6 +1,5 @@
 import { batchLookupLawsByIds } from './lawSearch';
 import { resolveAlias, normalizeArticleNo, buildArticleId } from './lawConstants';
-import { hasReplacementChars, buildLawTextMap, repairLawCitations } from './textSanitize';
 import { readLawRefs, upsertManyLawRefs, hasLawRefByNameArticle } from './lawRefsJson';
 import type { LawRefItem } from './lawRefsJson';
 import type { getDB } from '../db';
@@ -46,10 +45,6 @@ export const loadLawDocsByIds = async (
       const results = await batchLookupLawsByIds(mongoUrl, stillMissing);
       const toCache: LawRefItem[] = [];
       for (const r of results) {
-        if (hasReplacementChars(r.content)) {
-          console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
-          continue;
-        }
         loaded.push({
           id: r._id,
           title: `${r.law_name} ${r.article_no}`,
@@ -120,10 +115,6 @@ export const fetchAndCacheUncitedMentions = async (
           const results = await batchLookupLawsByIds(mongoUrl, idsToFetch);
           const toCache: LawRefItem[] = [];
           for (const r of results) {
-            if (hasReplacementChars(r.content)) {
-              console.warn(`Skipping corrupted law text from MongoDB: ${r._id}`);
-              continue;
-            }
             toCache.push({
               id: r._id,
               law_name: r.law_name,
@@ -143,19 +134,4 @@ export const fetchAndCacheUncitedMentions = async (
   }
 
   return readLawRefs(drizzle, caseId);
-};
-
-/**
- * Repair corrupted law citations using cached law text,
- * and return the current law refs (for SSE push or further use).
- */
-export const repairAndGetRefs = async (
-  drizzle: Drizzle,
-  caseId: string,
-  citations: Array<{ type: string; label: string; quoted_text?: string | null }>,
-): Promise<LawRefItem[]> => {
-  const refs = await readLawRefs(drizzle, caseId);
-  const lawTextMap = buildLawTextMap(refs);
-  repairLawCitations(citations, lawTextMap);
-  return refs;
 };

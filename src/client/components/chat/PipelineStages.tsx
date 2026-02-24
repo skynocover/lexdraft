@@ -3,6 +3,7 @@ import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
 import type { PipelineStep } from '../../../shared/types';
 import { StageBadge, StepChildren, ReviewContent } from './PipelineStageContent';
 import type { ReviewData } from './PipelineStageContent';
+import { cleanText } from '../../lib/textUtils';
 
 // ── Content data types ──
 
@@ -203,7 +204,7 @@ const CaseConfirmContent = ({ data }: { data: CaseConfirmData }) => (
               className="flex items-center gap-2.5 rounded-lg border border-blue-400/10 bg-blue-400/5 px-3 py-2"
             >
               <span className="text-xs font-semibold tabular-nums text-blue-400">爭點 {i + 1}</span>
-              <span className="text-xs text-t2">{issue.title}</span>
+              <span className="text-xs text-t2">{cleanText(issue.title)}</span>
             </div>
           ))}
         </div>
@@ -215,8 +216,10 @@ const CaseConfirmContent = ({ data }: { data: CaseConfirmData }) => (
         <div className="space-y-1.5">
           {data.gaps.map((gap, i) => (
             <div key={i} className="rounded-lg border border-amber-400/15 bg-amber-400/5 px-3 py-2">
-              <p className="text-xs text-t2">{gap.description}</p>
-              {gap.suggestion && <p className="mt-1 text-xs text-t3">{gap.suggestion}</p>}
+              <p className="text-xs text-t2">{cleanText(gap.description)}</p>
+              {gap.suggestion && (
+                <p className="mt-1 text-xs text-t3">{cleanText(gap.suggestion)}</p>
+              )}
             </div>
           ))}
         </div>
@@ -268,7 +271,7 @@ const ResearchContent = ({ data }: { data: ResearchData }) => {
                 expandedGroup === gi ? 'rotate-90' : ''
               }`}
             />
-            <span className="flex-1 text-xs font-semibold text-t1">{group.section}</span>
+            <span className="flex-1 text-xs font-semibold text-t1">{cleanText(group.section)}</span>
             <StageBadge variant="count">{group.items.length} 條</StageBadge>
           </button>
           {expandedGroup === gi && (
@@ -276,7 +279,7 @@ const ResearchContent = ({ data }: { data: ResearchData }) => {
               {group.items.map((item, ii) => (
                 <div key={ii} className="flex items-center gap-2 py-0.5 text-xs text-t3">
                   {itemBadge(item.type)}
-                  <span className="flex-1 truncate">{item.name}</span>
+                  <span className="flex-1 truncate">{cleanText(item.name)}</span>
                 </div>
               ))}
             </div>

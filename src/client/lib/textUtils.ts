@@ -1,9 +1,8 @@
 export const formatAmount = (amount: number): string => `NT$ ${amount.toLocaleString()}`;
 
-/** Strip emoji, U+FFFD replacement chars, and other non-text symbols */
+/** Strip emoji and other non-text symbols */
 export function cleanText(text: string): string {
   return text
-    .replace(/\uFFFD/g, '')
     .replace(/[\u{1F600}-\u{1F9FF}]/gu, '')
     .replace(/[\u{2600}-\u{27BF}]/gu, '')
     .replace(/[\u{FE00}-\u{FE0F}]/gu, '')

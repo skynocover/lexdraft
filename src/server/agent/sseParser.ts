@@ -2,7 +2,6 @@
  * Shared OpenAI-compatible SSE stream parser.
  * Used by both collectStreamText (tool execution) and AgentDO (agent loop).
  */
-import { stripReplacementChars } from '../lib/textSanitize';
 import type { ToolCall } from './aiClient';
 
 export interface OpenAIChunk {
@@ -27,6 +26,11 @@ export interface OpenAIChunk {
 /**
  * Parse an OpenAI-compatible SSE stream, calling onChunk for each parsed JSON object.
  * Handles multi-byte UTF-8 split across chunks and flushes remaining data.
+ *
+ * Centralised U+FFFD sanitisation: AI Gateway / upstream APIs occasionally emit
+ * invalid UTF-8 bytes that decode to replacement characters.  We strip them here
+ * so every downstream consumer (collectStreamText, collectStreamWithToolCalls,
+ * AgentDO, etc.) automatically receives clean text.
  */
 export async function parseOpenAIStream(
   response: Response,
@@ -42,7 +46,15 @@ export async function parseOpenAIStream(
       const data = line.slice(6).trim();
       if (data === '[DONE]') continue;
       try {
-        onChunk(JSON.parse(data));
+        const chunk: OpenAIChunk = JSON.parse(data);
+
+        // ── Centralised U+FFFD sanitisation ──
+        const delta = chunk.choices?.[0]?.delta;
+        if (delta?.content?.includes('\uFFFD')) {
+          delta.content = delta.content.replace(/\uFFFD/g, '');
+        }
+
+        onChunk(chunk);
       } catch {
         /* skip unparseable */
       }
@@ -67,7 +79,7 @@ export async function parseOpenAIStream(
 
 /**
  * Collect full text from an SSE streaming response.
- * Strips U+FFFD replacement characters from corrupted multi-byte sequences.
+ * U+FFFD sanitisation is handled centrally by parseOpenAIStream.
  */
 export async function collectStreamText(response: Response): Promise<string> {
   let text = '';
@@ -75,7 +87,7 @@ export async function collectStreamText(response: Response): Promise<string> {
     const content = chunk.choices?.[0]?.delta?.content;
     if (content) text += content;
   });
-  return stripReplacementChars(text);
+  return text;
 }
 
 // ── Stream with Tool Calls ──

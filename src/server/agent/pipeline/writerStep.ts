@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import { briefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument, type ClaudeUsage } from '../claudeClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
-import { fetchAndCacheUncitedMentions, repairAndGetRefs } from '../../lib/lawRefService';
+import { fetchAndCacheUncitedMentions } from '../../lib/lawRefService';
 import { parseJsonField } from '../toolHelpers';
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
 import type { StrategyOutput } from './types';
@@ -308,9 +308,6 @@ ${completedText}`;
     action: 'set_law_refs',
     data: allRefs,
   });
-
-  const allCitationRefs = [...citations, ...segments.flatMap((s) => s.citations)];
-  await repairAndGetRefs(ctx.drizzle, ctx.caseId, allCitationRefs);
 
   // Build paragraph
   const paragraph: Paragraph = {

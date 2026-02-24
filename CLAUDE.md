@@ -74,6 +74,10 @@ The `optimizeDeps.esbuildOptions.plugins` entry fixes `mongodb → whatwg-url �
 
 `@cloudflare/vite-plugin`'s `unsafeModuleFallbackService` only activates with `nodejs_compat`. Using `nodejs_compat_v2` disables `node:` module fallback. With `compatibility_date >= 2024-09-23`, `nodejs_compat` already includes v2 features.
 
+### U+FFFD 清除 — 只在 `parseOpenAIStream` 處理，不要在下游重複
+
+AI Gateway / Gemini SSE 串流偶爾產生 U+FFFD（replacement character）。清除邏輯**只寫在 `sseParser.ts` 的 `parseOpenAIStream()`**，所有下游（`collectStreamText`、`collectStreamWithToolCalls`、`AgentDO`）自動受益。不要在個別消費端再加 `stripReplacementChars` 或類似處理 — 曾經散落 9 處導致持續遺漏 bug。
+
 ## Law Search (MongoDB Atlas Search)
 
 - **DB**: `lawdb.articles` (221,061 articles), index `law_search`, analyzer `lucene.smartcn`
@@ -110,12 +114,12 @@ The `optimizeDeps.esbuildOptions.plugins` entry fixes `mongodb → whatwg-url �
 
 Atlas Search + smartcn 的概念搜尋對關鍵字選擇很敏感：
 
-| 能搜到 | 搜不到 | 原因 |
-|--------|--------|------|
-| `民法 侵權行為` | `民法 精神慰撫金` | 法條用「慰撫金」不用「精神慰撫金」 |
+| 能搜到          | 搜不到               | 原因                               |
+| --------------- | -------------------- | ---------------------------------- |
+| `民法 侵權行為` | `民法 精神慰撫金`    | 法條用「慰撫金」不用「精神慰撫金」 |
 | `民法 損害賠償` | `民法 不能工作 損失` | 法條用「勞動能力」不用「不能工作」 |
-| `民法 毀損` | `民法 物之毀損` | 「物之」干擾 tokenization |
-| `與有過失` | `過失傷害 賠償責任` | 純概念搜尋 recall 極低 |
+| `民法 毀損`     | `民法 物之毀損`      | 「物之」干擾 tokenization          |
+| `與有過失`      | `過失傷害 賠償責任`  | 純概念搜尋 recall 極低             |
 
 優化方向：用更短、更接近法條原文的關鍵字；避免口語化的複合詞
 

@@ -3,11 +3,7 @@ import { nanoid } from 'nanoid';
 import { files, briefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { toolError, toolSuccess, parseJsonField } from '../toolHelpers';
-import {
-  loadLawDocsByIds,
-  fetchAndCacheUncitedMentions,
-  repairAndGetRefs,
-} from '../../lib/lawRefService';
+import { loadLawDocsByIds, fetchAndCacheUncitedMentions } from '../../lib/lawRefService';
 import type { Paragraph } from '../../../client/stores/useBriefStore';
 import type { ToolHandler } from './types';
 
@@ -134,12 +130,15 @@ ${existingParagraph.content_md}
     claudeInstruction,
   );
 
-  // 6. Post-processing: detect uncited law mentions, fetch, cache, repair citations
+  // 6. Post-processing: detect uncited law mentions, fetch and cache
   const citedLawLabels = new Set(citations.filter((c) => c.type === 'law').map((c) => c.label));
-  await fetchAndCacheUncitedMentions(drizzle, caseId, ctx.mongoUrl, text, citedLawLabels);
-
-  const allCitationRefs = [...citations, ...segments.flatMap((s) => s.citations)];
-  const displayRefs = await repairAndGetRefs(drizzle, caseId, allCitationRefs);
+  const displayRefs = await fetchAndCacheUncitedMentions(
+    drizzle,
+    caseId,
+    ctx.mongoUrl,
+    text,
+    citedLawLabels,
+  );
 
   await ctx.sendSSE({
     type: 'brief_update',
