@@ -14,7 +14,7 @@ export const StageBadge = ({
   const cls = {
     default: 'bg-t3/10 text-t3',
     law: 'bg-blue-400/10 text-blue-400',
-    count: 'bg-t3/[0.08] text-t3',
+    count: 'bg-t3/8 text-t3',
     attack: 'bg-emerald-400/10 text-emerald-400',
     defense: 'bg-amber-400/10 text-amber-400',
     reference: 'bg-t3/10 text-t3',

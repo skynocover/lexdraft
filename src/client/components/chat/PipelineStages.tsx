@@ -77,7 +77,7 @@ const itemBadge = (type: ResearchItem['type']) => {
 // ── Main component ──
 
 export const PipelineStages = ({ steps }: { steps: PipelineStep[] }) => (
-  <div className="rounded-2xl border border-bd/50 bg-white/[0.02] px-1 py-2">
+  <div className="rounded-2xl border border-bd/50 bg-white/2 px-1 py-2">
     {steps.map((step, i) => (
       <StageCard key={i} step={step} isLast={i === steps.length - 1} />
     ))}
@@ -108,7 +108,7 @@ const StageCard = ({ step, isLast }: { step: PipelineStep; isLast: boolean }) =>
       <button
         onClick={() => showContent && setExpanded(!expanded)}
         className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors ${
-          expanded && showContent ? 'bg-white/[0.03]' : 'hover:bg-white/[0.02]'
+          expanded && showContent ? 'bg-white/3' : 'hover:bg-white/2'
         } ${showContent ? 'cursor-pointer' : 'cursor-default'}`}
       >
         <StatusIndicator status={step.status} />
@@ -170,7 +170,7 @@ const CaseConfirmContent = ({ data }: { data: CaseConfirmData }) => (
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-t3">載入檔案</p>
       <div className="flex flex-wrap gap-1.5">
         {data.files.map((f, i) => (
-          <span key={i} className="rounded-md bg-t3/[0.08] px-2.5 py-1 text-xs text-t3">
+          <span key={i} className="rounded-md bg-t3/8 px-2.5 py-1 text-xs text-t3">
             {f}
           </span>
         ))}
@@ -264,7 +264,7 @@ const ResearchContent = ({ data }: { data: ResearchData }) => {
         <div key={gi}>
           <button
             onClick={() => setExpandedGroup(expandedGroup === gi ? null : gi)}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-white/[0.02]"
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-white/2"
           >
             <ChevronRight
               size={10}

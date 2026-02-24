@@ -135,6 +135,7 @@ Atlas Search + smartcn 的概念搜尋對關鍵字選擇很敏感：
 
 - 使用 `lucide-react` 作為圖示庫，不要使用 inline SVG
 - Tailwind 寬高值使用 spacing scale（如 `w-120`）而非任意值（如 `w-[480px]`）
+- Tailwind opacity 使用整數簡寫（如 `bg-white/2`、`bg-t3/8`）而非任意值（如 `bg-white/[0.02]`、`bg-t3/[0.08]`）
 - 使用 TypeScript，不要使用 `any` 類型
 - 為每個函數定義參數和返回類型
 - Always start by creating a detailed todo list for the current task.
