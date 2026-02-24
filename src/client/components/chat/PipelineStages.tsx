@@ -95,6 +95,7 @@ const StageCard = ({ step, isLast }: { step: PipelineStep; isLast: boolean }) =>
     content?.type === 'strategy' ||
     content?.type === 'review';
   const hasChildren = !!step.children?.length;
+  const hideChildrenForResearch = content?.type === 'research' && step.status === 'done';
   const showContent = (hasRenderer || hasChildren) && step.status !== 'pending';
 
   useEffect(() => {
@@ -132,9 +133,9 @@ const StageCard = ({ step, isLast }: { step: PipelineStep; isLast: boolean }) =>
       </button>
       {showContent && expanded && (
         <div className="ml-6.5 border-l border-t3/10 pb-3 pl-5">
-          {hasChildren && <StepChildren children={step.children!} />}
+          {hasChildren && !hideChildrenForResearch && <StepChildren children={step.children!} />}
           {hasRenderer && (
-            <div className="pt-2">
+            <div className={hasChildren && !hideChildrenForResearch ? 'pt-2' : ''}>
               <StageContentRenderer content={content!} />
             </div>
           )}
