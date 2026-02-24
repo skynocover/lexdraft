@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, type KeyboardEvent } from 'react';
 import { useParams } from 'react-router';
-import { ChevronsLeft } from 'lucide-react';
+import { ChevronsLeft, FileText, BookOpen } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import { useUIStore } from '../../stores/useUIStore';
 import { MessageBubble } from '../chat/MessageBubble';
@@ -109,8 +109,26 @@ export function ChatPanel() {
       {/* Message list */}
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
         {messages.length === 0 && (
-          <div className="flex flex-1 items-center justify-center">
-            <p className="text-center text-xs text-t3">在下方輸入指令開始對話</p>
+          <div className="flex flex-1 flex-col items-center justify-center gap-4">
+            <p className="text-center text-xs text-t3">選擇指令或輸入問題開始對話</p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => caseId && sendMessage(caseId, '請幫我撰寫一份書狀')}
+                disabled={!caseId || isStreaming}
+                className="flex items-center gap-2 rounded-lg border border-bd bg-bg-2 px-4 py-2.5 text-xs text-t2 transition hover:bg-bg-3 hover:text-t1 disabled:opacity-50"
+              >
+                <FileText size={14} className="shrink-0 text-ac" />
+                撰寫書狀
+              </button>
+              <button
+                onClick={() => caseId && sendMessage(caseId, '請摘要本案的案件內容')}
+                disabled={!caseId || isStreaming}
+                className="flex items-center gap-2 rounded-lg border border-bd bg-bg-2 px-4 py-2.5 text-xs text-t2 transition hover:bg-bg-3 hover:text-t1 disabled:opacity-50"
+              >
+                <BookOpen size={14} className="shrink-0 text-ac" />
+                摘要案件內容
+              </button>
+            </div>
           </div>
         )}
 
