@@ -46,6 +46,7 @@ interface ClaudeResponse {
     text: string;
     citations?: Array<ContentBlockCitation | CharLocationCitation>;
   }>;
+  stop_reason?: string;
   usage?: {
     input_tokens: number;
     output_tokens: number;
@@ -259,7 +260,7 @@ export const callClaude = async (
   systemPrompt: string,
   userMessage: string,
   maxTokens = 4096,
-): Promise<{ content: string; usage: ClaudeUsage }> => {
+): Promise<{ content: string; usage: ClaudeUsage; truncated: boolean }> => {
   const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/anthropic/v1/messages`;
 
   const response = await fetch(gatewayUrl, {
@@ -285,6 +286,13 @@ export const callClaude = async (
   const data = (await response.json()) as ClaudeResponse;
   const content = data.content.map((b) => b.text).join('');
   const usage: ClaudeUsage = data.usage || { input_tokens: 0, output_tokens: 0 };
+  const truncated = data.stop_reason === 'max_tokens';
 
-  return { content, usage };
+  if (truncated) {
+    console.warn(
+      `[callClaude] Response truncated (stop_reason=max_tokens, maxTokens=${maxTokens})`,
+    );
+  }
+
+  return { content, usage, truncated };
 };

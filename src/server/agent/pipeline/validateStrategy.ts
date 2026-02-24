@@ -2,8 +2,17 @@
 // Program-side structural validation for the strategy step output.
 // Catches structural issues before passing to Writer.
 
-import type { StrategyOutput, LegalIssue } from './types';
+import type { StrategyOutput, LegalIssue, Claim } from './types';
 import { parseLLMJsonResponse } from '../toolHelpers';
+
+/** Apply defaults for optional claim fields (backward compatible) */
+export const applyClaimDefaults = (claims: Claim[]): Claim[] =>
+  claims.map((c) => ({
+    ...c,
+    claim_type: c.claim_type || 'primary',
+    dispute_id: c.dispute_id || null,
+    responds_to: c.responds_to || null,
+  }));
 
 export interface ValidationResult {
   valid: boolean;
@@ -137,13 +146,7 @@ export const parseStrategyOutput = (content: string): StrategyOutput => {
     throw new Error('論證策略回傳格式不正確（缺少 sections 陣列）');
   }
 
-  // Apply defaults for new fields (backward compatible)
-  parsed.claims = parsed.claims.map((c) => ({
-    ...c,
-    claim_type: c.claim_type || 'primary',
-    dispute_id: c.dispute_id || null,
-    responds_to: c.responds_to || null,
-  }));
+  parsed.claims = applyClaimDefaults(parsed.claims);
 
   return parsed;
 };

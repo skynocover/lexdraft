@@ -126,6 +126,77 @@ export const parseLLMJsonResponse = <T>(content: string, errorLabel: string): T 
 };
 
 /**
+ * Attempt to repair truncated JSON by closing unclosed strings, arrays, and objects.
+ * Used when LLM response is cut off due to max_tokens limit.
+ */
+export const repairTruncatedJson = <T>(content: string): T | null => {
+  let json = content.trim();
+
+  // Remove markdown code block wrappers
+  json = json.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+
+  // Find the first { to start from
+  const start = json.indexOf('{');
+  if (start === -1) return null;
+  json = json.slice(start);
+
+  // Remove trailing comma if present
+  json = json.replace(/,\s*$/, '');
+
+  // Single pass: detect unclosed string + count unclosed brackets/braces
+  let inString = false;
+  let escape = false;
+  const stack: string[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === '{') stack.push('}');
+    else if (ch === '[') stack.push(']');
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  if (inString) {
+    json += '"';
+  }
+
+  // Remove any trailing key without value (e.g., `"key":` or `"key": `)
+  json = json.replace(/,\s*"[^"]*"\s*:\s*$/, '');
+  // Remove trailing incomplete value after colon
+  json = json.replace(/:\s*$/, ': null');
+
+  // Remove trailing comma before closing
+  json = json.replace(/,\s*$/, '');
+
+  // Close all unclosed brackets/braces in reverse order
+  while (stack.length > 0) {
+    json += stack.pop();
+  }
+
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    // Try with cleanLLMJson
+    try {
+      return JSON.parse(cleanLLMJson(json)) as T;
+    } catch {
+      console.error(`[repairTruncatedJson] Repair failed (first 300 chars): ${json.slice(0, 300)}`);
+      return null;
+    }
+  }
+};
+
+/**
  * Extract and parse a JSON array from LLM response text.
  * Like parseLLMJsonResponse but for array output (matches outermost [...]).
  */

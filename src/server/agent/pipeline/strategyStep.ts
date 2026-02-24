@@ -1,7 +1,11 @@
 import { callClaude, type ClaudeUsage } from '../claudeClient';
-import { parseJsonField } from '../toolHelpers';
+import { parseJsonField, repairTruncatedJson } from '../toolHelpers';
 import { STRATEGIST_SYSTEM_PROMPT, buildStrategistInput } from '../prompts/strategistPrompt';
-import { validateStrategyOutput, parseStrategyOutput } from './validateStrategy';
+import {
+  validateStrategyOutput,
+  parseStrategyOutput,
+  applyClaimDefaults,
+} from './validateStrategy';
 import type { StrategyOutput } from './types';
 import type { PipelineContext } from '../briefPipeline';
 import type { ContextStore } from '../contextStore';
@@ -61,16 +65,25 @@ export const callStrategist = async (
   try {
     strategyOutput = await callStrategyLLM(ctx.aiEnv, userMessage, usage);
   } catch (firstErr) {
-    // Retry once on parse failure — add correction prompt so LLM knows to fix JSON
-    const correctionMessage =
-      userMessage +
-      '\n\n═══ 修正指示 ═══\n前一次輸出不是有效的 JSON。請只輸出合法 JSON，不要加任何其他文字或 markdown code block。';
+    const errMsg = firstErr instanceof Error ? firstErr.message : '未知錯誤';
+    const isTruncation = errMsg.includes('截斷');
+
+    // Retry with appropriate correction prompt
+    const correctionMessage = isTruncation
+      ? userMessage +
+        '\n\n═══ 修正指示 ═══\n' +
+        '前一次輸出因長度超過限制而被截斷。請精簡輸出：\n' +
+        '1. statement 欄位用一句話，不超過 30 字\n' +
+        '2. fact_application 不超過 50 字\n' +
+        '3. conclusion 不超過 20 字\n' +
+        '4. 合併相似的 supporting claims\n' +
+        '5. 只輸出合法 JSON，不要加 markdown code block'
+      : userMessage +
+        '\n\n═══ 修正指示 ═══\n前一次輸出不是有效的 JSON。請只輸出合法 JSON，不要加任何其他文字或 markdown code block。';
     try {
       strategyOutput = await callStrategyLLM(ctx.aiEnv, correctionMessage, usage);
     } catch {
-      throw new Error(
-        `論證策略規劃失敗：${firstErr instanceof Error ? firstErr.message : '未知錯誤'}`,
-      );
+      throw new Error(`論證策略規劃失敗：${errMsg}`);
     }
   }
 
@@ -106,14 +119,27 @@ const callStrategyLLM = async (
   userMessage: string,
   usage: ClaudeUsage,
 ): Promise<StrategyOutput> => {
-  const { content, usage: callUsage } = await callClaude(
-    aiEnv,
-    STRATEGIST_SYSTEM_PROMPT,
-    userMessage,
-    8192, // Strategist output includes claims + sections — needs more tokens
-  );
+  const {
+    content,
+    usage: callUsage,
+    truncated,
+  } = await callClaude(aiEnv, STRATEGIST_SYSTEM_PROMPT, userMessage, 16384);
   usage.input_tokens += callUsage.input_tokens;
   usage.output_tokens += callUsage.output_tokens;
+
+  // If response was truncated, try to repair the JSON before normal parsing
+  if (truncated) {
+    console.warn('[callStrategyLLM] Response truncated — attempting JSON repair');
+    const repaired = repairTruncatedJson<StrategyOutput>(content);
+    if (repaired && repaired.claims && repaired.sections) {
+      console.warn(
+        `[callStrategyLLM] JSON repair succeeded (${repaired.claims.length} claims, ${repaired.sections.length} sections)`,
+      );
+      repaired.claims = applyClaimDefaults(repaired.claims);
+      return repaired;
+    }
+    throw new Error('論證策略回傳格式不正確（回應被截斷，JSON 不完整）');
+  }
 
   return parseStrategyOutput(content);
 };
