@@ -74,9 +74,15 @@ The `optimizeDeps.esbuildOptions.plugins` entry fixes `mongodb → whatwg-url �
 
 `@cloudflare/vite-plugin`'s `unsafeModuleFallbackService` only activates with `nodejs_compat`. Using `nodejs_compat_v2` disables `node:` module fallback. With `compatibility_date >= 2024-09-23`, `nodejs_compat` already includes v2 features.
 
-### U+FFFD 清除 — 只在 `parseOpenAIStream` 處理，不要在下游重複
+### U+FFFD 清除 — 兩個 AI Gateway 邊界，共用 `stripFFFD()`
 
-AI Gateway / Gemini SSE 串流偶爾產生 U+FFFD（replacement character）。清除邏輯**只寫在 `sseParser.ts` 的 `parseOpenAIStream()`**，所有下游（`collectStreamText`、`collectStreamWithToolCalls`、`AgentDO`）自動受益。不要在個別消費端再加 `stripReplacementChars` 或類似處理 — 曾經散落 9 處導致持續遺漏 bug。
+Cloudflare AI Gateway 代理 chunked response 時偶爾在 multi-byte UTF-8 邊界切壞字元，產生 U+FFFD。清除策略：
+
+- **共用函式**：`src/server/lib/sanitize.ts` 的 `stripFFFD()` 是唯一存放 regex 的地方
+- **Gemini 邊界**：`sseParser.ts` 的 `parseOpenAIStream()` — 清除 `delta.content` 和 `delta.tool_calls[].function.arguments`
+- **Claude 邊界**：`claudeClient.ts` — 清除 `block.text`、`cited_text`；`label` 使用本地 `doc.title`（不依賴 AI echo）
+
+**不要在下游（stores、components、DB writes）加任何 U+FFFD 處理。** 所有清除只在上述兩個邊界進行。
 
 ## Law Search (MongoDB Atlas Search)
 

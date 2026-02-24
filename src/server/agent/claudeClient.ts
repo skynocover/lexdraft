@@ -1,6 +1,7 @@
 import type { Citation } from '../../client/stores/useBriefStore';
 import type { AIEnv } from './aiClient';
 import { nanoid } from 'nanoid';
+import { stripFFFD } from '../lib/sanitize';
 
 // ── Document block types ──
 
@@ -212,8 +213,11 @@ export const callClaudeWithCitations = async (
 
   for (const block of data.content) {
     if (block.type === 'text') {
-      // Strip raw <cite> tags that Claude sometimes outputs in text
-      const cleanText = block.text.replace(/<cite\s+index="[^"]*">/g, '').replace(/<\/cite>/g, '');
+      // Strip raw <cite> tags that Claude sometimes outputs in text,
+      // then strip U+FFFD from AI Gateway corruption (Claude boundary)
+      const cleanText = stripFFFD(
+        block.text.replace(/<cite\s+index="[^"]*">/g, '').replace(/<\/cite>/g, ''),
+      );
       fullText += cleanText;
       const blockCitations: Citation[] = [];
 
@@ -224,7 +228,9 @@ export const callClaudeWithCitations = async (
 
           const citation: Citation = {
             id: nanoid(),
-            label: cite.document_title,
+            // Use our own doc.title (guaranteed clean) instead of the
+            // AI Gateway-echoed document_title which may contain U+FFFD
+            label: doc?.title || stripFFFD(cite.document_title),
             type: doc?.doc_type || (doc?.file_id ? 'file' : 'law'),
             file_id: doc?.file_id,
             location:
@@ -234,7 +240,7 @@ export const callClaudeWithCitations = async (
                     char_start: cite.start_char_index,
                     char_end: cite.end_char_index,
                   },
-            quoted_text: cite.cited_text,
+            quoted_text: stripFFFD(cite.cited_text),
             status: 'confirmed',
           };
           blockCitations.push(citation);
@@ -284,7 +290,7 @@ export const callClaude = async (
   }
 
   const data = (await response.json()) as ClaudeResponse;
-  const content = data.content.map((b) => b.text).join('');
+  const content = stripFFFD(data.content.map((b) => b.text).join(''));
   const usage: ClaudeUsage = data.usage || { input_tokens: 0, output_tokens: 0 };
   const truncated = data.stop_reason === 'max_tokens';
 

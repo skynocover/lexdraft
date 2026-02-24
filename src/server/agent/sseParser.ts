@@ -3,6 +3,7 @@
  * Used by both collectStreamText (tool execution) and AgentDO (agent loop).
  */
 import type { ToolCall } from './aiClient';
+import { stripFFFD } from '../lib/sanitize';
 
 export interface OpenAIChunk {
   choices?: Array<{
@@ -27,10 +28,10 @@ export interface OpenAIChunk {
  * Parse an OpenAI-compatible SSE stream, calling onChunk for each parsed JSON object.
  * Handles multi-byte UTF-8 split across chunks and flushes remaining data.
  *
- * Centralised U+FFFD sanitisation: AI Gateway / upstream APIs occasionally emit
- * invalid UTF-8 bytes that decode to replacement characters.  We strip them here
- * so every downstream consumer (collectStreamText, collectStreamWithToolCalls,
- * AgentDO, etc.) automatically receives clean text.
+ * U+FFFD sanitisation (Gemini boundary): AI Gateway occasionally corrupts
+ * multi-byte UTF-8 when proxying chunked responses. We strip U+FFFD here
+ * for both delta.content and tool_call arguments via shared stripFFFD().
+ * See also: claudeClient.ts for the Claude API boundary.
  */
 export async function parseOpenAIStream(
   response: Response,
@@ -48,10 +49,17 @@ export async function parseOpenAIStream(
       try {
         const chunk: OpenAIChunk = JSON.parse(data);
 
-        // ── Centralised U+FFFD sanitisation ──
+        // ── Centralised U+FFFD sanitisation (Gemini boundary) ──
         const delta = chunk.choices?.[0]?.delta;
-        if (delta?.content?.includes('\uFFFD')) {
-          delta.content = delta.content.replace(/\uFFFD/g, '');
+        if (delta?.content) {
+          delta.content = stripFFFD(delta.content);
+        }
+        if (delta?.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            if (tc.function?.arguments) {
+              tc.function.arguments = stripFFFD(tc.function.arguments);
+            }
+          }
         }
 
         onChunk(chunk);
