@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Check, ChevronDown, ChevronRight, X } from 'lucide-react';
-import type { PipelineStep } from '../../../shared/types';
-import { StageBadge, StepChildren, ReviewContent } from './PipelineStageContent';
+import { Check, ChevronDown, ChevronRight, Minus, X } from 'lucide-react';
+import type { PipelineStep, PipelineStepChild } from '../../../shared/types';
+import { StageBadge, StepChildren, ReviewContent, isEmptyResult } from './PipelineStageContent';
 import type { ReviewData } from './PipelineStageContent';
 import { cleanText } from '../../lib/textUtils';
 
@@ -95,7 +95,7 @@ const StageCard = ({ step, isLast }: { step: PipelineStep; isLast: boolean }) =>
     content?.type === 'strategy' ||
     content?.type === 'review';
   const hasChildren = !!step.children?.length;
-  const hideChildrenForResearch = content?.type === 'research' && step.status === 'done';
+  const isResearchDone = content?.type === 'research' && step.status === 'done';
   const showContent = (hasRenderer || hasChildren) && step.status !== 'pending';
 
   useEffect(() => {
@@ -133,14 +133,45 @@ const StageCard = ({ step, isLast }: { step: PipelineStep; isLast: boolean }) =>
       </button>
       {showContent && expanded && (
         <div className="ml-6.5 border-l border-t3/10 pb-3 pl-5">
-          {hasChildren && !hideChildrenForResearch && <StepChildren children={step.children!} />}
+          {hasChildren && !isResearchDone && <StepChildren children={step.children!} />}
           {hasRenderer && (
-            <div className={hasChildren && !hideChildrenForResearch ? 'pt-2' : ''}>
+            <div className={hasChildren && !isResearchDone ? 'pt-2' : ''}>
               <StageContentRenderer content={content!} />
             </div>
           )}
+          {hasChildren && isResearchDone && <SearchLog children={step.children!} />}
         </div>
       )}
+    </div>
+  );
+};
+
+// ── Search log (collapsible, for completed research step) ──
+
+const SearchLog = ({ children }: { children: PipelineStepChild[] }) => {
+  const [open, setOpen] = useState(false);
+  const totalCount = children.length;
+  const emptyCount = children.filter(isEmptyResult).length;
+
+  return (
+    <div className="py-1">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-white/2"
+      >
+        <ChevronRight
+          size={10}
+          className={`shrink-0 text-t3 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+        />
+        <span className="text-xs font-medium text-t3">搜尋紀錄（{totalCount}次）</span>
+        {emptyCount > 0 && (
+          <span className="flex items-center gap-1 text-xs text-amber-400">
+            <Minus size={10} strokeWidth={3} />
+            {emptyCount} 次未找到
+          </span>
+        )}
+      </button>
+      {open && <StepChildren children={children} />}
     </div>
   );
 };

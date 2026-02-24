@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Check, CheckCircle2, ChevronRight, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronRight, Loader2, Minus, X } from 'lucide-react';
 import type { PipelineStepChild } from '../../../shared/types';
 
 // ── Badge (shared) ──
@@ -28,6 +28,11 @@ export const StageBadge = ({
   );
 };
 
+// ── Shared helper ──
+
+export const isEmptyResult = (c: PipelineStepChild): boolean =>
+  c.status === 'done' && (!c.results || c.results.length === 0);
+
 // ── Step children (search queries) ──
 
 export const StepChildren = ({ children }: { children: PipelineStepChild[] }) => {
@@ -45,6 +50,8 @@ export const StepChildren = ({ children }: { children: PipelineStepChild[] }) =>
             <span className="mt-0.5 shrink-0">
               {child.status === 'running' ? (
                 <Loader2 size={10} className="animate-spin text-ac" />
+              ) : isEmptyResult(child) ? (
+                <Minus size={10} strokeWidth={3} className="text-amber-400" />
               ) : child.status === 'done' ? (
                 <Check size={10} strokeWidth={3} className="text-gr" />
               ) : child.status === 'error' ? (
