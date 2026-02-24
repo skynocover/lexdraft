@@ -14,6 +14,7 @@ import { useBriefStore } from '../../stores/useBriefStore';
 import { useCaseStore, type CaseFile } from '../../stores/useCaseStore';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
+import { useCitedLawRefs } from '../../hooks/useCitedLawRefs';
 
 const SIDEBAR_TABS: { key: SidebarTab; label: string; icon: typeof FolderOpen }[] = [
   { key: 'case-info', label: '案件資訊', icon: Info },
@@ -78,6 +79,7 @@ const CaseMaterialsContent = () => {
   const setCaseMaterialSection = useUIStore((s) => s.setCaseMaterialSection);
   const briefs = useBriefStore((s) => s.briefs);
   const files = useCaseStore((s) => s.files);
+  const { citedCount } = useCitedLawRefs();
 
   const focusedPanel = panels.find((p) => p.id === focusedPanelId);
   const activeTabId = focusedPanel?.activeTabId ?? null;
@@ -108,6 +110,7 @@ const CaseMaterialsContent = () => {
       {/* 法條引用 */}
       <CollapsibleSection
         title="法條引用"
+        count={citedCount}
         open={caseMaterialSections.lawRefs}
         onOpenChange={(open) => setCaseMaterialSection('lawRefs', open)}
       >

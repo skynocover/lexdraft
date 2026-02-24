@@ -1,8 +1,8 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Search, Check, X } from 'lucide-react';
 import { useBriefStore, type LawRef } from '../../../stores/useBriefStore';
 import { useCaseStore } from '../../../stores/useCaseStore';
-import { forEachCitation } from '../../../lib/citationUtils';
+import { useCitedLawRefs } from '../../../hooks/useCitedLawRefs';
 import { LawRefCard } from './LawRefCard';
 import { api } from '../../../lib/api';
 
@@ -18,10 +18,10 @@ interface SearchResult {
 
 export const LawRefsSection = () => {
   const lawRefs = useBriefStore((s) => s.lawRefs);
-  const currentBrief = useBriefStore((s) => s.currentBrief);
   const removeLawRef = useBriefStore((s) => s.removeLawRef);
   const setLawRefs = useBriefStore((s) => s.setLawRefs);
   const currentCase = useCaseStore((s) => s.currentCase);
+  const { citedLawRefs, availableLawRefs } = useCitedLawRefs();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -33,29 +33,6 @@ export const LawRefsSection = () => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const existingIds = new Set(lawRefs.map((r) => r.id));
-
-  const citedLabels = useMemo(() => {
-    const labels = new Set<string>();
-    if (!currentBrief?.content_structured?.paragraphs) return labels;
-    forEachCitation(currentBrief.content_structured.paragraphs, (c) => {
-      if (c.type === 'law') labels.add(c.label);
-    });
-    return labels;
-  }, [currentBrief]);
-
-  const { citedLawRefs, availableLawRefs } = useMemo(() => {
-    const cited: typeof lawRefs = [];
-    const available: typeof lawRefs = [];
-    for (const ref of lawRefs) {
-      const label = `${ref.law_name} ${ref.article}`;
-      if (citedLabels.has(label)) {
-        cited.push(ref);
-      } else if (ref.is_manual) {
-        available.push(ref);
-      }
-    }
-    return { citedLawRefs: cited, availableLawRefs: available };
-  }, [lawRefs, citedLabels]);
 
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -247,16 +224,10 @@ export const LawRefsSection = () => {
           </div>
         ) : (
           <div className="space-y-1.5">
-            {citedLawRefs.length > 0 && (
-              <>
-                <p className="px-1 pt-1 text-xs font-medium text-t3">
-                  已引用 ({citedLawRefs.length})
-                </p>
-                {citedLawRefs.map((ref) => (
-                  <LawRefCard key={ref.id} lawRef={ref} cited onRemove={removeLawRef} />
-                ))}
-              </>
-            )}
+            {citedLawRefs.length > 0 &&
+              citedLawRefs.map((ref) => (
+                <LawRefCard key={ref.id} lawRef={ref} cited onRemove={removeLawRef} />
+              ))}
             {availableLawRefs.length > 0 && (
               <>
                 <p className="px-1 pt-2 text-xs font-medium text-t3">
