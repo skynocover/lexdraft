@@ -1,4 +1,4 @@
-// ── Pipeline v3 Types ──
+// ── Pipeline Types ──
 // Shared types for the brief writing pipeline
 
 import type { Paragraph, Citation, TextSegment } from '../../../client/stores/useBriefStore';
@@ -74,6 +74,7 @@ export interface StrategySection {
   relevant_file_ids: string[];
   relevant_law_ids: string[];
   facts_to_use?: FactUsage[];
+  legal_reasoning?: string;
 }
 
 // ── Strategy Output (論證策略完整 output) ──
@@ -87,7 +88,7 @@ export interface StrategyOutput {
   };
 }
 
-// ── Research Result (法律研究 output) ──
+// ── Found Law ──
 
 export interface FoundLaw {
   id: string;
@@ -96,15 +97,6 @@ export interface FoundLaw {
   content: string;
   relevance: string;
   side: 'attack' | 'defense_risk' | 'reference';
-}
-
-export interface ResearchResult {
-  issue_id: string;
-  strength: 'strong' | 'moderate' | 'weak' | 'untenable';
-  found_laws: FoundLaw[];
-  analysis: string;
-  attack_points: string[];
-  defense_risks: string[];
 }
 
 // ── Draft Section (Writer output) ──
@@ -132,6 +124,7 @@ export interface WriterContext {
   laws: FoundLaw[];
   fileIds: string[];
   factsToUse?: FactUsage[];
+  legal_reasoning?: string; // from ReasoningSection
 
   // 回顧層
   completedSections: DraftSection[];
@@ -181,6 +174,62 @@ export interface DamageItem {
   category: string;
   description: string | null;
   amount: number;
+}
+
+// ── Law Fetch Types ──
+
+// Step 1 output (pure function, no AI)
+export interface FetchedLaw {
+  id: string; // e.g., "B0000001-184" (pcode format, matches DB _id)
+  law_name: string; // e.g., "民法"
+  article_no: string; // e.g., "第 184 條"
+  content: string; // full article text
+  source: 'mentioned' | 'user_manual' | 'supplemented';
+}
+
+export interface LawFetchResult {
+  laws: Map<string, FetchedLaw>; // key = law_id
+  total: number;
+}
+
+// Step 2 output (Claude tool-loop)
+export interface ReasoningSection extends StrategySection {
+  legal_reasoning: string; // ≤300 chars free-text reasoning per section
+}
+
+export interface ReasoningStrategyOutput {
+  claims: Claim[];
+  sections: ReasoningSection[];
+}
+
+// Step 2 input
+export interface ReasoningStrategyInput {
+  caseSummary: string;
+  briefType: string;
+  legalIssues: LegalIssue[];
+  informationGaps: InformationGap[];
+  fetchedLaws: FetchedLaw[];
+  fileSummaries: Array<{
+    id: string;
+    filename: string;
+    category: string | null;
+    summary: string;
+  }>;
+  damages: DamageItem[];
+  timeline: TimelineItem[];
+  userAddedLaws: Array<{
+    id: string;
+    law_name: string;
+    article_no: string;
+    content: string;
+  }>;
+  caseMetadata?: {
+    caseNumber: string;
+    court: string;
+    caseType: string;
+    clientRole: string;
+    caseInstructions: string;
+  };
 }
 
 // Re-export commonly used types

@@ -302,3 +302,142 @@ export const callClaude = async (
 
   return { content, usage, truncated };
 };
+
+// ── Claude Tool-Loop Types ──
+
+export interface ClaudeToolDefinition {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+export interface ClaudeMessage {
+  role: 'user' | 'assistant';
+  content: string | ClaudeContentBlock[];
+}
+
+export type ClaudeContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'tool_result'; tool_use_id: string; content: string };
+
+export interface ClaudeToolLoopOptions {
+  model: string;
+  system: string;
+  messages: ClaudeMessage[];
+  tools: ClaudeToolDefinition[];
+  max_tokens: number;
+}
+
+export interface ClaudeToolLoopResponse {
+  content: ClaudeContentBlock[];
+  stop_reason: 'end_turn' | 'tool_use' | 'max_tokens';
+  usage: ClaudeUsage;
+}
+
+// ── Retry wrapper (429 / 5xx) ──
+
+const callWithRetry = async (
+  url: string,
+  env: AIEnv,
+  body: Record<string, unknown>,
+  maxRetries = 3,
+): Promise<Response> => {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (response.ok) return response;
+
+    if (attempt < maxRetries - 1 && (response.status === 429 || response.status >= 500)) {
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+      continue;
+    }
+
+    const errText = await response.text();
+    throw new Error(`Claude API error: ${response.status} - ${errText}`);
+  }
+  throw new Error('callWithRetry: unreachable');
+};
+
+// ── Claude Tool-Loop Call ──
+
+/**
+ * Call Claude with tool support (for multi-turn tool-loop agents).
+ * Routed through Cloudflare AI Gateway. Retries on 429/5xx.
+ * Strips U+FFFD at AI Gateway boundary.
+ */
+export const callClaudeToolLoop = async (
+  env: AIEnv,
+  options: ClaudeToolLoopOptions,
+): Promise<ClaudeToolLoopResponse> => {
+  const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/anthropic/v1/messages`;
+
+  const body = {
+    model: options.model,
+    max_tokens: options.max_tokens,
+    system: options.system,
+    messages: options.messages,
+    tools: options.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.input_schema,
+    })),
+  };
+
+  const response = await callWithRetry(gatewayUrl, env, body);
+
+  const data = (await response.json()) as {
+    content: Array<Record<string, unknown>>;
+    stop_reason: string;
+    usage?: { input_tokens: number; output_tokens: number };
+  };
+
+  // Strip U+FFFD at AI Gateway boundary (text + tool_use input string values)
+  const stripFFFDFromValues = (obj: Record<string, unknown>): Record<string, unknown> => {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      result[k] = typeof v === 'string' ? stripFFFD(v) : v;
+    }
+    return result;
+  };
+
+  const content: ClaudeContentBlock[] = data.content.map((block) => {
+    if (block.type === 'text') {
+      return { type: 'text' as const, text: stripFFFD(block.text as string) };
+    }
+    if (block.type === 'tool_use') {
+      return {
+        type: 'tool_use' as const,
+        id: block.id as string,
+        name: block.name as string,
+        input: stripFFFDFromValues(block.input as Record<string, unknown>),
+      };
+    }
+    return block as ClaudeContentBlock;
+  });
+
+  return {
+    content,
+    stop_reason: data.stop_reason as ClaudeToolLoopResponse['stop_reason'],
+    usage: data.usage || { input_tokens: 0, output_tokens: 0 },
+  };
+};
+
+// ── Tool-loop helpers ──
+
+/** Extract all tool_use calls from Claude response blocks */
+export const extractToolCalls = (
+  blocks: ClaudeContentBlock[],
+): Array<{ id: string; name: string; input: Record<string, unknown> }> =>
+  blocks.filter(
+    (b): b is { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> } =>
+      b.type === 'tool_use',
+  );

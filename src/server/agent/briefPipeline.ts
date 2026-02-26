@@ -6,12 +6,6 @@ import { type ClaudeUsage } from './claudeClient';
 import { readLawRefs, upsertManyLawRefs } from '../lib/lawRefsJson';
 import type { LawRefItem } from '../lib/lawRefsJson';
 import {
-  runResearchAgent,
-  type ResearchAgentResult,
-  type ResearchProgressCallback,
-} from './researchAgent';
-import { createLawSearchSession } from '../lib/lawSearch';
-import {
   runCaseReader,
   runIssueAnalyzer,
   type OrchestratorOutput,
@@ -20,14 +14,19 @@ import {
 } from './orchestratorAgent';
 import { parseJsonField, loadReadyFiles, toolError, toolSuccess } from './toolHelpers';
 import { ContextStore } from './contextStore';
-import type { LegalIssue, FoundLaw, TimelineItem, DamageItem } from './pipeline/types';
+import type { LegalIssue, TimelineItem, DamageItem } from './pipeline/types';
 import type { ToolResult } from './tools/types';
 import type { Paragraph } from '../../client/stores/useBriefStore';
 import type { AIEnv } from './aiClient';
 import type { SSEEvent, PipelineStep, PipelineStepChild } from '../../shared/types';
-import { callStrategist, type StrategyProgressCallback } from './pipeline/strategyStep';
-import { writeSectionV3, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
+import { writeSection, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
 import type { FileRow } from './pipeline/writerStep';
+import { runLawFetch, truncateLawContent } from './pipeline/lawFetchStep';
+import {
+  runReasoningStrategy,
+  type ReasoningStrategyProgressCallback,
+} from './pipeline/reasoningStrategyStep';
+import type { ReasoningStrategyInput, ReasoningStrategyOutput } from './pipeline/types';
 
 // ── Types ──
 
@@ -576,143 +575,6 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       },
     );
 
-    // ═══ Step 2: Legal Research Agent ═══
-    if (ctx.signal.aborted) return toolError('已取消');
-    currentStep = STEP_LAW;
-    await progress.startStep(STEP_LAW);
-
-    // Build case summary from file summaries for research context (cap at 4000 chars)
-    const MAX_SUMMARY_LEN = 4000;
-    const rawSummary =
-      store.caseSummary ||
-      readyFiles
-        .map((f) => {
-          const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
-          return `${f.filename}: ${summary.summary || ''}`;
-        })
-        .join('\n');
-    const caseSummaryForResearch =
-      rawSummary.length > MAX_SUMMARY_LEN
-        ? rawSummary.slice(0, MAX_SUMMARY_LEN) + '…（摘要已截斷）'
-        : rawSummary;
-
-    // Track search children for progress UI
-    const searchChildren: PipelineStepChild[] = [];
-
-    const researchProgress: ResearchProgressCallback = {
-      onSearchStart: async (query) => {
-        searchChildren.push({ label: query, status: 'running' });
-        await progress.setStepChildren(STEP_LAW, [...searchChildren]);
-      },
-      onSearchResult: async (query, count, laws) => {
-        const idx = searchChildren.findIndex((c) => c.label === query && c.status === 'running');
-        if (idx >= 0) {
-          searchChildren[idx] = {
-            ...searchChildren[idx],
-            status: 'done',
-            detail: `${count} 條`,
-            results: laws,
-          };
-          await progress.setStepChildren(STEP_LAW, [...searchChildren]);
-        }
-      },
-      onIssueComplete: async () => {
-        // Progress is tracked per-search; issue completion is implicit
-      },
-    };
-
-    let researchResult;
-    try {
-      researchResult = await runResearchAgent(
-        ctx.aiEnv,
-        ctx.mongoUrl,
-        {
-          legalIssues: store.legalIssues.map((issue) => ({
-            id: issue.id,
-            title: issue.title,
-            our_position: issue.our_position,
-            their_position: issue.their_position,
-            mentioned_laws: issue.mentioned_laws,
-          })),
-          caseSummary: caseSummaryForResearch,
-          briefType: ctx.briefType,
-        },
-        ctx.signal,
-        researchProgress,
-      );
-    } catch (researchErr) {
-      const errDetail = researchErr instanceof Error ? researchErr.message : '未知錯誤';
-      console.error('Research Agent failed, falling back to mentioned_laws lookup:', researchErr);
-
-      // Show warning in progress children (full error in results for expansion)
-      searchChildren.push({
-        label: 'Research Agent 失敗',
-        status: 'error',
-        results: [errDetail],
-      });
-      searchChildren.push({ label: '改用 mentioned_laws 直接查詢', status: 'running' });
-      await progress.setStepChildren(STEP_LAW, [...searchChildren]);
-
-      // Fallback: batch-search mentioned_laws from existing issues via MongoDB
-      researchResult = await fallbackResearchFromMentionedLaws(ctx.mongoUrl, store.legalIssues);
-
-      // Update fallback child to done
-      const fallbackIdx = searchChildren.findIndex(
-        (c) => c.label === '改用 mentioned_laws 直接查詢',
-      );
-      if (fallbackIdx >= 0) {
-        searchChildren[fallbackIdx] = { ...searchChildren[fallbackIdx], status: 'done' };
-        await progress.setStepChildren(STEP_LAW, [...searchChildren]);
-      }
-    }
-
-    // Set research results directly in ContextStore
-    store.research = researchResult.research;
-
-    // Cache found laws in JSON column
-    const allResearchLaws = researchResult.research.flatMap((r) => r.found_laws);
-    const seenLawIds = new Set<string>();
-    const lawRefsToCache: LawRefItem[] = [];
-    for (const law of allResearchLaws) {
-      if (seenLawIds.has(law.id)) continue;
-      seenLawIds.add(law.id);
-      lawRefsToCache.push({
-        id: law.id,
-        law_name: law.law_name,
-        article: law.article_no,
-        full_text: law.content,
-        is_manual: false,
-      });
-    }
-    if (lawRefsToCache.length) {
-      await upsertManyLawRefs(ctx.drizzle, ctx.caseId, lawRefsToCache);
-    }
-
-    const totalLawCount = seenLawIds.size;
-    await progress.completeStep(
-      STEP_LAW,
-      `${totalLawCount} 條（${researchResult.totalSearches} 次搜尋）`,
-      {
-        type: 'research',
-        groups: researchResult.research.map((r) => {
-          const issue = store.legalIssues.find((i) => i.id === r.issue_id);
-          return {
-            section: issue?.title || r.issue_id,
-            items: r.found_laws.map((l) => ({
-              name: `${l.law_name} ${l.article_no}`,
-              type: l.side,
-            })),
-          };
-        }),
-        totalCount: totalLawCount,
-      },
-    );
-
-    // ═══ Step 3: 論證策略 ═══
-    if (ctx.signal.aborted) return toolError('已取消');
-    currentStep = STEP_STRATEGY;
-    await progress.startStep(STEP_STRATEGY);
-
     // Identify user-added laws (is_manual = true)
     const userAddedLaws = allLawRefRows
       .filter((r) => r.is_manual && r.full_text)
@@ -723,63 +585,128 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
         content: r.full_text,
       }));
 
-    // Track strategy children for progress UI
-    const strategyChildren: PipelineStepChild[] = [];
+    // ═══ Step 1: Law Fetch (pure function, no AI) ═══
+    if (ctx.signal.aborted) return toolError('已取消');
+    currentStep = STEP_LAW;
+    await progress.startStep(STEP_LAW);
 
-    const strategyProgress: StrategyProgressCallback = {
-      onPrepareInput: async () => {
-        strategyChildren.push({ label: '整理案件資料', status: 'running' });
+    const lawFetchChildren: PipelineStepChild[] = [];
+
+    const lawFetchResult = await runLawFetch(ctx.mongoUrl, {
+      legalIssues: store.legalIssues,
+      userAddedLaws: allLawRefRows.filter((r) => r.is_manual),
+      existingLawRefs: allLawRefRows,
+    });
+
+    // Cache fetched laws in DB
+    const fetchedLawsArray = [...lawFetchResult.laws.values()];
+
+    // Build progress children showing actual law names
+    const mentionedLaws = fetchedLawsArray.filter((l) => l.source === 'mentioned');
+    const manualLaws = fetchedLawsArray.filter((l) => l.source === 'user_manual');
+
+    if (mentionedLaws.length > 0) {
+      lawFetchChildren.push({
+        label: '提及法條',
+        status: 'done',
+        detail: `${mentionedLaws.length} 條`,
+        results: mentionedLaws.map((l) => `${l.law_name} ${l.article_no}`),
+      });
+    }
+    if (manualLaws.length > 0) {
+      lawFetchChildren.push({
+        label: '使用者手動法條',
+        status: 'done',
+        detail: `${manualLaws.length} 條`,
+        results: manualLaws.map((l) => `${l.law_name} ${l.article_no}`),
+      });
+    }
+    await progress.setStepChildren(STEP_LAW, [...lawFetchChildren]);
+    const lawRefsToCache: LawRefItem[] = mentionedLaws.map((l) => ({
+      id: l.id,
+      law_name: l.law_name,
+      article: l.article_no,
+      full_text: l.content,
+      is_manual: false,
+    }));
+    if (lawRefsToCache.length) {
+      await upsertManyLawRefs(ctx.drizzle, ctx.caseId, lawRefsToCache);
+    }
+
+    await progress.completeStep(STEP_LAW, `${lawFetchResult.total} 條法條`);
+
+    // ═══ Step 2: Reasoning + Strategy (Claude tool-loop) ═══
+    if (ctx.signal.aborted) return toolError('已取消');
+    currentStep = STEP_STRATEGY;
+    await progress.startStep(STEP_STRATEGY);
+
+    const strategyChildren: PipelineStepChild[] = [];
+    const strategyProgress: ReasoningStrategyProgressCallback = {
+      onReasoningStart: async () => {
+        strategyChildren.push({ label: 'AI 法律推理中', status: 'running' });
         await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
       },
-      onLLMStart: async (attempt) => {
-        // 完成上一個 running child
-        const lastRunning = strategyChildren.findLastIndex((c) => c.status === 'running');
-        if (lastRunning >= 0) {
-          strategyChildren[lastRunning] = { ...strategyChildren[lastRunning], status: 'done' };
+      onSearchLaw: async (query, purpose, resultCount, lawNames) => {
+        strategyChildren.push({
+          label: `補搜：${purpose}`,
+          status: 'done',
+          detail: resultCount > 0 ? `${resultCount} 條（${query}）` : `未找到（${query}）`,
+          results: lawNames.length > 0 ? lawNames : undefined,
+        });
+        await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
+      },
+      onFinalized: async () => {
+        // Mark reasoning as done
+        const idx = strategyChildren.findIndex(
+          (c) => c.label === 'AI 法律推理中' && c.status === 'running',
+        );
+        if (idx >= 0) {
+          strategyChildren[idx] = { ...strategyChildren[idx], status: 'done' };
         }
-        const label = attempt === 1 ? 'AI 規劃論證架構' : `AI 重新規劃（第 ${attempt} 次）`;
-        strategyChildren.push({ label, status: 'running' });
+        strategyChildren.push({ label: '推理完成，輸出策略', status: 'running' });
         await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
       },
-      onLLMDone: async () => {
+      onOutputStart: async () => {
         const idx = strategyChildren.findLastIndex((c) => c.status === 'running');
         if (idx >= 0) {
           strategyChildren[idx] = { ...strategyChildren[idx], status: 'done' };
           await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
         }
       },
-      onValidateStart: async () => {
-        strategyChildren.push({ label: '驗證策略結構', status: 'running' });
-        await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
-      },
-      onValidateDone: async (valid, errors) => {
-        const idx = strategyChildren.findLastIndex((c) => c.label === '驗證策略結構');
-        if (idx >= 0) {
-          strategyChildren[idx] = {
-            ...strategyChildren[idx],
-            status: valid ? 'done' : 'error',
-            detail: valid ? '通過' : `${errors?.length ?? 0} 項問題`,
-            results: valid ? undefined : errors,
-          };
-          await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
-        }
-      },
-      onRetry: async (_attempt, reason) => {
-        strategyChildren.push({ label: reason, status: 'running' });
-        await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
-      },
     };
 
-    const strategyOutput = await callStrategist(
+    const strategyInput: ReasoningStrategyInput = {
+      caseSummary: store.caseSummary,
+      briefType: store.briefType,
+      legalIssues: store.legalIssues,
+      informationGaps: store.informationGaps,
+      fetchedLaws: fetchedLawsArray
+        .filter((l) => l.source !== 'user_manual')
+        .map(truncateLawContent),
+      fileSummaries: parsedFiles.map((f) => ({
+        id: f.id,
+        filename: f.filename,
+        category: f.category,
+        summary: f.parsedSummary || '無摘要',
+      })),
+      damages: finalDamages,
+      timeline: finalTimeline,
+      userAddedLaws,
+      caseMetadata: store.caseMetadata,
+    };
+
+    const strategyOutput: ReasoningStrategyOutput = await runReasoningStrategy(
       ctx,
       store,
-      readyFiles,
-      finalDamages,
+      strategyInput,
       totalUsage,
-      userAddedLaws,
-      finalTimeline,
       strategyProgress,
     );
+
+    // Set found laws in ContextStore (fetchedLaws + supplementedLaws)
+    store.setFoundLaws(fetchedLawsArray);
+
+    // ═══ Common: Set strategy + persist claims ═══
 
     // Set strategy in ContextStore
     store.setStrategyOutput(strategyOutput.claims, strategyOutput.sections);
@@ -822,12 +749,21 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       `${strategyOutput.sections.length} 段、${ourClaimCount} 項我方主張、${theirClaimCount} 項對方主張`,
       {
         type: 'strategy',
-        sections: strategyOutput.sections.map((s) => ({
-          id: s.id,
-          section: s.section,
-          subsection: s.subsection,
-          claimCount: s.claims.length,
-        })),
+        sections: strategyOutput.sections.map((s) => {
+          const sectionClaims = strategyOutput.claims
+            .filter((c) => s.claims.includes(c.id))
+            .map((c) => ({
+              side: c.side as 'ours' | 'theirs',
+              statement: c.statement,
+            }));
+          return {
+            id: s.id,
+            section: s.section,
+            subsection: s.subsection,
+            claimCount: s.claims.length,
+            claims: sectionClaims,
+          };
+        }),
         claimCount: strategyOutput.claims.length,
         rebuttalCount,
         unrebutted,
@@ -849,14 +785,13 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       try {
         const writerCtx = store.getContextForSection(i);
 
-        const paragraph = await writeSectionV3(
+        const paragraph = await writeSection(
           ctx,
           briefId,
           strategySection,
           writerCtx,
           fileContentMap,
           store,
-          i,
           totalUsage,
         );
 
@@ -877,6 +812,17 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     }
 
     await progress.completeWriting(paragraphs.length);
+
+    // ═══ Batch write all paragraphs to DB (single UPDATE instead of N SELECT+UPDATE) ═══
+    if (paragraphs.length > 0) {
+      await ctx.drizzle
+        .update(briefs)
+        .set({
+          content_structured: JSON.stringify({ paragraphs }),
+          updated_at: new Date().toISOString(),
+        })
+        .where(eq(briefs.id, briefId));
+    }
 
     // ═══ Cleanup: delete uncited non-manual law refs ═══
     await cleanupUncitedLaws(ctx, paragraphs);
@@ -937,84 +883,7 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
   }
 };
 
-// ── Research fallback: look up mentioned_laws directly from MongoDB ──
-
-const fallbackResearchFromMentionedLaws = async (
-  mongoUrl: string,
-  legalIssues: LegalIssue[],
-): Promise<ResearchAgentResult> => {
-  const searchedLawIds = new Set<string>();
-  let totalSearches = 0;
-
-  // Collect all unique mentioned_laws across all issues
-  const allMentioned = new Map<string, string[]>(); // query → issue IDs
-  for (const issue of legalIssues) {
-    for (const law of issue.mentioned_laws) {
-      const trimmed = law.trim();
-      if (!trimmed) continue;
-      const existing = allMentioned.get(trimmed) || [];
-      existing.push(issue.id);
-      allMentioned.set(trimmed, existing);
-    }
-  }
-
-  // If no mentioned_laws at all, use issue titles as search queries
-  if (allMentioned.size === 0) {
-    for (const issue of legalIssues) {
-      const title = issue.title.trim();
-      if (!title) continue;
-      allMentioned.set(title, [issue.id]);
-    }
-  }
-
-  // Search each mentioned law
-  const lawSession = createLawSearchSession(mongoUrl);
-  const foundByIssue = new Map<string, FoundLaw[]>();
-
-  try {
-    for (const [query, issueIds] of allMentioned) {
-      totalSearches++;
-      const results = await lawSession.search(query, 3);
-
-      for (const r of results) {
-        searchedLawIds.add(r._id);
-        const foundLaw: FoundLaw = {
-          id: r._id,
-          law_name: r.law_name,
-          article_no: r.article_no,
-          content: r.content,
-          relevance: `與爭點相關（從 mentioned_laws 查詢）`,
-          side: 'attack',
-        };
-
-        for (const issueId of issueIds) {
-          const arr = foundByIssue.get(issueId) || [];
-          // Avoid duplicates
-          if (!arr.some((l) => l.id === foundLaw.id)) {
-            arr.push(foundLaw);
-          }
-          foundByIssue.set(issueId, arr);
-        }
-      }
-    }
-  } finally {
-    await lawSession.close();
-  }
-
-  // Build research results
-  const research = legalIssues.map((issue) => ({
-    issue_id: issue.id,
-    strength: 'moderate' as const,
-    found_laws: foundByIssue.get(issue.id) || [],
-    analysis: '透過 mentioned_laws 直接查詢法條（Research Agent 未執行）。',
-    attack_points: [],
-    defense_risks: [],
-  }));
-
-  return { research, searchedLawIds, totalSearches };
-};
-
-// ── Step 1 helpers ──
+// ── Helpers ──
 
 const createBriefInDB = async (ctx: PipelineContext): Promise<string> => {
   const briefId = nanoid();

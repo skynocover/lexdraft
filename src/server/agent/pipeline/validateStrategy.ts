@@ -118,7 +118,29 @@ export const validateStrategyOutput = (
     }
   }
 
-  // 8. dispute_id must be a valid issue ID (if provided)
+  // 8. legal_reasoning length check (warning-level, non-blocking log only)
+  for (const section of output.sections) {
+    const lr = (section as { legal_reasoning?: string }).legal_reasoning;
+    if (lr && lr.length > 300) {
+      console.warn(
+        `[Strategy Warning] 段落「${section.section}」的 legal_reasoning 超過 300 字（${lr.length} 字）`,
+      );
+    }
+  }
+
+  // 9. legal_basis ⊆ relevant_law_ids (structural consistency)
+  for (const section of output.sections) {
+    const lawIdSet = new Set(section.relevant_law_ids);
+    for (const basisId of section.argumentation.legal_basis) {
+      if (!lawIdSet.has(basisId)) {
+        errors.push(
+          `段落「${section.section}」的 legal_basis 引用「${basisId}」不在 relevant_law_ids 中`,
+        );
+      }
+    }
+  }
+
+  // 10. dispute_id must be a valid issue ID (if provided)
   const issueIds = new Set(legalIssues.map((i) => i.id));
   for (const claim of output.claims) {
     if (claim.dispute_id && !issueIds.has(claim.dispute_id)) {

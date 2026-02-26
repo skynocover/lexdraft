@@ -37,6 +37,7 @@
     "drizzle-orm": "^0.45.1",
     "file-saver": "^2.0.5",
     "hono": "^4.11.9",
+    "jsonrepair": "^3.13.2",
     "lucide-react": "^0.564.0",
     "mongodb": "^7.1.0",
     "nanoid": "^5.1.6",

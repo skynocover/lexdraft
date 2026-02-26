@@ -7,8 +7,8 @@ import type {
   StrategySection,
   LegalIssue,
   InformationGap,
-  ResearchResult,
   FoundLaw,
+  FetchedLaw,
   DraftSection,
   WriterContext,
   TimelineItem,
@@ -42,14 +42,16 @@ export class ContextStore {
   damages: DamageItem[] = [];
   timeline: TimelineItem[] = [];
 
-  // Step 2: 法律研究 Agent 產出 (Phase 2 — currently seeded from law search)
-  research: ResearchResult[] = [];
-
-  // Step 3: 論證策略 Step 產出
+  // Step 2: 論證策略 Step 產出
   claims: Claim[] = [];
   sections: StrategySection[] = [];
 
-  // Step 4: Writer 逐段產出
+  // Step 2: Reasoning + Strategy
+  reasoningSummary = '';
+  supplementedLaws: FetchedLaw[] = [];
+  foundLaws: FoundLaw[] = []; // combined laws for Writer
+
+  // Step 3: Writer 逐段產出
   draftSections: DraftSection[] = [];
 
   // ── Query Methods ──
@@ -67,9 +69,9 @@ export class ContextStore {
     );
   };
 
-  /** Get all found laws across all research results */
+  /** Get all found laws */
   getAllFoundLaws = (): FoundLaw[] => {
-    return this.research.flatMap((r) => r.found_laws);
+    return this.foundLaws;
   };
 
   /** Assemble complete Writer context for a specific section */
@@ -98,6 +100,7 @@ export class ContextStore {
       laws: this.getAllFoundLaws().filter((l) => lawIdSet.has(l.id)),
       fileIds: section.relevant_file_ids,
       factsToUse: section.facts_to_use,
+      legal_reasoning: section.legal_reasoning,
 
       // 回顧層 — full text of completed sections
       completedSections: this.draftSections.slice(0, sectionIndex),
@@ -144,5 +147,38 @@ export class ContextStore {
   /** Add a completed draft section */
   addDraftSection = (draft: DraftSection) => {
     this.draftSections.push(draft);
+  };
+
+  /** Set reasoning summary from finalize_strategy tool call */
+  setReasoningSummary = (summary: string) => {
+    this.reasoningSummary = summary;
+  };
+
+  /** Add supplemented laws found during Step 2 reasoning (written immediately) */
+  addSupplementedLaws = (laws: FetchedLaw[]) => {
+    for (const law of laws) {
+      if (!this.supplementedLaws.some((l) => l.id === law.id)) {
+        this.supplementedLaws.push(law);
+      }
+    }
+  };
+
+  /** Populate foundLaws from fetchedLaws + supplementedLaws (called after Steps 1+2) */
+  setFoundLaws = (fetchedLaws: FetchedLaw[]) => {
+    const allLaws = [...fetchedLaws, ...this.supplementedLaws];
+    const seen = new Set<string>();
+    this.foundLaws = [];
+    for (const law of allLaws) {
+      if (seen.has(law.id)) continue;
+      seen.add(law.id);
+      this.foundLaws.push({
+        id: law.id,
+        law_name: law.law_name,
+        article_no: law.article_no,
+        content: law.content,
+        relevance: '',
+        side: 'attack',
+      });
+    }
   };
 }

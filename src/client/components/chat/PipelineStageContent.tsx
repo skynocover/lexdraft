@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AlertTriangle, Check, CheckCircle2, ChevronRight, Loader2, Minus, X } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import type { PipelineStepChild } from '../../../shared/types';
 
 // ── Badge (shared) ──
@@ -38,53 +39,66 @@ export const isEmptyResult = (c: PipelineStepChild): boolean =>
 export const StepChildren = ({ children }: { children: PipelineStepChild[] }) => {
   const [expandedChild, setExpandedChild] = useState<number | null>(null);
   return (
-    <div className="space-y-0.5 py-1">
-      {children.map((child, ci) => (
-        <div key={ci}>
-          <button
-            onClick={() =>
-              child.results?.length ? setExpandedChild(expandedChild === ci ? null : ci) : undefined
-            }
-            className={`flex w-full items-start gap-2 px-2 py-1 text-left ${child.results?.length ? 'cursor-pointer' : 'cursor-default'}`}
-          >
-            <span className="mt-0.5 shrink-0">
-              {child.status === 'running' ? (
-                <Loader2 size={10} className="animate-spin text-ac" />
-              ) : isEmptyResult(child) ? (
-                <Minus size={10} strokeWidth={3} className="text-amber-400" />
-              ) : child.status === 'done' ? (
-                <Check size={10} strokeWidth={3} className="text-gr" />
-              ) : child.status === 'error' ? (
-                <X size={10} strokeWidth={3} className="text-red-400" />
-              ) : (
-                <span className="inline-block h-2.5 w-2.5 rounded-full border border-t3/30" />
-              )}
-            </span>
-            <span
-              className={`flex-1 text-xs ${child.status === 'error' ? 'break-all text-red-400' : 'truncate text-t3'}`}
+    <TooltipProvider delayDuration={500}>
+      <div className="space-y-0.5 py-1">
+        {children.map((child, ci) => (
+          <div key={ci}>
+            <button
+              onClick={() =>
+                child.results?.length
+                  ? setExpandedChild(expandedChild === ci ? null : ci)
+                  : undefined
+              }
+              className={`flex w-full items-start gap-2 px-2 py-1 text-left ${child.results?.length ? 'cursor-pointer' : 'cursor-default'}`}
             >
-              {child.label}
-            </span>
-            {child.detail && <span className="text-xs text-t3/60">{child.detail}</span>}
-            {child.results?.length ? (
-              <ChevronRight
-                size={8}
-                className={`mt-0.5 shrink-0 text-t3/40 transition-transform duration-150 ${expandedChild === ci ? 'rotate-90' : ''}`}
-              />
-            ) : null}
-          </button>
-          {expandedChild === ci && child.results && (
-            <div className="space-y-0.5 pb-1 pl-7">
-              {child.results.map((r, ri) => (
-                <p key={ri} className="text-xs text-t3/70">
-                  {r}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
+              <span className="mt-1 shrink-0">
+                {child.status === 'running' ? (
+                  <Loader2 size={12} className="animate-spin text-ac" />
+                ) : isEmptyResult(child) ? (
+                  <Minus size={12} strokeWidth={3} className="text-amber-400" />
+                ) : child.status === 'done' ? (
+                  <Check size={12} strokeWidth={3} className="text-gr" />
+                ) : child.status === 'error' ? (
+                  <X size={12} strokeWidth={3} className="text-red-400" />
+                ) : (
+                  <span className="inline-block h-3 w-3 rounded-full border border-t3/30" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={`block truncate text-sm ${child.status === 'error' ? 'break-all text-red-400' : 'text-t3'}`}
+                    >
+                      {child.label}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-80 text-xs">
+                    {child.label}
+                  </TooltipContent>
+                </Tooltip>
+                {child.detail && <span className="block text-sm text-t3/60">{child.detail}</span>}
+              </span>
+              {child.results?.length ? (
+                <ChevronRight
+                  size={10}
+                  className={`mt-1 shrink-0 text-t3/40 transition-transform duration-150 ${expandedChild === ci ? 'rotate-90' : ''}`}
+                />
+              ) : null}
+            </button>
+            {expandedChild === ci && child.results && (
+              <div className="space-y-0.5 pb-1 pl-7">
+                {child.results.map((r, ri) => (
+                  <p key={ri} className="text-sm text-t3/70">
+                    {r}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </TooltipProvider>
   );
 };
 

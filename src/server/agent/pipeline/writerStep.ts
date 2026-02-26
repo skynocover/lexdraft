@@ -1,10 +1,7 @@
-import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { briefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument, type ClaudeUsage } from '../claudeClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
 import { fetchAndCacheUncitedMentions } from '../../lib/lawRefService';
-import { parseJsonField } from '../toolHelpers';
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
 import type { StrategyOutput } from './types';
 import type { PipelineContext } from '../briefPipeline';
@@ -94,7 +91,7 @@ const stripLeadingHeadings = (
   return { text: stripped, segments: newSegments, citations: newCitations };
 };
 
-// ── Step 5: Writer (v3 — uses ContextStore) ──
+// ── Step 3: Writer (uses ContextStore) ──
 
 export type FileRow = {
   id: string;
@@ -103,14 +100,13 @@ export type FileRow = {
   content_md: string | null;
 };
 
-export const writeSectionV3 = async (
+export const writeSection = async (
   ctx: PipelineContext,
   briefId: string,
   strategySection: StrategyOutput['sections'][number],
   writerCtx: ReturnType<ContextStore['getContextForSection']>,
   fileContentMap: Map<string, FileRow>,
   store: ContextStore,
-  sectionIndex: number,
   usage: ClaudeUsage,
 ): Promise<Paragraph> => {
   const documents: ClaudeDocument[] = [];
@@ -133,19 +129,6 @@ export const writeSectionV3 = async (
       content: law.content,
       doc_type: 'law',
     });
-  }
-
-  // Also add laws from sectionLawMap that aren't in strategy (backward compat)
-  const strategyLawIds = new Set(writerCtx.laws.map((l) => l.id));
-  const allFoundLaws = store.getAllFoundLaws();
-  for (const law of allFoundLaws) {
-    if (!strategyLawIds.has(law.id) && strategySection.relevant_law_ids.includes(law.id)) {
-      documents.push({
-        title: `${law.law_name} ${law.article_no}`,
-        content: law.content,
-        doc_type: 'law',
-      });
-    }
   }
 
   // ── Build Writer instruction with 3-layer context ──
@@ -231,6 +214,13 @@ ${claimsText}
   ${legalBasisText}
   事實適用：${argText.fact_application}
   結論：${argText.conclusion}`;
+
+  if (writerCtx.legal_reasoning) {
+    instruction += `
+
+[本段推理指引]（律師的推理方向，指導撰寫深度）
+  ${writerCtx.legal_reasoning}`;
+  }
 
   if (factsText) {
     instruction += `
@@ -319,22 +309,6 @@ ${completedText}`;
     dispute_id: strategySection.dispute_id || null,
     citations,
   };
-
-  // Update brief in DB
-  const briefRows = await ctx.drizzle.select().from(briefs).where(eq(briefs.id, briefId));
-  const contentStructured = parseJsonField<{ paragraphs: Paragraph[] }>(
-    briefRows[0]?.content_structured,
-    { paragraphs: [] },
-  );
-  contentStructured.paragraphs.push(paragraph);
-
-  await ctx.drizzle
-    .update(briefs)
-    .set({
-      content_structured: JSON.stringify(contentStructured),
-      updated_at: new Date().toISOString(),
-    })
-    .where(eq(briefs.id, briefId));
 
   // Send paragraph SSE
   await ctx.sendSSE({

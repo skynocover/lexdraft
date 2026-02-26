@@ -45,7 +45,7 @@ export const useUIStore = create<UIState>((set) => ({
   caseMaterialSections: {
     briefs: true,
     files: true,
-    lawRefs: false,
+    lawRefs: true,
   },
 
   rightFilesOpen: true,

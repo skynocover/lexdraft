@@ -31,9 +31,20 @@ interface ResearchData {
   totalCount: number;
 }
 
+interface StrategyClaim {
+  side: 'ours' | 'theirs';
+  statement: string;
+}
+
 interface StrategyData {
   type: 'strategy';
-  sections: { id: string; section: string; subsection?: string; claimCount: number }[];
+  sections: {
+    id: string;
+    section: string;
+    subsection?: string;
+    claimCount: number;
+    claims?: StrategyClaim[];
+  }[];
   claimCount: number;
 }
 
@@ -262,27 +273,55 @@ const CaseConfirmContent = ({ data }: { data: CaseConfirmData }) => (
 
 // ── Strategy content ──
 
-const StrategyContent = ({ data }: { data: StrategyData }) => (
-  <div className="space-y-2">
-    <p className="text-xs font-semibold uppercase tracking-wider text-t3">
-      段落配置（{data.claimCount} 項主張）
-    </p>
-    <div className="space-y-1">
-      {data.sections.map((sec) => (
-        <div
-          key={sec.id}
-          className="flex items-center gap-2.5 rounded-lg border border-ac/10 bg-ac/5 px-3 py-2"
-        >
-          <span className="flex-1 text-xs text-t2">
-            {sec.section}
-            {sec.subsection ? ` > ${sec.subsection}` : ''}
-          </span>
-          {sec.claimCount > 0 && <StageBadge variant="count">{sec.claimCount} 項主張</StageBadge>}
-        </div>
-      ))}
+const StrategyContent = ({ data }: { data: StrategyData }) => {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wider text-t3">
+        段落配置（{data.claimCount} 項主張）
+      </p>
+      <div className="space-y-1">
+        {data.sections.map((sec) => (
+          <div key={sec.id}>
+            <button
+              onClick={() =>
+                sec.claims?.length ? setExpanded(expanded === sec.id ? null : sec.id) : undefined
+              }
+              className={`flex w-full items-center gap-2.5 rounded-lg border border-ac/10 bg-ac/5 px-3 py-2 text-left ${sec.claims?.length ? 'cursor-pointer' : 'cursor-default'}`}
+            >
+              <span className="flex-1 text-xs text-t2">
+                {sec.section}
+                {sec.subsection ? ` > ${sec.subsection}` : ''}
+              </span>
+              {sec.claimCount > 0 && (
+                <StageBadge variant="count">{sec.claimCount} 項主張</StageBadge>
+              )}
+              {sec.claims?.length ? (
+                <ChevronRight
+                  size={10}
+                  className={`shrink-0 text-t3/40 transition-transform duration-150 ${expanded === sec.id ? 'rotate-90' : ''}`}
+                />
+              ) : null}
+            </button>
+            {expanded === sec.id && sec.claims && (
+              <div className="space-y-0.5 py-1 pl-3">
+                {sec.claims.map((claim, ci) => (
+                  <div key={ci} className="flex items-start gap-2 px-2 py-0.5">
+                    <StageBadge variant={claim.side === 'ours' ? 'attack' : 'defense'}>
+                      {claim.side === 'ours' ? '我方' : '對方'}
+                    </StageBadge>
+                    <span className="flex-1 text-xs text-t3">{claim.statement}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ── Research content ──
 

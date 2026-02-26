@@ -1,5 +1,11 @@
 import { MongoClient } from 'mongodb';
-import { resolveAlias, normalizeArticleNo, buildArticleId, PCODE_MAP } from './lawConstants';
+import {
+  resolveAlias,
+  normalizeArticleNo,
+  buildArticleId,
+  PCODE_MAP,
+  ALIAS_MAP,
+} from './lawConstants';
 
 export interface LawArticle {
   _id: string;
@@ -42,6 +48,33 @@ const buildLawClause = (name: string): { filter?: unknown[]; must?: unknown[] } 
       },
     ],
   };
+};
+
+/**
+ * Pre-sorted law names (PCODE_MAP keys + ALIAS_MAP keys), longest first.
+ * Used by tryExtractLawName to greedily match the longest known law name prefix.
+ */
+const SORTED_LAW_NAMES = [...new Set([...Object.keys(PCODE_MAP), ...Object.keys(ALIAS_MAP)])].sort(
+  (a, b) => b.length - a.length,
+);
+
+/**
+ * Try to extract a known law name prefix from a query string (without spaces).
+ * e.g. "民法過失相抵" → { lawName: "民法", concept: "過失相抵" }
+ * e.g. "勞基法加班費" → { lawName: "勞基法", concept: "加班費" }
+ * Returns null if no known law name prefix is found or no remaining concept text.
+ */
+const tryExtractLawName = (query: string): { lawName: string; concept: string } | null => {
+  const trimmed = query.trim();
+  for (const name of SORTED_LAW_NAMES) {
+    if (trimmed.startsWith(name) && trimmed.length > name.length) {
+      const concept = trimmed.slice(name.length).trim();
+      if (concept) {
+        return { lawName: name, concept };
+      }
+    }
+  }
+  return null;
 };
 
 /** 遞迴移除物件中所有 `synonyms` 欄位（用於 fallback 重搜） */
@@ -160,10 +193,13 @@ const searchWithCollection = async (
       ...buildLawClause(artResolvedName),
       should: [{ phrase: { query: artNormalized, path: 'article_no' } }],
     };
-  } else if (lawConceptMatch) {
-    const rawLawName = lawConceptMatch[1];
-    const resolvedName = resolveAlias(rawLawName);
-    const concept = lawConceptMatch[2];
+  } else if (lawConceptMatch || (!articleMatch && tryExtractLawName(query))) {
+    // Handles both "民法 過失相抵" (with space, via regex) and "民法過失相抵" (no space, via tryExtractLawName)
+    const extracted = lawConceptMatch
+      ? { lawName: lawConceptMatch[1], concept: lawConceptMatch[2] }
+      : tryExtractLawName(query)!;
+    const resolvedName = resolveAlias(extracted.lawName);
+    const concept = extracted.concept;
     compound = {
       ...buildLawClause(resolvedName),
       should: [
