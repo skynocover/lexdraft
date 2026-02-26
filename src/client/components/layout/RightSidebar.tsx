@@ -1,5 +1,13 @@
 import { useRef, useState } from 'react';
-import { Info, FolderOpen, BarChart3, ChevronsRight, ChevronRight, Plus } from 'lucide-react';
+import {
+  Info,
+  FolderOpen,
+  BarChart3,
+  ChevronsRight,
+  ChevronRight,
+  Plus,
+  Search,
+} from 'lucide-react';
 import { useTabStore } from '../../stores/useTabStore';
 import { useUIStore, type SidebarTab, type AnalysisSubTab } from '../../stores/useUIStore';
 import { BriefsSection } from './sidebar/BriefsSection';
@@ -113,10 +121,27 @@ const CaseMaterialsContent = () => {
         count={citedCount}
         open={caseMaterialSections.lawRefs}
         onOpenChange={(open) => setCaseMaterialSection('lawRefs', open)}
+        action={<LawSearchButton />}
       >
         <LawRefsSection />
       </CollapsibleSection>
     </div>
+  );
+};
+
+/* ===================== Law Search Button ===================== */
+
+const LawSearchButton = () => {
+  const openLawSearchTab = useTabStore((s) => s.openLawSearchTab);
+
+  return (
+    <button
+      onClick={() => openLawSearchTab()}
+      className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+      title="搜尋法條"
+    >
+      <Search size={14} />
+    </button>
   );
 };
 

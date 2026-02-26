@@ -7,6 +7,7 @@ import { FileViewer } from './FileViewer';
 import { OutlinePanel } from './OutlinePanel';
 import { VersionPreviewEditor } from './VersionPreviewEditor';
 import { LawViewer } from './LawViewer';
+import { LawSearchViewer } from './LawSearchViewer';
 import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
 
 interface EditorPanelProps {
@@ -92,6 +93,14 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
             lawName={activeTab.lawName}
             article={activeTab.article}
             fullText={activeTab.fullText}
+          />
+        ) : activeTab?.type === 'law-search' ? (
+          <LawSearchViewer
+            key={activeTab.searchId}
+            searchId={activeTab.searchId}
+            initialQuery={activeTab.query}
+            cachedResults={activeTab.cachedResults}
+            cachedSelected={activeTab.cachedSelected}
           />
         ) : (
           <div className="flex h-full items-center justify-center">

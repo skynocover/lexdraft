@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { nanoid } from 'nanoid';
 import { useBriefStore } from './useBriefStore';
 import type { Paragraph } from './useBriefStore';
 import { useAuthStore } from './useAuthStore';
@@ -37,7 +38,25 @@ interface LawTab {
   fullText: string | null;
 }
 
-export type TabData = BriefTab | FileTab | VersionPreviewTab | LawTab;
+export interface LawSearchResult {
+  _id: string;
+  law_name: string;
+  article_no: string;
+  content: string;
+  pcode: string;
+  nature: string;
+  score: number;
+}
+
+interface LawSearchTab {
+  type: 'law-search';
+  searchId: string;
+  query: string;
+  cachedResults: LawSearchResult[];
+  cachedSelected: string[];
+}
+
+export type TabData = BriefTab | FileTab | VersionPreviewTab | LawTab | LawSearchTab;
 
 export interface Panel {
   id: string;
@@ -80,6 +99,13 @@ interface TabState {
     fullText: string | null,
   ) => void;
   updateBriefTabTitle: (briefId: string, title: string) => void;
+  openLawSearchTab: (initialQuery?: string) => void;
+  updateLawSearchTabQuery: (searchId: string, query: string) => void;
+  updateLawSearchTabCache: (
+    searchId: string,
+    results: LawSearchResult[],
+    selected: string[],
+  ) => void;
   clearTabs: () => void;
 }
 
@@ -658,6 +684,54 @@ export const useTabStore = create<TabState>((set, get) => ({
     if (tabData?.type === 'brief') {
       set({
         tabRegistry: { ...tabRegistry, [tabId]: { ...tabData, title } },
+      });
+    }
+  },
+
+  openLawSearchTab: (initialQuery) => {
+    const { tabRegistry, panels, focusedPanelId } = get();
+    const searchId = nanoid();
+    const tabId = `law-search:${searchId}`;
+
+    const newRegistry = {
+      ...tabRegistry,
+      [tabId]: {
+        type: 'law-search' as const,
+        searchId,
+        query: initialQuery ?? '',
+        cachedResults: [],
+        cachedSelected: [],
+      },
+    };
+    set({
+      tabRegistry: newRegistry,
+      panels: panels.map((p) =>
+        p.id === focusedPanelId ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId } : p,
+      ),
+    });
+  },
+
+  updateLawSearchTabQuery: (searchId, query) => {
+    const tabId = `law-search:${searchId}`;
+    const { tabRegistry } = get();
+    const tabData = tabRegistry[tabId];
+    if (tabData?.type === 'law-search') {
+      set({
+        tabRegistry: { ...tabRegistry, [tabId]: { ...tabData, query } },
+      });
+    }
+  },
+
+  updateLawSearchTabCache: (searchId, results, selected) => {
+    const tabId = `law-search:${searchId}`;
+    const { tabRegistry } = get();
+    const tabData = tabRegistry[tabId];
+    if (tabData?.type === 'law-search') {
+      set({
+        tabRegistry: {
+          ...tabRegistry,
+          [tabId]: { ...tabData, cachedResults: results, cachedSelected: selected },
+        },
       });
     }
   },

@@ -5,6 +5,21 @@ import { useTabStore, type TabData } from '../../stores/useTabStore';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { getBriefLabel } from '../../lib/briefTypeConfig';
 
+const getTabLabel = (tabData: TabData, briefType?: string): string => {
+  switch (tabData.type) {
+    case 'brief':
+      return tabData.title || getBriefLabel(briefType ?? '');
+    case 'version-preview':
+      return tabData.label;
+    case 'law':
+      return `${tabData.lawName} ${tabData.article}`;
+    case 'law-search':
+      return tabData.query ? `搜尋: ${tabData.query}` : '法條搜尋';
+    case 'file':
+      return tabData.filename;
+  }
+};
+
 interface TabBarProps {
   panelId: string;
 }
@@ -41,14 +56,7 @@ const SortableTab = ({
       : undefined,
   );
 
-  const label =
-    tabData.type === 'brief'
-      ? tabData.title || getBriefLabel(briefType ?? '')
-      : tabData.type === 'version-preview'
-        ? tabData.label
-        : tabData.type === 'law'
-          ? `${tabData.lawName} ${tabData.article}`
-          : tabData.filename;
+  const label = getTabLabel(tabData, briefType);
 
   return (
     <button
