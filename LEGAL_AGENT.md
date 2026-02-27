@@ -187,13 +187,13 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Phase1["C1: Phase 1 — 推理 tool-loop<br/>Claude Haiku 4.5, 最多 6 輪"]
-    Phase1 --> SearchLaw{"需要補搜<br/>法條？"}
+    Reasoning["C1: Reasoning — 法律推理 tool-loop<br/>Claude Haiku 4.5, 最多 6 輪"]
+    Reasoning --> SearchLaw{"需要補搜<br/>法條？"}
     SearchLaw -- YES --> Search["C2: search_law<br/>查 MongoDB + 即時寫入"]
-    Search --> Phase1
+    Search --> Reasoning
     SearchLaw -- NO --> Finalize["C3: finalize_strategy<br/>推理摘要 + 補搜法條 ID"]
-    Finalize --> Phase2["C4: Phase 2 — JSON 輸出<br/>獨立 Claude 呼叫（無工具）"]
-    Phase2 --> Validate{"C5: 驗證<br/>結構完整？"}
+    Finalize --> Structuring["C4: Structuring — 策略結構化 JSON 輸出<br/>獨立 Claude 呼叫（無工具）"]
+    Structuring --> Validate{"C5: 驗證<br/>結構完整？"}
     Validate -- YES --> SetStrategy["C6: 寫入 claims 表<br/>SSE: set_claims"]
     Validate -- NO --> Retry["C7: 注入錯誤重試"]
     Retry --> SetStrategy
@@ -202,10 +202,10 @@ flowchart TD
 
 | 編號 | 節點                     | 實際做什麼                                                                                                                        | 目的                                                                                                |
 | ---- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| C1   | Phase 1 — 推理 tool-loop | Claude Haiku 4.5 多輪 tool-loop：AI 自由文字推理（請求權基礎分析、構成要件檢視、攻防預判），視需要呼叫 `search_law` 補搜法條      | 產出有深度的法律推理，AI 可主動發現法條缺口並補搜，而非只是搬運條文                                 |
+| C1   | Reasoning — 法律推理 tool-loop | Claude Haiku 4.5 多輪 tool-loop：AI 自由文字推理（請求權基礎分析、構成要件檢視、攻防預判），視需要呼叫 `search_law` 補搜法條      | 產出有深度的法律推理，AI 可主動發現法條缺口並補搜，而非只是搬運條文                                 |
 | C2   | search_law 補搜          | 查 MongoDB Atlas Search，回傳條文全文。即時寫入 ContextStore + DB（fire-and-forget 持久化），確保 Step 2 失敗時已補搜的法條仍可用 | 推理過程中發現缺口時主動補搜（如時效抗辯、舉證責任倒置相關條文）                                    |
 | C3   | finalize_strategy        | AI 呼叫 `finalize_strategy` 工具，附上 `reasoning_summary`（推理摘要）和 `supplemented_law_ids`（補搜法條 ID），系統回傳簡潔確認  | 標記推理完成，進入 JSON 輸出階段。推理 / JSON 硬隔離（parser gate）：finalize 之前不嘗試 parse JSON |
-| C4   | Phase 2 — JSON 輸出      | **獨立的 Claude 呼叫**（不帶工具、乾淨 context）：輸入推理摘要 + 爭點 + 可用法條 + 檔案 ID，輸出 claims + sections JSON           | 將推理和 JSON 輸出分離，避免推理 context 過長導致 JSON 品質下降                                     |
+| C4   | Structuring — 策略結構化 JSON 輸出 | **獨立的 Claude 呼叫**（不帶工具、乾淨 context）：輸入推理摘要 + 爭點 + 可用法條 + 檔案 ID，輸出 claims + sections JSON           | 將推理和 JSON 輸出分離，避免推理 context 過長導致 JSON 品質下降                                     |
 | C5   | 驗證結構完整？           | `validateStrategyOutput()` 檢查：claims 結構完整性、sections 引用的 claims 存在、覆蓋率足夠                                       | 防止 AI 產出殘缺的策略                                                                              |
 | C6   | 寫入 claims 表 + SSE     | `store.setStrategyOutput(claims, sections)`；Claims 寫入 D1（每 10 筆一批避免參數上限）；SSE `set_claims` 通知前端                | 持久化主張圖譜，前端可以顯示攻防關係圖                                                              |
 | C7   | 注入錯誤訊息重試         | 將具體的驗證錯誤注入 prompt，讓 AI 修正（最多重試 1 次）。JSON 解析失敗時先用 `jsonrepair` 修復                                   | 給 AI 精確的修正指示                                                                                |
@@ -661,16 +661,16 @@ interface FetchedLaw {
 | 可用工具     | `search_law`（補搜法條）、`finalize_strategy`（定稿信號） |
 | 最多輪數     | 6 輪（`MAX_ROUNDS`）                                      |
 | 最多補搜     | 6 次 search_law（`MAX_SEARCHES`）                         |
-| max_tokens   | 16384（推理階段）/ 32768（JSON 輸出階段）                 |
+| max_tokens   | 8192（Reasoning）/ 16384（Structuring）                   |
 | Soft timeout | 25 秒（催促 finalize，非硬切）                            |
 
 #### 兩階段架構
 
-**Phase 1 — 推理 tool-loop**（`callClaudeToolLoop`）：
+**Reasoning — 法律推理 tool-loop**（`callClaudeToolLoop`）：
 
 AI 自由文字推理，執行請求權基礎分析、構成要件檢視、攻防預判。推理過程中發現法條缺口時呼叫 `search_law` 補搜。推理完成後呼叫 `finalize_strategy`，附上推理摘要。
 
-**Phase 2 — JSON 輸出**（獨立 `callClaude` 呼叫）：
+**Structuring — 策略結構化 JSON 輸出**（獨立 `callClaude` 呼叫）：
 
 獨立的 Claude 呼叫（不帶工具、乾淨 context）。輸入推理摘要 + 爭點 + 可用法條 + 檔案 ID，輸出 claims + sections JSON。將推理和 JSON 輸出分離，避免推理 context 過長導致 JSON 品質下降。
 
@@ -686,13 +686,13 @@ AI 自由文字推理，執行請求權基礎分析、構成要件檢視、攻�
 
 - 輸入：`reasoning_summary`（推理摘要，500 字內）、`supplemented_law_ids`（補搜法條 ID）
 - 系統回傳簡潔確認：`'推理完成。'`
-- 標記推理完成，Phase 1 結束
+- 標記推理完成，Reasoning 階段結束
 
 #### Parser Gate（推理 / JSON 硬隔離）
 
 - `finalize_strategy` 之前：AI 的所有文字輸出視為推理，不嘗試 parse JSON
 - 未 finalize 就 end_turn：注入 `「請繼續推理，或呼叫 finalize_strategy」`
-- 只有 finalized 後的 Phase 2 輸出才嘗試 parse JSON
+- 只有 finalized 後的 Structuring 輸出才嘗試 parse JSON
 
 #### 控制閥
 

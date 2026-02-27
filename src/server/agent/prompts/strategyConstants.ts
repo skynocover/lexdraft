@@ -1,6 +1,6 @@
 // ── Shared constants for reasoning strategy prompts ──
-// Used by both reasoningStrategyPrompt.ts (reasoning phase) and
-// reasoningStrategyStep.ts (JSON output phase) to avoid duplication.
+// Used by both reasoningStrategyPrompt.ts (Reasoning 階段) and
+// reasoningStrategyStep.ts (Structuring 階段) to avoid duplication.
 
 export const BRIEF_STRUCTURE_CONVENTIONS = `═══ 書狀結構慣例（依民事訴訟法及實務慣例）═══
 
@@ -65,7 +65,9 @@ export const SECTION_RULES = `═══ 段落規則 ═══
 - fact_application：事實如何涵攝到法律要件
 - conclusion：本段小結論
 - dispute_id：連結到對應爭點的 ID（前言和結論不需要）
-- legal_reasoning：本段的法律推理摘要（不超過 300 字），包含：
+- relevant_file_ids：列出本段撰寫時需要引用的來源檔案 ID（重要！確保每個論述段都有對應的來源檔案，否則 Writer 無法產生引用標記）
+- relevant_law_ids：列出本段需要引用的法條 ID
+- legal_reasoning：本段的法律推理摘要（不超過 500 字），包含：
   - 為什麼用這個請求權基礎（如有比較則簡述理由）
   - 構成要件如何對應到事實
   - 預判對方可能的攻擊角度及我方回應`;

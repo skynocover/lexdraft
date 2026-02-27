@@ -1,14 +1,13 @@
-// ── Step 2: 法律推理 + 論證策略 (Claude tool-loop agent) ──
+// ── Step 2: 法律推理 + 論證策略 (Reasoning + Structuring) ──
 // AI reasons freely, calls search_law when it finds gaps, then finalize_strategy to output JSON.
 
 import {
-  callClaude,
   callClaudeToolLoop,
+  callClaude,
   extractToolCalls,
-  type ClaudeContentBlock,
   type ClaudeMessage,
+  type ClaudeContentBlock,
   type ClaudeToolDefinition,
-  type ClaudeUsage,
 } from '../claudeClient';
 import { createLawSearchSession, type LawSearchSession } from '../../lib/lawSearch';
 import { upsertManyLawRefs } from '../../lib/lawRefsJson';
@@ -25,18 +24,27 @@ import {
 } from '../prompts/strategyConstants';
 import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy';
 import { jsonrepair } from 'jsonrepair';
-import type { ReasoningStrategyInput, ReasoningStrategyOutput, FetchedLaw } from './types';
+import type {
+  ReasoningStrategyInput,
+  ReasoningStrategyOutput,
+  FetchedLaw,
+  PerIssueAnalysis,
+} from './types';
 import type { PipelineContext } from '../briefPipeline';
 import type { ContextStore } from '../contextStore';
 
 // ── Constants ──
 
-const MODEL = 'claude-haiku-4-5-20251001';
 const MAX_ROUNDS = 6;
 const MAX_SEARCHES = 6;
 const SOFT_TIMEOUT_MS = 25000;
-const MAX_TOKENS = 16384;
-const JSON_OUTPUT_MAX_TOKENS = 32768;
+const MAX_TOKENS = 8192;
+const JSON_OUTPUT_MAX_TOKENS = 16384;
+const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
+
+// ── Usage type (structurally compatible with ClaudeUsage from briefPipeline) ──
+
+type UsageCounter = { input_tokens: number; output_tokens: number };
 
 // ── JSON Output System Prompt (separate call, clean context) ──
 
@@ -85,12 +93,22 @@ const buildJsonOutputMessage = (store: ContextStore, input: ReasoningStrategyInp
 
   const fileText = input.fileSummaries.map((f) => `- [${f.id}] ${f.filename}`).join('\n');
 
+  const analysisText =
+    store.perIssueAnalysis.length > 0
+      ? store.perIssueAnalysis
+          .map(
+            (a) =>
+              `- [${a.issue_id}] 請求權基礎：${a.chosen_basis}\n  法條：${a.key_law_ids.join(', ')}\n  涵攝：${a.element_mapping}${a.defense_response ? `\n  攻防：${a.defense_response}` : ''}`,
+          )
+          .join('\n')
+      : '';
+
   return `[書狀類型] ${input.briefType}
 
 [推理摘要]
 ${store.reasoningSummary || '（無摘要）'}
 
-[爭點清單]
+${analysisText ? `[逐爭點分析]\n${analysisText}\n\n` : ''}[爭點清單]
 ${issueText}
 
 [可用法條]
@@ -99,21 +117,27 @@ ${lawText || '（無）'}
 [案件檔案]
 ${fileText}
 
-請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。`;
+請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。每個 section 的 relevant_law_ids 應依照[逐爭點分析]中各爭點的 key_law_ids 分配。`;
 };
 
-// ── Tool Definitions ──
+// ── Tool Definitions (Claude format) ──
 
 const SEARCH_LAW_TOOL: ClaudeToolDefinition = {
   name: 'search_law',
-  description: '搜尋法律條文資料庫。用於推理過程中發現缺口時補搜法條。',
+  description:
+    '搜尋法律條文資料庫。推理過程中主動搜尋你需要引用的法條全文。建議每個請求權基礎至少搜尋一次相關條文。',
   input_schema: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
         description:
-          '搜尋關鍵字。格式：「法規名 概念」（中間加空格），例如「民法 過失相抵」「民法 損害賠償」。避免不帶法規名的純概念搜尋。',
+          '搜尋關鍵字。格式：「法規名 概念」（中間加空格），例如「民法 過失相抵」「民法 損害賠償」。也支援純概念搜尋如「損害賠償」。',
+      },
+      law_name: {
+        type: 'string',
+        description:
+          '指定搜尋的法規名稱（如「民法」「刑法」「勞動基準法」），支援縮寫。指定後會在該法規範圍內搜尋。',
       },
       purpose: { type: 'string', description: '為什麼需要搜尋這條法條' },
       limit: { type: 'number', description: '回傳結果數量（預設 3）' },
@@ -125,13 +149,42 @@ const SEARCH_LAW_TOOL: ClaudeToolDefinition = {
 const FINALIZE_STRATEGY_TOOL: ClaudeToolDefinition = {
   name: 'finalize_strategy',
   description:
-    '當你完成法律推理、補搜完所有需要的法條後，呼叫此工具來輸出最終的論證策略。呼叫此工具後，你需要在下一輪輸出完整的 JSON 結果。',
+    '當你完成法律推理、完整性檢查、並補搜完所有需要的法條後，呼叫此工具。需提供整體策略摘要和逐爭點分析（請求權基礎、法條、涵攝、攻防）。呼叫此工具後，你需要在下一輪輸出完整的 JSON 結果。',
   input_schema: {
     type: 'object',
     properties: {
       reasoning_summary: {
         type: 'string',
-        description: '推理過程的摘要（500字以內）',
+        description:
+          '整體策略方向摘要（200字以內），如「本案以侵權責任為主，§191-2為核心請求權基礎」',
+      },
+      per_issue_analysis: {
+        type: 'array',
+        description: '逐爭點的推理結論，確保 Structuring 階段能精確分配法條和論證策略',
+        items: {
+          type: 'object',
+          properties: {
+            issue_id: { type: 'string', description: '對應爭點 ID' },
+            chosen_basis: {
+              type: 'string',
+              description: '選定的請求權基礎，如「民法§184-1前段 + §191-2」',
+            },
+            key_law_ids: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '本爭點需要的法條 ID（必須是已查到全文的法條）',
+            },
+            element_mapping: {
+              type: 'string',
+              description: '構成要件如何對應事實（≤200字）',
+            },
+            defense_response: {
+              type: 'string',
+              description: '預判對方抗辯及我方回應策略（≤150字）',
+            },
+          },
+          required: ['issue_id', 'chosen_basis', 'key_law_ids', 'element_mapping'],
+        },
       },
       supplemented_law_ids: {
         type: 'array',
@@ -139,7 +192,7 @@ const FINALIZE_STRATEGY_TOOL: ClaudeToolDefinition = {
         description: '推理過程中補搜到的法條 ID 列表',
       },
     },
-    required: ['reasoning_summary'],
+    required: ['reasoning_summary', 'per_issue_analysis'],
   },
 };
 
@@ -162,40 +215,32 @@ export interface ReasoningStrategyProgressCallback {
 // ── search_law handler ──
 
 const handleSearchLaw = async (
-  toolId: string,
   input: Record<string, unknown>,
   ctx: PipelineContext,
   store: ContextStore,
   lawSession: LawSearchSession,
   searchCount: number,
   progress?: ReasoningStrategyProgressCallback,
-): Promise<{ result: ClaudeContentBlock; newCount: number }> => {
+): Promise<{ content: string; newCount: number }> => {
   const query = input.query as string;
+  const lawName = input.law_name as string | undefined;
   const purpose = input.purpose as string;
   const limit = (input.limit as number) || 3;
 
   if (searchCount >= MAX_SEARCHES) {
     return {
-      result: {
-        type: 'tool_result',
-        tool_use_id: toolId,
-        content: '已達到搜尋上限。請根據現有法條完成推理並呼叫 finalize_strategy。',
-      },
+      content: '已達到搜尋上限。請根據現有法條完成推理並呼叫 finalize_strategy。',
       newCount: searchCount,
     };
   }
 
-  const results = await lawSession.search(query, limit);
+  const results = await lawSession.search(query, limit, lawName);
   const newCount = searchCount + 1;
 
   if (results.length === 0) {
     await progress?.onSearchLaw(query, purpose, 0, []);
     return {
-      result: {
-        type: 'tool_result',
-        tool_use_id: toolId,
-        content: `未找到「${query}」的相關法條。請嘗試用更短的關鍵字，或繼續推理。`,
-      },
+      content: `未找到「${query}」的相關法條。請嘗試用更短的關鍵字，或繼續推理。`,
       newCount,
     };
   }
@@ -230,11 +275,7 @@ const handleSearchLaw = async (
   await progress?.onSearchLaw(query, purpose, fetchedLaws.length, lawNames);
 
   return {
-    result: {
-      type: 'tool_result',
-      tool_use_id: toolId,
-      content: `找到 ${fetchedLaws.length} 筆結果：\n\n${resultText}`,
-    },
+    content: `找到 ${fetchedLaws.length} 筆結果：\n\n${resultText}`,
     newCount,
   };
 };
@@ -245,11 +286,12 @@ export const runReasoningStrategy = async (
   ctx: PipelineContext,
   store: ContextStore,
   input: ReasoningStrategyInput,
-  usage: ClaudeUsage,
+  usage: UsageCounter,
   progress?: ReasoningStrategyProgressCallback,
 ): Promise<ReasoningStrategyOutput> => {
   await progress?.onReasoningStart();
 
+  const systemPrompt = REASONING_STRATEGY_SYSTEM_PROMPT;
   const userMessage = buildReasoningStrategyInput(input);
   const messages: ClaudeMessage[] = [{ role: 'user', content: userMessage }];
 
@@ -262,132 +304,139 @@ export const runReasoningStrategy = async (
   // Helper: call Claude with current messages (reasoning phase)
   const callReasoning = () =>
     callClaudeToolLoop(ctx.aiEnv, {
-      model: MODEL,
-      system: REASONING_STRATEGY_SYSTEM_PROMPT,
+      model: CLAUDE_MODEL,
+      system: systemPrompt,
       messages,
       tools: TOOLS,
       max_tokens: MAX_TOKENS,
     });
 
-  // Helper: separate clean call for JSON output (simpler callClaude, no tool overhead)
-  const callJsonOutput = (userMessage: string) =>
-    callClaude(ctx.aiEnv, JSON_OUTPUT_SYSTEM_PROMPT, userMessage, JSON_OUTPUT_MAX_TOKENS);
+  // Helper: separate clean call for JSON output (Claude, prompt-based JSON)
+  const callJsonOutput = (msg: string) =>
+    callClaude(ctx.aiEnv, JSON_OUTPUT_SYSTEM_PROMPT, msg, JSON_OUTPUT_MAX_TOKENS);
 
   // Helper: accumulate usage
-  const addUsage = (u: ClaudeUsage) => {
+  const addUsage = (u: UsageCounter) => {
     usage.input_tokens += u.input_tokens;
     usage.output_tokens += u.output_tokens;
   };
 
   try {
-    // ── Phase 1: Reasoning tool-loop ──
+    // ── Reasoning: 法律推理 tool-loop ──
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      // Soft timeout nudge (only once)
+      const response = await callReasoning();
+      addUsage(response.usage);
+
+      // Push assistant message (content is ClaudeContentBlock[])
+      messages.push({ role: 'assistant', content: response.content });
+
+      // Extract tool calls from response
+      const toolCalls = extractToolCalls(response.content);
+
+      // ── No tool calls → end of turn ──
+      if (toolCalls.length === 0) {
+        if (finalized) break; // Reasoning done, move to Structuring
+
+        // Not finalized → nudge to continue (with timeout override)
+        let nudge = '請繼續推理，或如果你已完成推理，請呼叫 finalize_strategy。';
+        if (!timeoutNudged && Date.now() - startTime > SOFT_TIMEOUT_MS) {
+          timeoutNudged = true;
+          nudge =
+            '時間有限。如果你的推理已經足夠完整，請立即呼叫 finalize_strategy。' +
+            '如果還有關鍵缺口，最多再搜尋一次後就呼叫 finalize_strategy。';
+        }
+        messages.push({ role: 'user', content: nudge });
+        continue;
+      }
+
+      // ── Handle tool calls → build tool_result blocks ──
+      const resultBlocks: ClaudeContentBlock[] = [];
+
+      for (const tc of toolCalls) {
+        if (!['search_law', 'finalize_strategy'].includes(tc.name)) {
+          resultBlocks.push({
+            type: 'tool_result',
+            tool_use_id: tc.id,
+            content: `錯誤：工具「${tc.name}」不存在。請只使用 search_law 或 finalize_strategy。`,
+          });
+          continue;
+        }
+
+        if (tc.name === 'search_law') {
+          const r = await handleSearchLaw(tc.input, ctx, store, lawSession, searchCount, progress);
+          resultBlocks.push({ type: 'tool_result', tool_use_id: tc.id, content: r.content });
+          searchCount = r.newCount;
+        }
+
+        if (tc.name === 'finalize_strategy') {
+          const summary = tc.input.reasoning_summary as string;
+          const perIssue = (tc.input.per_issue_analysis as PerIssueAnalysis[]) || [];
+          finalized = true;
+          store.setReasoningSummary(summary);
+          store.setPerIssueAnalysis(perIssue);
+          resultBlocks.push({ type: 'tool_result', tool_use_id: tc.id, content: '推理完成。' });
+          await progress?.onFinalized();
+        }
+      }
+
+      // Add timeout nudge as text block in the same user message
       if (!timeoutNudged && Date.now() - startTime > SOFT_TIMEOUT_MS && !finalized) {
         timeoutNudged = true;
-        messages.push({
-          role: 'user',
-          content:
+        resultBlocks.push({
+          type: 'text',
+          text:
             '時間有限。如果你的推理已經足夠完整，請立即呼叫 finalize_strategy。' +
             '如果還有關鍵缺口，最多再搜尋一次後就呼叫 finalize_strategy。',
         });
       }
 
-      const response = await callReasoning();
-      addUsage(response.usage);
-      messages.push({ role: 'assistant', content: response.content });
+      messages.push({ role: 'user', content: resultBlocks });
 
-      const toolCalls = extractToolCalls(response.content);
-
-      // ── end_turn with no tool calls ──
-      if (response.stop_reason === 'end_turn' && toolCalls.length === 0) {
-        if (finalized) break; // Reasoning done, move to Phase 2
-        // Not finalized → nudge to continue
-        messages.push({
-          role: 'user',
-          content: '請繼續推理，或如果你已完成推理，請呼叫 finalize_strategy。',
-        });
-        continue;
-      }
-
-      // ── Handle tool calls ──
-      if (toolCalls.length > 0) {
-        const toolResults: ClaudeContentBlock[] = [];
-
-        for (const tc of toolCalls) {
-          if (!['search_law', 'finalize_strategy'].includes(tc.name)) {
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: tc.id,
-              content: `錯誤：工具「${tc.name}」不存在。請只使用 search_law 或 finalize_strategy。`,
-            });
-            continue;
-          }
-
-          if (tc.name === 'search_law') {
-            const r = await handleSearchLaw(
-              tc.id,
-              tc.input,
-              ctx,
-              store,
-              lawSession,
-              searchCount,
-              progress,
-            );
-            toolResults.push(r.result);
-            searchCount = r.newCount;
-          }
-
-          if (tc.name === 'finalize_strategy') {
-            const summary = tc.input.reasoning_summary as string;
-            finalized = true;
-            store.setReasoningSummary(summary);
-            toolResults.push({
-              type: 'tool_result',
-              tool_use_id: tc.id,
-              content: '推理完成。',
-            });
-            await progress?.onFinalized();
-          }
-        }
-
-        messages.push({ role: 'user', content: toolResults });
-
-        // If finalize just happened, break out of loop — don't wait for next round
-        if (finalized) break;
-      }
+      // If finalize just happened, break out of loop — don't wait for next round
+      if (finalized) break;
     }
 
     // ── Force finalize if AI hasn't yet ──
     if (!finalized) {
       console.warn('[reasoningStrategy] Reached MAX_ROUNDS without finalize — forcing');
-      messages.push({
-        role: 'user',
-        content: '你已達到最大輪數。請立即呼叫 finalize_strategy。',
-      });
+
+      // Claude requires strict user/assistant alternation.
+      // After the loop, last message is always user — append force text to it.
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.role === 'user') {
+        if (typeof lastMsg.content === 'string') {
+          lastMsg.content += '\n\n你已達到最大輪數。請立即呼叫 finalize_strategy。';
+        } else {
+          (lastMsg.content as ClaudeContentBlock[]).push({
+            type: 'text',
+            text: '你已達到最大輪數。請立即呼叫 finalize_strategy。',
+          });
+        }
+      }
 
       const forceResp = await callReasoning();
       addUsage(forceResp.usage);
 
-      const forceTCs = extractToolCalls(forceResp.content);
-
-      for (const tc of forceTCs) {
+      const forceToolCalls = extractToolCalls(forceResp.content);
+      for (const tc of forceToolCalls) {
         if (tc.name === 'finalize_strategy') {
           finalized = true;
           store.setReasoningSummary(tc.input.reasoning_summary as string);
+          store.setPerIssueAnalysis((tc.input.per_issue_analysis as PerIssueAnalysis[]) || []);
           await progress?.onFinalized();
         }
       }
 
       // If AI just output text without tool calls, treat as forced finalize
-      if (forceTCs.length === 0 && !finalized) {
+      if (forceToolCalls.length === 0 && !finalized) {
         finalized = true;
         store.setReasoningSummary('（未提供推理摘要）');
+        store.setPerIssueAnalysis([]);
         await progress?.onFinalized();
       }
     }
 
-    // ── Phase 2: Separate JSON output call (clean context, no tools) ──
+    // ── Structuring: 策略結構化 JSON 輸出 ──
     await progress?.onOutputStart();
 
     const jsonMessage = buildJsonOutputMessage(store, input);
@@ -423,8 +472,10 @@ const callJsonAndParse = async (
   userMessage: string,
   store: ContextStore,
   input: ReasoningStrategyInput,
-  callJsonOutput: (msg: string) => ReturnType<typeof callClaude>,
-  addUsage: (u: ClaudeUsage) => void,
+  callJsonOutput: (
+    msg: string,
+  ) => Promise<{ content: string; usage: UsageCounter; truncated: boolean }>,
+  addUsage: (u: UsageCounter) => void,
 ): Promise<ReasoningStrategyOutput> => {
   // First attempt
   const resp = await callJsonOutput(userMessage);

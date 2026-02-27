@@ -12,7 +12,7 @@ npm run deploy           # wrangler deploy to Cloudflare
 npm run db:generate      # Generate Drizzle migrations from schema
 npm run db:migrate:local # Apply migrations to local D1
 npx tsc --noEmit         # Type-check (no test framework configured)
-node scripts/law-search-test/search-test.mjs  # Law search regression test (needs MongoDB)
+node scripts/law-search-test/search-test.mjs  # Law search regression test (needs MongoDB + MONGO_API_KEY for hybrid tests)
 ```
 
 ## Architecture Overview
@@ -86,13 +86,13 @@ Cloudflare AI Gateway 代理 chunked response 時偶爾在 multi-byte UTF-8 邊�
 
 ## Law Search (MongoDB Atlas Search + Vector Search)
 
-- **DB**: `lawdb.articles` (221,061 articles), index `law_search` (smartcn) + `vector_index` (512 dim, cosine)
+- **DB**: `lawdb.articles` (60,199 articles — 法律 46,839 + 命令/施行細則 13,142 + 憲法 218), index `law_search` (smartcn) + `vector_index` (512 dim, cosine)
 - **Env var**: `MONGO_URL` (mongodb+srv:// connection string), `MONGO_API_KEY` (Voyage AI embedding API key)
 - **Document fields**: `_id` (`{pcode}-{number}`，如 `B0000001-184`), `pcode`, `law_name`, `nature`, `category`, `chapter`, `article_no`（如 `第 184 條`）, `content`, `aliases`, `last_update`, `embedding` (512 dim)
 - **Synonyms**: 172 groups in `synonyms` collection, loaded at application layer via `loadSynonymsAsAliasMap()`. Atlas Search `synonyms: "law_synonyms"` mapping 已移除（與 smartcn 不相容）
 - **Law URL pattern**: `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode={pcode}`
 
-### 搜尋策略 — J（`lawSearch.ts`）
+### 搜尋策略 — Hybrid（`lawSearch.ts`）
 
 查詢分類與策略：
 
@@ -100,12 +100,12 @@ Cloudflare AI Gateway 代理 chunked response 時偶爾在 multi-byte UTF-8 邊�
    - S0: `_id` 直查 O(1)，~25ms
    - S1: regex 匹配，~1000ms+
    - S2: Atlas Search keyword，~30ms
-2. **法規+概念**（如「民法 損害賠償」）→ keyword Atlas Search（移除 synonyms）
-3. **純概念**（如「損害賠償」「車禍賠償」）→ J 策略（rewrite → keyword, vector fallback）：
-   - 查 `CONCEPT_TO_LAW` 改寫表（~50 組，定義在 `lawConstants.ts`）
-   - 有匹配 → keyword search → 直接回傳
-     - keyword 無結果 → vector fallback → keyword pure concept fallback
-   - 無匹配 → vector search → keyword pure concept fallback
+2. **概念查詢**（法規+概念 或 純概念）→ Hybrid keyword+vector → vector-first merge：
+   - 判斷 lawName + concept（opts.lawName / regex / tryExtractLawName / CONCEPT_TO_LAW 改寫表）
+   - 有 apiKey → keyword + filteredVector 平行執行 → vector-first merge（vector 結果優先排序，keyword 補位）
+   - 無 apiKey → keyword only（graceful fallback）
+   - `law_name` 參數支援：agent/pipeline 可傳入明確法規名稱，keyword 用 pcode filter，vector 用 pre-filter
+   - 實驗驗證：vector-first merge（MRR 0.536）優於 RRF（MRR 0.353），22 query benchmark
 
 ### CONCEPT_TO_LAW 改寫表（`lawConstants.ts`）
 
@@ -124,11 +124,13 @@ Cloudflare AI Gateway 代理 chunked response 時偶爾在 multi-byte UTF-8 邊�
 
 ### 搜尋測試腳本
 
-- `scripts/law-search-test/search-test.mjs` — 52 個回歸測試（keyword 為主）
+- `scripts/law-search-test/search-test.mjs` — 回歸測試（A-E: keyword, F-I: hybrid/vector）
+- 需要 `MONGO_URL` + `MONGO_API_KEY`（在 `dist/lexdraft/.dev.vars` 或環境變數）
+- 無 `MONGO_API_KEY` 時 F/G 類 vector-dependent 測試自動 SKIP
 
 修改 `lawSearch.ts` 或 `lawConstants.ts` 後務必跑測試確認。
 
-注意：測試腳本中的 `PCODE_MAP` 和 `ALIAS_MAP` 是從 `lawConstants.ts` 複製的，修改 `lawConstants.ts` 後需同步更新測試腳本。
+注意：測試腳本中的 `PCODE_MAP`、`ALIAS_MAP`、`CONCEPT_TO_LAW` 是從 `lawConstants.ts` 複製的，修改後需同步更新測試腳本。
 
 ### `PCODE_MAP` 維護（`lawConstants.ts`）
 

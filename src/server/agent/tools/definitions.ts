@@ -152,6 +152,11 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
             description:
               '搜尋關鍵字。範例：「民法第184條」「消保法第7條」「民法 損害賠償」「侵權行為」',
           },
+          law_name: {
+            type: 'string',
+            description:
+              '指定搜尋的法規名稱（如「民法」「刑法」「勞動基準法」），支援縮寫。指定後會在該法規範圍內搜尋。',
+          },
           limit: {
             type: 'number',
             description: '回傳筆數上限，預設 10',

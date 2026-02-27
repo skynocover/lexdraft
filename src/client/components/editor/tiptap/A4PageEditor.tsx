@@ -11,6 +11,7 @@ import { useSelectionToolbar } from '../../../hooks/useSelectionToolbar';
 import { CitationNode } from './extensions/CitationNode';
 import { LegalHeading } from './extensions/LegalHeading';
 import { LegalParagraph } from './extensions/LegalParagraph';
+import { PlaceholderHighlight } from './extensions/PlaceholderHighlight';
 import { contentStructuredToTiptapDoc, tiptapDocToContentStructured } from './converters';
 import { CitationReviewModal } from './CitationReviewModal';
 import { PrintPreviewModal } from './PrintPreviewModal';
@@ -76,6 +77,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
       LegalHeading,
       LegalParagraph,
       CitationNode,
+      PlaceholderHighlight,
     ],
     content: contentStructuredToTiptapDoc(content),
     editorProps: {

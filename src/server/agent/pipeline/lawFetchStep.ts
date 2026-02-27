@@ -2,7 +2,12 @@
 // Deterministic batch lookup of mentioned laws from MongoDB.
 
 import { createLawSearchSession } from '../../lib/lawSearch';
-import { resolveAlias, normalizeArticleNo, buildArticleId } from '../../lib/lawConstants';
+import {
+  resolveAlias,
+  normalizeArticleNo,
+  buildArticleId,
+  expandWithCompanions,
+} from '../../lib/lawConstants';
 import type { LegalIssue, FetchedLaw, LawFetchResult } from './types';
 import type { LawRefItem } from '../../lib/lawRefsJson';
 
@@ -86,10 +91,13 @@ export const runLawFetch = async (
   // 1. Collect and normalize all mentioned law IDs
   const mentionedIds = collectMentionedLawIds(input.legalIssues);
 
+  // 1.5 Expand with companion laws
+  const expandedIds = expandWithCompanions(mentionedIds);
+
   // 2. Add existing cached laws (skip MongoDB lookup for these)
   const cachedIds = new Set<string>();
   for (const ref of input.existingLawRefs) {
-    if (!ref.is_manual && ref.full_text && mentionedIds.has(ref.id)) {
+    if (!ref.is_manual && ref.full_text && expandedIds.has(ref.id)) {
       cachedIds.add(ref.id);
       laws.set(ref.id, {
         id: ref.id,
@@ -102,7 +110,7 @@ export const runLawFetch = async (
   }
 
   // 3. Batch lookup uncached mentioned laws from MongoDB
-  const uncachedIds = [...mentionedIds.keys()].filter((id) => !cachedIds.has(id));
+  const uncachedIds = [...expandedIds.keys()].filter((id) => !cachedIds.has(id));
 
   if (uncachedIds.length > 0) {
     const session = createLawSearchSession(mongoUrl, apiKey);
@@ -120,7 +128,7 @@ export const runLawFetch = async (
       }
 
       // Fallback: for IDs not found by batch, try individual search
-      for (const [id, meta] of mentionedIds) {
+      for (const [id, meta] of expandedIds) {
         if (!laws.has(id)) {
           const searchResults = await session.search(`${meta.lawName}${meta.articleNo}`, 1);
           if (searchResults.length > 0) {

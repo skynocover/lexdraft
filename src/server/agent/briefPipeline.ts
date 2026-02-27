@@ -775,7 +775,7 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       },
     );
 
-    // ═══ Step 4: Writer (sequential, uses strategy sections) ═══
+    // ═══ Step 3: Writer (sequential, uses strategy sections) ═══
     currentStep = STEP_WRITER;
     const paragraphs: Paragraph[] = [];
 

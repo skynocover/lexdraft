@@ -176,6 +176,16 @@ export interface DamageItem {
   amount: number;
 }
 
+// ── Per-Issue Analysis (Reasoning → Structuring handoff) ──
+
+export interface PerIssueAnalysis {
+  issue_id: string;
+  chosen_basis: string;
+  key_law_ids: string[];
+  element_mapping: string;
+  defense_response?: string;
+}
+
 // ── Law Fetch Types ──
 
 // Step 1 output (pure function, no AI)

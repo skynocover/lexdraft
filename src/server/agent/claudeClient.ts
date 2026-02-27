@@ -206,6 +206,13 @@ export const callClaudeWithCitations = async (
 
   const data = (await response.json()) as ClaudeResponse;
 
+  // Detect truncation (like callClaude does)
+  if (data.stop_reason === 'max_tokens') {
+    console.warn(
+      `[callClaudeWithCitations] Response truncated (stop_reason=max_tokens, output_tokens=${data.usage?.output_tokens})`,
+    );
+  }
+
   // Parse response: extract text, segments, and citations
   let fullText = '';
   const allCitations: Citation[] = [];

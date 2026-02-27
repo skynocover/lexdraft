@@ -162,14 +162,20 @@ const SHARED_PROJECT = {
 };
 
 /**
- * Run $vectorSearch on the articles collection.
+ * Run $vectorSearch with optional pcode/nature pre-filter.
+ * Requires Atlas vector_index to have filter fields configured.
  */
-const vectorSearch = async (
+const filteredVectorSearch = async (
   coll: Collection,
   queryVector: number[],
   limit: number,
-): Promise<LawArticle[]> =>
-  coll
+  filter?: { pcode?: string; nature?: string },
+): Promise<LawArticle[]> => {
+  const searchFilter: Record<string, unknown> = {};
+  if (filter?.pcode) searchFilter.pcode = { $eq: filter.pcode };
+  if (filter?.nature) searchFilter.nature = { $eq: filter.nature };
+
+  return coll
     .aggregate([
       {
         $vectorSearch: {
@@ -178,11 +184,45 @@ const vectorSearch = async (
           queryVector,
           numCandidates: limit * 10,
           limit,
+          ...(Object.keys(searchFilter).length > 0 && { filter: searchFilter }),
         },
       },
       { $project: { ...SHARED_PROJECT, score: { $meta: 'vectorSearchScore' } } },
     ])
     .toArray() as unknown as Promise<LawArticle[]>;
+};
+
+/**
+ * Vector-first merge: vector results ranked first (superior semantic relevance),
+ * keyword results fill remaining slots (deduplicated).
+ * Experimentally validated: MRR 0.536 vs RRF's 0.353 on 22-query benchmark.
+ */
+const vectorFirstMerge = (
+  keywordResults: LawArticle[],
+  vectorResults: LawArticle[],
+  limit: number,
+): LawArticle[] => {
+  const seen = new Set<string>();
+  const out: LawArticle[] = [];
+
+  // Vector results first — better semantic ranking
+  for (const r of vectorResults) {
+    if (!seen.has(r._id)) {
+      seen.add(r._id);
+      out.push({ ...r, score: 1 - out.length * 0.01 }); // descending score for ordering
+    }
+  }
+
+  // Keyword backfill — adds diversity, catches exact matches vector may miss
+  for (const r of keywordResults) {
+    if (!seen.has(r._id) && out.length < limit) {
+      seen.add(r._id);
+      out.push({ ...r, score: 0.5 - out.length * 0.01 });
+    }
+  }
+
+  return out.slice(0, limit);
+};
 
 const MONGO_OPTS = {
   maxPoolSize: 1,
@@ -209,6 +249,7 @@ interface SearchOpts {
   nature?: string;
   apiKey?: string;
   dbAliases?: Record<string, string>;
+  lawName?: string;
 }
 
 /**
@@ -217,19 +258,17 @@ interface SearchOpts {
  *
  * Query classification:
  *   ├─ 條號查詢 → S0 direct _id / S1 regex / S2 Atlas keyword（不變）
- *   ├─ 法規+概念 → keyword Atlas Search（移除 synonyms）
- *   └─ 純概念 → J 策略（rewrite → keyword, vector fallback）：
- *       1. 查 CONCEPT_TO_LAW 改寫表
- *       2. 有匹配 → keyword search → 直接回傳
- *          └─ keyword 無結果 → vector fallback → keyword pure concept fallback
- *       3. 無匹配 → vector search → keyword pure concept fallback
+ *   └─ 概念查詢 → Hybrid search（keyword + vector → vector-first merge）：
+ *       1. 判斷 lawName + concept（opts.lawName / regex / tryExtractLawName / CONCEPT_TO_LAW）
+ *       2. 有 apiKey → keyword + filteredVector 平行 → vector-first merge
+ *       3. 無 apiKey → keyword only（graceful fallback）
  */
 const searchWithCollection = async (
   coll: Collection,
   query: string,
   opts: SearchOpts,
 ): Promise<LawArticle[]> => {
-  const { limit, nature, apiKey, dbAliases } = opts;
+  const { limit, nature, apiKey, dbAliases, lawName } = opts;
   const safeLimit = Math.min(Math.max(limit, 1), 50);
 
   // Guard: empty query would crash MongoDB Atlas Search compound.should[].text.query
@@ -323,144 +362,133 @@ const searchWithCollection = async (
     return runAtlasSearch(compound);
   }
 
-  if (lawConceptMatch || (!articleMatch && tryExtractLawName(query))) {
-    // Law name + concept keyword search (e.g. "民法 損害賠償" or "民法過失相抵")
-    const extracted = lawConceptMatch
-      ? { lawName: lawConceptMatch[1], concept: lawConceptMatch[2] }
-      : tryExtractLawName(query)!;
-    const resolvedName = resolveAlias(extracted.lawName, dbAliases);
-    const concept = extracted.concept;
-    const compound: Record<string, unknown> = {
-      ...buildLawClause(resolvedName),
-      should: [
-        {
-          text: {
-            query: concept,
-            path: 'chapter',
-            score: { boost: { value: 5 } },
-          },
-        },
-        {
-          text: {
-            query: concept,
-            path: 'content',
-            score: { boost: { value: 3 } },
-          },
-        },
-        {
-          text: {
-            query: concept,
-            path: 'category',
-          },
-        },
-      ],
-      minimumShouldMatch: 1,
-    };
-    applyNatureFilter(compound, nature);
-    return runAtlasSearch(compound);
-  }
+  // ── Concept search: unified hybrid (keyword + vector → vector-first merge) ──
+  // 1. Determine lawName + concept from: opts.lawName, regex, tryExtractLawName, or CONCEPT_TO_LAW
+  // 2. Resolve pcode from lawName
+  // 3. Run keyword + vector in parallel → vector-first merge (or keyword-only if no apiKey)
 
-  // ── Pure concept: J strategy (rewrite → keyword, vector fallback) ──
-  // 1. Try CONCEPT_TO_LAW rewrite table
-  // 2. If matched → keyword search with rewritten lawName+concept → direct return
-  //    - If keyword empty → fallback to vector → fallback to keyword pure concept
-  // 3. If no match → vector search → fallback to keyword pure concept
+  // Step 1: Extract law name and concept
+  let resolvedLawName: string | undefined;
+  let keywordConcept: string; // concept text for keyword search
 
-  const rw = tryRewriteQuery(query);
-
-  if (rw) {
-    // Rewrite table matched — keyword search (no RRF, direct return)
-    const resolvedName = resolveAlias(rw.lawName, dbAliases);
-    const kwCompound: Record<string, unknown> = {
-      ...buildLawClause(resolvedName),
-      should: [
-        {
-          text: {
-            query: rw.concept,
-            path: 'chapter',
-            score: { boost: { value: 5 } },
-          },
-        },
-        {
-          text: {
-            query: rw.concept,
-            path: 'content',
-            score: { boost: { value: 3 } },
-          },
-        },
-        {
-          text: {
-            query: rw.concept,
-            path: 'category',
-          },
-        },
-      ],
-      minimumShouldMatch: 1,
-    };
-    applyNatureFilter(kwCompound, nature);
-
-    const kwResults = await runAtlasSearch(kwCompound);
-
-    if (kwResults.length > 0) {
-      return kwResults;
-    }
-
-    // Keyword empty — fallback to vector, then keyword pure concept
-    if (apiKey) {
-      try {
-        const queryVector = await embedQuery(query, apiKey);
-        return vectorSearch(coll, queryVector, safeLimit);
-      } catch {
-        // Vector failed — fall through to keyword pure concept below
+  if (lawName) {
+    // Explicit lawName from tool parameter — highest priority
+    resolvedLawName = resolveAlias(lawName, dbAliases);
+    keywordConcept = query;
+  } else if (lawConceptMatch) {
+    // "民法 損害賠償" pattern
+    resolvedLawName = resolveAlias(lawConceptMatch[1], dbAliases);
+    keywordConcept = lawConceptMatch[2];
+  } else {
+    const extracted = !articleMatch ? tryExtractLawName(query) : null;
+    if (extracted) {
+      // "民法過失相抵" pattern (no space)
+      resolvedLawName = resolveAlias(extracted.lawName, dbAliases);
+      keywordConcept = extracted.concept;
+    } else {
+      // Pure concept — try CONCEPT_TO_LAW rewrite for keyword optimization
+      const rw = tryRewriteQuery(query);
+      if (rw) {
+        resolvedLawName = resolveAlias(rw.lawName, dbAliases);
+        keywordConcept = rw.concept;
+      } else {
+        // No law identified — unscoped search
+        resolvedLawName = undefined;
+        keywordConcept = query;
       }
     }
   }
 
-  // No rewrite match — try vector search directly
-  if (!rw && apiKey) {
+  // Step 2: Resolve pcode for filtering
+  const pcode = resolvedLawName ? PCODE_MAP[resolvedLawName] : undefined;
+
+  // Step 3: Build keyword compound query
+  const buildConceptKeywordCompound = (): Record<string, unknown> => {
+    const compound: Record<string, unknown> = resolvedLawName
+      ? {
+          ...buildLawClause(resolvedLawName),
+          should: [
+            {
+              text: {
+                query: keywordConcept,
+                path: 'chapter',
+                score: { boost: { value: 5 } },
+              },
+            },
+            {
+              text: {
+                query: keywordConcept,
+                path: 'content',
+                score: { boost: { value: 3 } },
+              },
+            },
+            {
+              text: {
+                query: keywordConcept,
+                path: 'category',
+              },
+            },
+          ],
+          minimumShouldMatch: 1,
+        }
+      : {
+          should: [
+            {
+              text: {
+                query: keywordConcept,
+                path: ['law_name', 'aliases'],
+                score: { boost: { value: 1.5 } },
+              },
+            },
+            {
+              text: {
+                query: keywordConcept,
+                path: 'chapter',
+                score: { boost: { value: 3 } },
+              },
+            },
+            {
+              text: {
+                query: keywordConcept,
+                path: 'content',
+              },
+            },
+            {
+              text: {
+                query: keywordConcept,
+                path: 'category',
+                score: { boost: { value: 0.5 } },
+              },
+            },
+          ],
+          minimumShouldMatch: 1,
+        };
+    applyNatureFilter(compound, nature);
+    return compound;
+  };
+
+  // Step 4: Run hybrid or keyword-only
+  if (apiKey) {
+    // Hybrid: keyword + vector in parallel → vector-first merge
     try {
       const queryVector = await embedQuery(query, apiKey);
-      return vectorSearch(coll, queryVector, safeLimit);
-    } catch {
-      // Vector failed — fallback to keyword pure concept
+      const [kwResults, vecResults] = await Promise.all([
+        runAtlasSearch(buildConceptKeywordCompound()),
+        filteredVectorSearch(coll, queryVector, safeLimit, {
+          pcode,
+          nature,
+        }),
+      ]);
+      const merged = vectorFirstMerge(kwResults, vecResults, safeLimit);
+      if (merged.length > 0) return merged;
+    } catch (err) {
+      // Vector/embedding failed — fall through to keyword-only
+      console.warn('[lawSearch] Hybrid search failed, falling back to keyword:', err);
     }
   }
 
-  // Final fallback: keyword pure concept search
-  const compound: Record<string, unknown> = {
-    should: [
-      {
-        text: {
-          query,
-          path: ['law_name', 'aliases'],
-          score: { boost: { value: 1.5 } },
-        },
-      },
-      {
-        text: {
-          query,
-          path: 'chapter',
-          score: { boost: { value: 3 } },
-        },
-      },
-      {
-        text: {
-          query,
-          path: 'content',
-        },
-      },
-      {
-        text: {
-          query,
-          path: 'category',
-          score: { boost: { value: 0.5 } },
-        },
-      },
-    ],
-    minimumShouldMatch: 1,
-  };
-  applyNatureFilter(compound, nature);
-  return runAtlasSearch(compound);
+  // Keyword-only fallback (no apiKey or hybrid failed)
+  return runAtlasSearch(buildConceptKeywordCompound());
 };
 
 // ── Public APIs (manage MongoClient lifecycle, delegate to core) ──
@@ -471,9 +499,15 @@ const searchWithCollection = async (
  */
 export const searchLaw = async (
   mongoUrl: string,
-  opts: { query: string; limit?: number; nature?: string; apiKey?: string },
+  opts: {
+    query: string;
+    limit?: number;
+    nature?: string;
+    apiKey?: string;
+    lawName?: string;
+  },
 ): Promise<LawArticle[]> => {
-  const { query, limit: rawLimit, nature, apiKey } = opts;
+  const { query, limit: rawLimit, nature, apiKey, lawName } = opts;
 
   if (!mongoUrl) {
     console.warn('searchLaw: MONGO_URL not set');
@@ -491,6 +525,7 @@ export const searchLaw = async (
       nature,
       apiKey,
       dbAliases,
+      lawName,
     });
   } finally {
     await client.close().catch(() => {});
@@ -541,7 +576,7 @@ export const batchLookupLawsByIds = async (
  * MUST call close() when done.
  */
 export interface LawSearchSession {
-  search: (query: string, limit?: number) => Promise<LawArticle[]>;
+  search: (query: string, limit?: number, lawName?: string) => Promise<LawArticle[]>;
   batchLookupByIds: (ids: string[]) => Promise<LawArticle[]>;
   close: () => Promise<void>;
 }
@@ -574,7 +609,7 @@ export const createLawSearchSession = (mongoUrl: string, apiKey?: string): LawSe
   };
 
   return {
-    search: async (query: string, limit?: number): Promise<LawArticle[]> => {
+    search: async (query: string, limit?: number, lawName?: string): Promise<LawArticle[]> => {
       if (!mongoUrl) return [];
       await ensureConnected();
       const coll = client.db('lawdb').collection('articles');
@@ -582,6 +617,7 @@ export const createLawSearchSession = (mongoUrl: string, apiKey?: string): LawSe
         limit: limit || 5,
         apiKey,
         dbAliases: cachedAliases,
+        lawName,
       });
     },
     batchLookupByIds: async (ids: string[]): Promise<LawArticle[]> => {

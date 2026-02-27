@@ -121,9 +121,9 @@ export const validateStrategyOutput = (
   // 8. legal_reasoning length check (warning-level, non-blocking log only)
   for (const section of output.sections) {
     const lr = (section as { legal_reasoning?: string }).legal_reasoning;
-    if (lr && lr.length > 300) {
+    if (lr && lr.length > 500) {
       console.warn(
-        `[Strategy Warning] 段落「${section.section}」的 legal_reasoning 超過 300 字（${lr.length} 字）`,
+        `[Strategy Warning] 段落「${section.section}」的 legal_reasoning 超過 500 字（${lr.length} 字）`,
       );
     }
   }

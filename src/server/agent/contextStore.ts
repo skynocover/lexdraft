@@ -13,6 +13,7 @@ import type {
   WriterContext,
   TimelineItem,
   DamageItem,
+  PerIssueAnalysis,
 } from './pipeline/types';
 import type { OrchestratorOutput } from './orchestratorAgent';
 
@@ -46,8 +47,9 @@ export class ContextStore {
   claims: Claim[] = [];
   sections: StrategySection[] = [];
 
-  // Step 2: Reasoning + Strategy
+  // Step 2: Reasoning → Structuring 產出
   reasoningSummary = '';
+  perIssueAnalysis: PerIssueAnalysis[] = [];
   supplementedLaws: FetchedLaw[] = [];
   foundLaws: FoundLaw[] = []; // combined laws for Writer
 
@@ -152,6 +154,11 @@ export class ContextStore {
   /** Set reasoning summary from finalize_strategy tool call */
   setReasoningSummary = (summary: string) => {
     this.reasoningSummary = summary;
+  };
+
+  /** Set per-issue analysis from finalize_strategy tool call */
+  setPerIssueAnalysis = (analysis: PerIssueAnalysis[]) => {
+    this.perIssueAnalysis = analysis;
   };
 
   /** Add supplemented laws found during Step 2 reasoning (written immediately) */

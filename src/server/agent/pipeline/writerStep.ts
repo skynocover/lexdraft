@@ -11,6 +11,43 @@ import type { Paragraph, TextSegment, Citation } from '../../../client/stores/us
 export const getSectionKey = (section: string, subsection?: string) =>
   `${section}${subsection ? ' > ' + subsection : ''}`;
 
+/** Strip markdown formatting (headings, blockquotes, bold) from AI output */
+const stripMarkdown = (t: string): string =>
+  t
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1');
+
+/**
+ * Rebuild segments so their concatenated text matches `strippedText`.
+ * Walks through original segments, applies stripMarkdown to each,
+ * then slices from strippedText to keep offsets consistent.
+ */
+const rebuildSegmentsAfterStrip = (
+  originalText: string,
+  originalSegments: TextSegment[],
+  strippedText: string,
+): { text: string; segments: TextSegment[] } => {
+  // Fast path: nothing changed
+  if (originalText === strippedText) {
+    return { text: strippedText, segments: originalSegments };
+  }
+
+  const segments: TextSegment[] = [];
+  let offset = 0;
+
+  for (const seg of originalSegments) {
+    const segStripped = stripMarkdown(seg.text);
+    const len = segStripped.length;
+    // Slice from strippedText to guarantee the concat matches exactly
+    const alignedText = strippedText.slice(offset, offset + len);
+    segments.push({ ...seg, text: alignedText || segStripped });
+    offset += len;
+  }
+
+  return { text: strippedText, segments };
+};
+
 // ── Heading deduplication helper ──
 
 const stripLeadingHeadings = (
@@ -111,8 +148,11 @@ export const writeSection = async (
 ): Promise<Paragraph> => {
   const documents: ClaudeDocument[] = [];
 
-  // ── Focus layer: relevant files ──
-  for (const fileId of writerCtx.fileIds) {
+  // ── Focus layer: relevant files (fallback to ALL files if strategy didn't specify) ──
+  const effectiveFileIds =
+    writerCtx.fileIds.length > 0 ? writerCtx.fileIds : [...fileContentMap.keys()];
+
+  for (const fileId of effectiveFileIds) {
     const file = fileContentMap.get(fileId);
     if (file) {
       const content = (file.content_md || file.full_text || '').slice(0, 20000);
@@ -251,7 +291,9 @@ ${completedText}`;
 - 使用正式法律文書用語（繁體中文）
 - 依照論證結構和 claims 列表撰寫，確保每個 claim 都有論述
 - 引用法條時，務必從提供的法條文件中引用，讓系統能自動標記引用來源
-- 引用事實時，從提供的來源文件中引用
+- 引用事實時，務必從提供的來源文件中直接引用對應段落
+- 每當提及具體數字（金額、日期、天數、次數）時，必須引用記載該數字的來源文件
+- 每當提及醫療診斷、鑑定結論、證明文件內容時，必須引用對應文件
 - 對「承認」的事實，可使用「此為兩造所不爭執」等用語
 - 對「爭執」的事實，需提出證據佐證
 - 對「自認」的事實，使用「被告於答辯狀自承」等用語
@@ -260,7 +302,11 @@ ${completedText}`;
 - 絕對不要輸出任何 XML 標籤（如 <document_context> 等）
 - 絕對不要使用 emoji 或特殊符號
 - 直接撰寫段落內容，不需要加入章節標題
-- 段落長度控制在 150-400 字之間`;
+- 絕對不要使用 markdown 語法（包括 #、>、**、* 等標記），輸出純文字段落
+- 段落長度控制在 150-400 字之間
+- 如遇不確定或需律師確認的資訊（如送達日期、當事人地址、身分證字號、具體證物編號），使用【待填：說明】標記，例如【待填：起訴狀繕本送達翌日】、【待填：原告住址】
+- 每段的論述角度和句式必須有所區分。參考[已完成段落]，避免重複使用相同的開頭句式（如不要每段都以「原告請求…悉數應予准許」開頭）、相同的法條引用模式、或相同的結尾語式
+- 每個損害項目有不同的法律依據和舉證重點，撰寫時應突出該項目的獨特論點，而非套用通用模板`;
 
   // Call Claude Citations API
   const {
@@ -274,12 +320,26 @@ ${completedText}`;
   usage.output_tokens += callUsage.output_tokens;
 
   // Strip duplicate headings that Claude may have included
-  const { text, segments, citations } = stripLeadingHeadings(
+  const {
+    text: headingStrippedText,
+    segments: headingStrippedSegments,
+    citations,
+  } = stripLeadingHeadings(
     rawText,
     rawSegments,
     rawCitations,
     strategySection.section,
     strategySection.subsection,
+  );
+
+  // Strip markdown from full text first, then rebuild segments to guarantee consistency.
+  // If we stripped segments individually, cross-segment markdown (e.g. **bold** split across
+  // two segments) would be removed from full text but not from individual segments.
+  const strippedText = stripMarkdown(headingStrippedText);
+  const { text, segments } = rebuildSegmentsAfterStrip(
+    headingStrippedText,
+    headingStrippedSegments,
+    strippedText,
   );
 
   // Post-processing: detect uncited law mentions, fetch, cache, repair citations

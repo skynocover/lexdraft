@@ -112,7 +112,11 @@ export const callAI = async (
   env: AIEnv,
   messages: ChatMessage[],
   opts?: CallAISimpleOptions,
-): Promise<{ content: string }> => {
+): Promise<{
+  content: string;
+  usage: { input_tokens: number; output_tokens: number };
+  truncated: boolean;
+}> => {
   const body: Record<string, unknown> = {
     model: opts?.model || MODEL,
     messages: sanitizeMessages(messages),
@@ -137,9 +141,104 @@ export const callAI = async (
     throw new Error(`AI Gateway error: ${response.status} - ${errText}`);
   }
   const data = (await response.json()) as {
-    choices: Array<{ message: { content: string } }>;
+    choices: Array<{ message: { content: string }; finish_reason?: string }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
-  return { content: data.choices[0]?.message?.content || '' };
+  const usage = {
+    input_tokens: data.usage?.prompt_tokens || 0,
+    output_tokens: data.usage?.completion_tokens || 0,
+  };
+  const truncated = data.choices[0]?.finish_reason === 'length';
+  return { content: data.choices[0]?.message?.content || '', usage, truncated };
+};
+
+// ── Gemini Tool-Loop (non-streaming, for pipeline Reasoning phase) ──
+
+export interface GeminiToolLoopResponse {
+  content: string;
+  toolCalls: ToolCall[];
+  usage: { input_tokens: number; output_tokens: number };
+}
+
+/**
+ * Call Gemini via AI Gateway with tool support (non-streaming).
+ * Used by pipeline reasoning loop. Retries on 429/5xx.
+ * `roundIndex` is used to generate unique tool call IDs.
+ */
+export const callGeminiToolLoop = async (
+  env: AIEnv,
+  opts: {
+    messages: ChatMessage[];
+    tools: ToolDef[];
+    maxTokens?: number;
+  },
+  roundIndex = 0,
+): Promise<GeminiToolLoopResponse> => {
+  const body: Record<string, unknown> = {
+    model: MODEL,
+    messages: sanitizeMessages(opts.messages),
+    stream: false,
+    max_tokens: opts.maxTokens || 16384,
+  };
+  if (opts.tools.length > 0) {
+    body.tools = opts.tools;
+  }
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch(getGatewayUrl(env), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      if (attempt < 2 && (response.status === 429 || response.status >= 500)) {
+        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        continue;
+      }
+      const errText = await response.text();
+      throw new Error(`AI Gateway error: ${response.status} - ${errText}`);
+    }
+
+    const data = (await response.json()) as {
+      choices: Array<{
+        message: {
+          content?: string | null;
+          tool_calls?: Array<{
+            id: string;
+            type: string;
+            function: { name: string; arguments: string };
+          }>;
+        };
+        finish_reason?: string;
+      }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+
+    const msg = data.choices[0]?.message;
+    const content = msg?.content || '';
+
+    const toolCalls: ToolCall[] = (msg?.tool_calls || []).map((tc, i) => ({
+      id: tc.id || `call_${roundIndex}_${i}`,
+      type: 'function' as const,
+      function: {
+        name: tc.function.name,
+        arguments: tc.function.arguments,
+      },
+    }));
+
+    const usage = {
+      input_tokens: data.usage?.prompt_tokens || 0,
+      output_tokens: data.usage?.completion_tokens || 0,
+    };
+
+    return { content, toolCalls, usage };
+  }
+
+  throw new Error('callGeminiToolLoop: exhausted retries');
 };
 
 export type { ChatMessage, ToolCall, ToolDef, AIEnv };
