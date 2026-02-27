@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Check, ChevronDown, ChevronRight, Minus, X } from 'lucide-react';
 import type { PipelineStep, PipelineStepChild } from '../../../shared/types';
+import { formatDuration } from '../../lib/formatDuration';
 import { StageBadge, StepChildren, ReviewContent, isEmptyResult } from './PipelineStageContent';
 import type { ReviewData } from './PipelineStageContent';
 import { cleanText } from '../../lib/textUtils';
@@ -133,6 +134,9 @@ const StageCard = ({ step, isLast }: { step: PipelineStep; isLast: boolean }) =>
             <span className={`text-xs ${step.status === 'error' ? 'text-red-400' : 'text-t3'}`}>
               {step.detail}
             </span>
+          )}
+          {step.durationMs != null && step.status === 'done' && (
+            <span className="text-xs text-t3/50">{formatDuration(step.durationMs)}</span>
           )}
         </div>
         {showContent && (

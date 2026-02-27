@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { files, briefs, cases, disputes, damages, briefVersions, claims } from '../db/schema';
 import { getDB } from '../db';
-import { type ClaudeUsage } from './claudeClient';
 import { readLawRefs, upsertManyLawRefs } from '../lib/lawRefsJson';
 import type { LawRefItem } from '../lib/lawRefsJson';
 import {
@@ -57,18 +56,23 @@ const createProgressTracker = (sendSSE: PipelineContext['sendSSE']) => {
     { label: '論證策略', status: 'pending' },
     { label: '書狀撰寫', status: 'pending' },
   ];
+  const stepStartTimes: (number | null)[] = [null, null, null, null];
 
   const send = () => sendSSE({ type: 'pipeline_progress', steps: structuredClone(steps) });
 
   return {
     startStep: async (index: number) => {
       steps[index].status = 'running';
+      stepStartTimes[index] = Date.now();
       await send();
     },
     completeStep: async (index: number, detail?: string, content?: Record<string, unknown>) => {
       steps[index].status = 'done';
       if (detail) steps[index].detail = detail;
       if (content) steps[index].content = content;
+      if (stepStartTimes[index]) {
+        steps[index].durationMs = Date.now() - stepStartTimes[index]!;
+      }
       await send();
     },
     setStepChildren: async (index: number, children: PipelineStepChild[]) => {
@@ -102,6 +106,9 @@ const createProgressTracker = (sendSSE: PipelineContext['sendSSE']) => {
     failStep: async (index: number, errorMsg: string) => {
       steps[index].status = 'error';
       steps[index].detail = errorMsg;
+      if (stepStartTimes[index]) {
+        steps[index].durationMs = Date.now() - stepStartTimes[index]!;
+      }
       await send();
     },
     completeWriting: async (total: number) => {
@@ -110,6 +117,9 @@ const createProgressTracker = (sendSSE: PipelineContext['sendSSE']) => {
         label: '書狀撰寫',
         detail: `${total} 段完成`,
         status: 'done',
+        durationMs: stepStartTimes[STEP_WRITER]
+          ? Date.now() - stepStartTimes[STEP_WRITER]!
+          : undefined,
       };
       await send();
     },
@@ -119,7 +129,7 @@ const createProgressTracker = (sendSSE: PipelineContext['sendSSE']) => {
 // ── Main Pipeline ──
 
 export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult> => {
-  const totalUsage: ClaudeUsage = { input_tokens: 0, output_tokens: 0 };
+  const pipelineStartTime = Date.now();
   const failedSections: string[] = [];
   const store = new ContextStore();
   const progress = createProgressTracker(ctx.sendSSE);
@@ -704,7 +714,6 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       ctx,
       store,
       strategyInput,
-      totalUsage,
       strategyProgress,
     );
 
@@ -797,7 +806,6 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
           writerCtx,
           fileContentMap,
           store,
-          totalUsage,
         );
 
         paragraphs.push(paragraph);
@@ -850,18 +858,10 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       });
     }
 
-    // Report Claude usage
+    // Report pipeline timing
     await ctx.sendSSE({
-      type: 'usage',
-      prompt_tokens: totalUsage.input_tokens,
-      completion_tokens: totalUsage.output_tokens,
-      total_tokens: totalUsage.input_tokens + totalUsage.output_tokens,
-      estimated_cost_ntd:
-        Math.round(
-          ((totalUsage.input_tokens * 0.8 + totalUsage.output_tokens * 4.0) / 1_000_000) *
-            32 *
-            10000,
-        ) / 10000,
+      type: 'pipeline_timing',
+      totalDurationMs: Date.now() - pipelineStartTime,
     });
 
     let resultMsg = `已完成書狀撰寫，共 ${paragraphs.length} 個段落。`;

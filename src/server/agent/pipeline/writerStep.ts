@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { callClaudeWithCitations, type ClaudeDocument, type ClaudeUsage } from '../claudeClient';
+import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
 import { fetchAndCacheUncitedMentions } from '../../lib/lawRefService';
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
@@ -144,7 +144,6 @@ export const writeSection = async (
   writerCtx: ReturnType<ContextStore['getContextForSection']>,
   fileContentMap: Map<string, FileRow>,
   store: ContextStore,
-  usage: ClaudeUsage,
 ): Promise<Paragraph> => {
   const documents: ClaudeDocument[] = [];
 
@@ -313,11 +312,7 @@ ${completedText}`;
     text: rawText,
     segments: rawSegments,
     citations: rawCitations,
-    usage: callUsage,
   } = await callClaudeWithCitations(ctx.aiEnv, documents, instruction);
-
-  usage.input_tokens += callUsage.input_tokens;
-  usage.output_tokens += callUsage.output_tokens;
 
   // Strip duplicate headings that Claude may have included
   const {

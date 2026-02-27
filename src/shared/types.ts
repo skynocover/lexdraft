@@ -17,13 +17,7 @@ export type SSEEvent =
       success: boolean;
     }
   | { type: 'progress'; current: number; total: number }
-  | {
-      type: 'usage';
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
-      estimated_cost_ntd: number;
-    }
+  | { type: 'pipeline_timing'; totalDurationMs: number }
   | {
       type: 'brief_update';
       brief_id: string;
@@ -56,6 +50,7 @@ export interface PipelineStep {
   label: string;
   detail?: string;
   status: 'done' | 'running' | 'pending' | 'error';
+  durationMs?: number;
   children?: PipelineStepChild[];
   content?: Record<string, unknown>;
 }

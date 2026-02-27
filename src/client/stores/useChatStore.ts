@@ -15,17 +15,10 @@ export interface ChatMessage {
   created_at: string;
 }
 
-interface TokenUsage {
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  estimated_cost_ntd: number;
-}
-
 interface ChatState {
   messages: ChatMessage[];
   isStreaming: boolean;
-  tokenUsage: TokenUsage | null;
+  pipelineTiming: number | null;
   error: string | null;
   prefillInput: string | null;
 
@@ -35,7 +28,7 @@ interface ChatState {
   appendToMessage: (id: string, text: string) => void;
   clearMessages: () => void;
   setIsStreaming: (isStreaming: boolean) => void;
-  setTokenUsage: (usage: TokenUsage | null) => void;
+  setPipelineTiming: (totalDurationMs: number | null) => void;
   setError: (error: string | null) => void;
   setPrefillInput: (text: string | null) => void;
 
@@ -50,7 +43,7 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isStreaming: false,
-  tokenUsage: null,
+  pipelineTiming: null,
   error: null,
   prefillInput: null,
   _abortController: null,
@@ -65,9 +58,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       messages: s.messages.map((m) => (m.id === id ? { ...m, content: m.content + text } : m)),
     })),
-  clearMessages: () => set({ messages: [], tokenUsage: null, error: null }),
+  clearMessages: () => set({ messages: [], pipelineTiming: null, error: null }),
   setIsStreaming: (isStreaming) => set({ isStreaming }),
-  setTokenUsage: (tokenUsage) => set({ tokenUsage }),
+  setPipelineTiming: (pipelineTiming) => set({ pipelineTiming }),
   setError: (error) => set({ error }),
   setPrefillInput: (prefillInput) => set({ prefillInput }),
 
@@ -89,8 +82,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (caseId: string, message: string) => {
-    const { addMessage, appendToMessage, updateMessage, setIsStreaming, setTokenUsage, setError } =
-      get();
+    const {
+      addMessage,
+      appendToMessage,
+      updateMessage,
+      setIsStreaming,
+      setPipelineTiming,
+      setError,
+    } = get();
 
     // Optimistic add user message
     const userMsgId = nanoid();
@@ -153,7 +152,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         addMessage,
         appendToMessage,
         updateMessage,
-        setTokenUsage,
+        setPipelineTiming,
         setError,
         getMessages: () => get().messages,
       };
@@ -211,6 +210,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error('clearConversation error:', err);
     }
     useRewindStore.getState().clear();
-    set({ messages: [], tokenUsage: null, error: null });
+    set({ messages: [], pipelineTiming: null, error: null });
   },
 }));

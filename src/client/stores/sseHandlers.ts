@@ -22,14 +22,7 @@ interface SSEActions {
   addMessage: (message: ChatMessage) => void;
   appendToMessage: (id: string, text: string) => void;
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
-  setTokenUsage: (
-    usage: {
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
-      estimated_cost_ntd: number;
-    } | null,
-  ) => void;
+  setPipelineTiming: (totalDurationMs: number | null) => void;
   setError: (error: string | null) => void;
   getMessages: () => ChatMessage[];
 }
@@ -131,13 +124,8 @@ export const handleSSEEvent = (
       break;
     }
 
-    case 'usage':
-      actions.setTokenUsage({
-        prompt_tokens: event.prompt_tokens,
-        completion_tokens: event.completion_tokens,
-        total_tokens: event.total_tokens,
-        estimated_cost_ntd: event.estimated_cost_ntd,
-      });
+    case 'pipeline_timing':
+      actions.setPipelineTiming(event.totalDurationMs);
       break;
 
     case 'brief_update': {

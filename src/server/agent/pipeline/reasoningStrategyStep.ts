@@ -42,10 +42,6 @@ const MAX_TOKENS = 8192;
 const JSON_OUTPUT_MAX_TOKENS = 16384;
 const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 
-// ── Usage type (structurally compatible with ClaudeUsage from briefPipeline) ──
-
-type UsageCounter = { input_tokens: number; output_tokens: number };
-
 // ── JSON Output System Prompt (separate call, clean context) ──
 
 const JSON_OUTPUT_SYSTEM_PROMPT = `你是一位資深台灣訴訟律師的策略輸出助手。你將收到律師的推理摘要、爭點清單、和可用法條，你的任務是根據這些資料輸出結構化的論證策略 JSON。
@@ -286,7 +282,6 @@ export const runReasoningStrategy = async (
   ctx: PipelineContext,
   store: ContextStore,
   input: ReasoningStrategyInput,
-  usage: UsageCounter,
   progress?: ReasoningStrategyProgressCallback,
 ): Promise<ReasoningStrategyOutput> => {
   await progress?.onReasoningStart();
@@ -315,17 +310,10 @@ export const runReasoningStrategy = async (
   const callJsonOutput = (msg: string) =>
     callClaude(ctx.aiEnv, JSON_OUTPUT_SYSTEM_PROMPT, msg, JSON_OUTPUT_MAX_TOKENS);
 
-  // Helper: accumulate usage
-  const addUsage = (u: UsageCounter) => {
-    usage.input_tokens += u.input_tokens;
-    usage.output_tokens += u.output_tokens;
-  };
-
   try {
     // ── Reasoning: 法律推理 tool-loop ──
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const response = await callReasoning();
-      addUsage(response.usage);
 
       // Push assistant message (content is ClaudeContentBlock[])
       messages.push({ role: 'assistant', content: response.content });
@@ -415,7 +403,6 @@ export const runReasoningStrategy = async (
       }
 
       const forceResp = await callReasoning();
-      addUsage(forceResp.usage);
 
       const forceToolCalls = extractToolCalls(forceResp.content);
       for (const tc of forceToolCalls) {
@@ -440,7 +427,7 @@ export const runReasoningStrategy = async (
     await progress?.onOutputStart();
 
     const jsonMessage = buildJsonOutputMessage(store, input);
-    return await callJsonAndParse(jsonMessage, store, input, callJsonOutput, addUsage);
+    return await callJsonAndParse(jsonMessage, store, input, callJsonOutput);
   } finally {
     await lawSession.close();
   }
@@ -474,12 +461,10 @@ const callJsonAndParse = async (
   input: ReasoningStrategyInput,
   callJsonOutput: (
     msg: string,
-  ) => Promise<{ content: string; usage: UsageCounter; truncated: boolean }>,
-  addUsage: (u: UsageCounter) => void,
+  ) => Promise<{ content: string; usage: { output_tokens: number }; truncated: boolean }>,
 ): Promise<ReasoningStrategyOutput> => {
   // First attempt
   const resp = await callJsonOutput(userMessage);
-  addUsage(resp.usage);
 
   console.log(
     `[reasoningStrategy] JSON output: truncated=${resp.truncated}, output_tokens=${resp.usage.output_tokens}, text_length=${resp.content.length}`,
@@ -502,7 +487,6 @@ const callJsonAndParse = async (
       buildJsonOutputMessage(store, input) +
       '\n\n重要：只輸出純 JSON，不要加 markdown code block、換行解釋或任何其他文字。確保 JSON string 值中沒有未轉義的換行字元。';
     const retryResp = await callJsonOutput(retryMsg);
-    addUsage(retryResp.usage);
 
     output = tryParse(retryResp.content);
 
@@ -527,7 +511,6 @@ const callJsonAndParse = async (
     '\n\n重要：只輸出純 JSON。';
 
   const fixResp = await callJsonOutput(fixMsg);
-  addUsage(fixResp.usage);
 
   const fixOutput = tryParse(fixResp.content);
 

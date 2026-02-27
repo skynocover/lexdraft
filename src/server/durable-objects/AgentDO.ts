@@ -316,9 +316,6 @@ ${paragraphList}
       // Skip tool_call records (they're part of assistant messages)
     }
 
-    let totalPromptTokens = 0;
-    let totalCompletionTokens = 0;
-
     // Agent loop
     for (let round = 0; round < MAX_ROUNDS; round++) {
       if (signal.aborted) {
@@ -347,12 +344,6 @@ ${paragraphList}
 
       await parseOpenAIStream(response, async (chunk: OpenAIChunk) => {
         if (signal.aborted) return;
-
-        // Track usage from final chunk
-        if (chunk.usage) {
-          totalPromptTokens += chunk.usage.prompt_tokens || 0;
-          totalCompletionTokens += chunk.usage.completion_tokens || 0;
-        }
 
         const delta = chunk.choices?.[0]?.delta;
         if (!delta) return;
@@ -405,19 +396,6 @@ ${paragraphList}
           function: { name: buf.name, arguments: buf.args || '{}' },
         });
       }
-
-      // Emit usage
-      const totalTokens = totalPromptTokens + totalCompletionTokens;
-      // Gemini 2.5 Flash pricing: ~$0.15/1M input, ~$0.60/1M output (approximate)
-      const costUsd = (totalPromptTokens * 0.15 + totalCompletionTokens * 0.6) / 1_000_000;
-      const costNtd = Math.round(costUsd * 32 * 10000) / 10000;
-      await sendSSE({
-        type: 'usage',
-        prompt_tokens: totalPromptTokens,
-        completion_tokens: totalCompletionTokens,
-        total_tokens: totalTokens,
-        estimated_cost_ntd: costNtd,
-      });
 
       if (toolCalls.length > 0) {
         // Save assistant message with tool_calls metadata
