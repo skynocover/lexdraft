@@ -761,7 +761,7 @@ AI 扮演資深訴訟律師，工作流程：
 | `relevant_file_ids[]`            | 需要引用的檔案 ID                                             |
 | `relevant_law_ids[]`             | 需要引用的法條 ID                                             |
 | `facts_to_use[]`                 | 要運用的事實（含 assertion_type 和用法）                      |
-| `legal_reasoning`                | **新增**：≤300 字自由文字，說明請求權選擇、要件對應、攻防預判 |
+| `legal_reasoning`                | **新增**：≤500 字自由文字，說明請求權選擇、要件對應、攻防預判 |
 
 #### 書狀結構慣例
 
@@ -834,7 +834,7 @@ Writer 拿到 **3 層上下文**：
 
 - 本段負責的 claims（含攻防配對關係）
 - 論證框架（法律依據 + 事實涵攝 + 結論）
-- `legal_reasoning`：Step 2 產出的法律推理（請求權選擇、要件對應、攻防預判，≤300 字）
+- `legal_reasoning`：Step 2 產出的法律推理（請求權選擇、要件對應、攻防預判，≤500 字）
 - 相關法條全文
 - 相關檔案內容（content_md 優先，fallback 到 full_text，截斷 20000 字）
 - 事實運用指示
