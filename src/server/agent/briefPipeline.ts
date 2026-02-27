@@ -40,6 +40,7 @@ export interface PipelineContext {
   drizzle: ReturnType<typeof getDB>;
   aiEnv: AIEnv;
   mongoUrl: string;
+  mongoApiKey?: string;
 }
 
 // ── Progress Tracker (4 steps) ──
@@ -592,11 +593,15 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
 
     const lawFetchChildren: PipelineStepChild[] = [];
 
-    const lawFetchResult = await runLawFetch(ctx.mongoUrl, {
-      legalIssues: store.legalIssues,
-      userAddedLaws: allLawRefRows.filter((r) => r.is_manual),
-      existingLawRefs: allLawRefRows,
-    });
+    const lawFetchResult = await runLawFetch(
+      ctx.mongoUrl,
+      {
+        legalIssues: store.legalIssues,
+        userAddedLaws: allLawRefRows.filter((r) => r.is_manual),
+        existingLawRefs: allLawRefRows,
+      },
+      ctx.mongoApiKey,
+    );
 
     // Cache fetched laws in DB
     const fetchedLawsArray = [...lawFetchResult.laws.values()];

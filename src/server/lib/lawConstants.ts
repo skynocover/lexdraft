@@ -158,8 +158,95 @@ export const ALIAS_MAP: Record<string, string> = {
 };
 
 /** 解析縮寫為全名，查不到則原樣返回 */
-export const resolveAlias = (name: string): string => {
-  return ALIAS_MAP[name] || name;
+export const resolveAlias = (name: string, dbAliases?: Record<string, string>): string => {
+  return ALIAS_MAP[name] || dbAliases?.[name] || name;
+};
+
+/** 常見法律概念 → 目標法規 + 改寫詞（用於純概念搜尋的改寫） */
+export const CONCEPT_TO_LAW: Record<string, { law: string; concept?: string }> = {
+  // 民法 — 債
+  損害賠償: { law: '民法' },
+  賠償責任: { law: '民法', concept: '損害賠償' },
+  回復原狀: { law: '民法' },
+  過失相抵: { law: '民法' },
+  與有過失: { law: '民法' },
+  連帶賠償: { law: '民法' },
+  連帶責任: { law: '民法' },
+  違約金: { law: '民法' },
+  債務不履行: { law: '民法' },
+  不完全給付: { law: '民法' },
+  瑕疵擔保: { law: '民法' },
+  契約解除: { law: '民法' },
+  不當得利: { law: '民法' },
+  無因管理: { law: '民法' },
+  合夥: { law: '民法' },
+  保證: { law: '民法' },
+  // 民法 — 侵權
+  侵權行為: { law: '民法' },
+  僱用人責任: { law: '民法', concept: '僱用人' },
+  慰撫金: { law: '民法' },
+  精神慰撫金: { law: '民法', concept: '慰撫金' },
+  精神賠償: { law: '民法', concept: '慰撫金' },
+  勞動能力: { law: '民法' },
+  勞動能力減損: { law: '民法', concept: '勞動能力' },
+  // 民法 — 物權
+  善意取得: { law: '民法', concept: '善意受讓' },
+  所有權: { law: '民法' },
+  抵押權: { law: '民法' },
+  留置權: { law: '民法' },
+  // 民法 — 總則
+  消滅時效: { law: '民法' },
+  意思表示: { law: '民法' },
+  // 刑法
+  過失傷害: { law: '刑法' },
+  過失致死: { law: '刑法' },
+  詐欺: { law: '刑法' },
+  背信: { law: '刑法' },
+  誹謗: { law: '刑法' },
+  公然侮辱: { law: '刑法' },
+  傷害: { law: '刑法' },
+  // 程序法
+  舉證責任: { law: '民事訴訟法', concept: '舉證' },
+  假扣押: { law: '民事訴訟法' },
+  假處分: { law: '民事訴訟法' },
+  強制執行: { law: '強制執行法' },
+  // 消保
+  定型化契約: { law: '消費者保護法' },
+  商品責任: { law: '消費者保護法', concept: '商品' },
+  // 勞動
+  解僱: { law: '勞動基準法', concept: '終止契約' },
+  資遣: { law: '勞動基準法' },
+  職業災害: { law: '勞動基準法' },
+  加班: { law: '勞動基準法', concept: '延長工時' },
+  工作加班: { law: '勞動基準法', concept: '延長工時' },
+  // 口語複合
+  車禍賠償: { law: '民法', concept: '損害賠償' },
+  醫療糾紛: { law: '醫療法', concept: '醫療' },
+  國家賠償: { law: '國家賠償法' },
+};
+
+/** CONCEPT_TO_LAW keys sorted longest first for greedy matching */
+const SORTED_CONCEPTS = Object.keys(CONCEPT_TO_LAW).sort((a, b) => b.length - a.length);
+
+/**
+ * 嘗試將純概念查詢改寫為 lawName + concept
+ * e.g. "損害賠償" → { lawName: "民法", concept: "損害賠償" }
+ * e.g. "精神慰撫金" → { lawName: "民法", concept: "慰撫金" }
+ * Returns null if no match found.
+ */
+export const tryRewriteQuery = (query: string): { lawName: string; concept: string } | null => {
+  const trimmed = query.trim();
+  if (CONCEPT_TO_LAW[trimmed]) {
+    const e = CONCEPT_TO_LAW[trimmed];
+    return { lawName: e.law, concept: e.concept || trimmed };
+  }
+  for (const key of SORTED_CONCEPTS) {
+    if (trimmed.includes(key)) {
+      const e = CONCEPT_TO_LAW[key];
+      return { lawName: e.law, concept: e.concept || trimmed };
+    }
+  }
+  return null;
 };
 
 /**

@@ -118,6 +118,7 @@ interface Env {
   CF_GATEWAY_ID: string;
   CF_AIG_TOKEN: string;
   MONGO_URL: string;
+  MONGO_API_KEY: string;
 }
 
 export class AgentDO extends DurableObject<Env> {
@@ -493,6 +494,7 @@ ${paragraphList}
               sendSSE: wrappedSendSSE,
               aiEnv,
               mongoUrl: this.env.MONGO_URL,
+              mongoApiKey: this.env.MONGO_API_KEY,
               signal,
             },
           );
@@ -513,8 +515,10 @@ ${paragraphList}
               .where(eq(messages.id, lastPipelineToolMsgId));
           }
 
-          // Truncate summary for SSE display
-          const resultSummary = result.length > 200 ? result.slice(0, 200) + '...' : result;
+          // Truncate summary for SSE display (skip truncation for search_law so frontend can parse all entries)
+          const skipTruncate = tc.function.name === 'search_law';
+          const resultSummary =
+            !skipTruncate && result.length > 200 ? result.slice(0, 200) + '...' : result;
 
           await sendSSE({
             type: 'tool_result',

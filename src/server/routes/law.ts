@@ -24,6 +24,7 @@ lawRouter.post('/law/search', async (c) => {
     query: body.query,
     limit: body.limit,
     nature: body.nature,
+    apiKey: c.env.MONGO_API_KEY,
   });
 
   return c.json({ query: body.query, total: results.length, results });

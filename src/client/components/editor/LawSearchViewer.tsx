@@ -12,6 +12,7 @@ interface LawSearchViewerProps {
   initialQuery: string;
   cachedResults: LawSearchResult[];
   cachedSelected: string[];
+  autoSearch?: boolean;
 }
 
 export const LawSearchViewer = ({
@@ -19,6 +20,7 @@ export const LawSearchViewer = ({
   initialQuery,
   cachedResults,
   cachedSelected,
+  autoSearch,
 }: LawSearchViewerProps) => {
   const updateLawSearchTabQuery = useTabStore((s) => s.updateLawSearchTabQuery);
   const updateLawSearchTabCache = useTabStore((s) => s.updateLawSearchTabCache);
@@ -75,6 +77,14 @@ export const LawSearchViewer = ({
   // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Auto-search on mount when triggered from chat
+  useEffect(() => {
+    if (autoSearch && initialQuery.trim() && cachedResults.length === 0) {
+      doSearch(initialQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

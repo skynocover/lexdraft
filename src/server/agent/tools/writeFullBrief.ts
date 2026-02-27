@@ -27,5 +27,6 @@ export const handleWriteFullBrief: ToolHandler = async (args, caseId, db, drizzl
     drizzle,
     aiEnv: ctx.aiEnv,
     mongoUrl: ctx.mongoUrl,
+    mongoApiKey: ctx.mongoApiKey,
   });
 };

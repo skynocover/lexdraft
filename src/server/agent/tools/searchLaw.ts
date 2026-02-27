@@ -27,13 +27,12 @@ export const handleSearchLaw: ToolHandler = async (args, _caseId, _db, _drizzle,
   }
 
   const query = preprocessQuery(rawQuery);
-  const results = await searchLaw(ctx.mongoUrl, { query, limit });
+  const results = await searchLaw(ctx.mongoUrl, { query, limit, apiKey: ctx.mongoApiKey });
 
   if (results.length === 0) {
     return toolSuccess(`未找到與「${query}」相關的法條。`);
   }
 
-  // Format result text (include IDs so agent can pass them to write_brief_section)
   const formatted = results
     .map(
       (r) =>
@@ -41,7 +40,5 @@ export const handleSearchLaw: ToolHandler = async (args, _caseId, _db, _drizzle,
     )
     .join('\n');
 
-  return toolSuccess(
-    `找到 ${results.length} 條相關法條：\n${formatted}\n\n【下一步】你必須立即對需要引用這些法條的段落呼叫 write_brief_section，將上述方括號內的法條 ID 傳入 relevant_law_ids 參數。不要只搜尋而不更新書狀。`,
-  );
+  return toolSuccess(`找到 ${results.length} 條相關法條：\n${formatted}`);
 };

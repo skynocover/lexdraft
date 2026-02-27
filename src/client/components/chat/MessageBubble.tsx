@@ -4,6 +4,7 @@ import { useChatStore, type ChatMessage } from '../../stores/useChatStore';
 import { useRewindStore } from '../../stores/useRewindStore';
 import { QuickActionButtons } from './QuickActionButtons';
 import { PipelineStages } from './PipelineStages';
+import { SearchLawDisplay } from './SearchLawDisplay';
 import { getCategoryTagCls, getCategoryLabel } from '../../lib/categoryConfig';
 import { getToolLabel } from './getToolLabel';
 import type { PipelineStep } from '../../../shared/types';
@@ -21,7 +22,10 @@ export const MessageBubble = memo(function MessageBubble({
   isLastAssistant?: boolean;
   caseId?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => {
+    if (message.role !== 'tool_call') return false;
+    return message.metadata?.tool_name === 'search_law';
+  });
   const snapshot = useRewindStore((s) =>
     message.role === 'assistant' ? s.snapshots[message.id] : undefined,
   );
@@ -221,46 +225,6 @@ function FileListDisplay({ content }: { content: string }) {
           {f.status === 'processing' && <span className="shrink-0 text-yl">&#8987;</span>}
         </div>
       ))}
-    </div>
-  );
-}
-
-function SearchLawDisplay({ content, query }: { content: string; query?: string }) {
-  // Parse search_law result lines: [ID] 法規名 條號：內容...
-  const LINE_REGEX = /^\[([^\]]+)\]\s*(.+?)：(.+)$/;
-  const lines = content.split('\n').filter((l) => LINE_REGEX.test(l));
-
-  if (!lines.length) {
-    return (
-      <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-t2">
-        {content.slice(0, 500)}
-      </pre>
-    );
-  }
-
-  return (
-    <div className="space-y-1.5">
-      {query && (
-        <p className="text-[11px] text-t3">
-          搜尋：<span className="text-t2">{query}</span>
-        </p>
-      )}
-      {lines.map((line, i) => {
-        const match = line.match(LINE_REGEX);
-        if (!match) return null;
-        const [, , title, preview] = match;
-        return (
-          <div key={i} className="flex items-start gap-1.5">
-            <span className="mt-0.5 shrink-0 rounded bg-purple-500/20 px-1 py-0.5 text-[11px] font-medium text-purple-400">
-              法規
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-t1">{title}</p>
-              <p className="truncate text-[11px] text-t3">{preview}</p>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

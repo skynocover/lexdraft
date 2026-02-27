@@ -101,6 +101,7 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
             initialQuery={activeTab.query}
             cachedResults={activeTab.cachedResults}
             cachedSelected={activeTab.cachedSelected}
+            autoSearch={activeTab.autoSearch}
           />
         ) : (
           <div className="flex h-full items-center justify-center">

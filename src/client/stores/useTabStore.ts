@@ -54,6 +54,7 @@ interface LawSearchTab {
   query: string;
   cachedResults: LawSearchResult[];
   cachedSelected: string[];
+  autoSearch: boolean;
 }
 
 export type TabData = BriefTab | FileTab | VersionPreviewTab | LawTab | LawSearchTab;
@@ -99,7 +100,7 @@ interface TabState {
     fullText: string | null,
   ) => void;
   updateBriefTabTitle: (briefId: string, title: string) => void;
-  openLawSearchTab: (initialQuery?: string) => void;
+  openLawSearchTab: (initialQuery?: string, autoSearch?: boolean) => void;
   updateLawSearchTabQuery: (searchId: string, query: string) => void;
   updateLawSearchTabCache: (
     searchId: string,
@@ -688,7 +689,7 @@ export const useTabStore = create<TabState>((set, get) => ({
     }
   },
 
-  openLawSearchTab: (initialQuery) => {
+  openLawSearchTab: (initialQuery, autoSearch) => {
     const { tabRegistry, panels, focusedPanelId } = get();
     const searchId = nanoid();
     const tabId = `law-search:${searchId}`;
@@ -701,6 +702,7 @@ export const useTabStore = create<TabState>((set, get) => ({
         query: initialQuery ?? '',
         cachedResults: [],
         cachedSelected: [],
+        autoSearch: autoSearch ?? false,
       },
     };
     set({

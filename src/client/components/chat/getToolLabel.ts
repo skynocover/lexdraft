@@ -55,9 +55,9 @@ const getToolLabel = (
     if (status === 'running') return `正在搜尋「${query || '...'}」...`;
     if (fullResult) {
       const match = fullResult.match(/找到 (\d+) 條/);
-      if (match) return `search_law「${query || ''}」— ${match[1]} 條結果`;
+      if (match) return `搜尋法條「${query || ''}」— 找到 ${match[1]} 條`;
     }
-    return `search_law「${query || ''}」`;
+    return `搜尋法條「${query || ''}」`;
   }
 
   if (toolName === 'calculate_damages') {

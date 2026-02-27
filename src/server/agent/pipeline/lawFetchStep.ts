@@ -79,6 +79,7 @@ export const runLawFetch = async (
     userAddedLaws: LawRefItem[];
     existingLawRefs: LawRefItem[];
   },
+  apiKey?: string,
 ): Promise<LawFetchResult> => {
   const laws = new Map<string, FetchedLaw>();
 
@@ -104,7 +105,7 @@ export const runLawFetch = async (
   const uncachedIds = [...mentionedIds.keys()].filter((id) => !cachedIds.has(id));
 
   if (uncachedIds.length > 0) {
-    const session = createLawSearchSession(mongoUrl);
+    const session = createLawSearchSession(mongoUrl, apiKey);
     try {
       // Try batch lookup by _id first (fastest)
       const results = await session.batchLookupByIds(uncachedIds);

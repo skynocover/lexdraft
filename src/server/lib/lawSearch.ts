@@ -1,8 +1,9 @@
-import { MongoClient } from 'mongodb';
+import { MongoClient, type Db } from 'mongodb';
 import {
   resolveAlias,
   normalizeArticleNo,
   buildArticleId,
+  tryRewriteQuery,
   PCODE_MAP,
   ALIAS_MAP,
 } from './lawConstants';
@@ -43,7 +44,6 @@ const buildLawClause = (name: string): { filter?: unknown[]; must?: unknown[] } 
         text: {
           query: name,
           path: ['law_name', 'aliases'],
-          synonyms: 'law_synonyms',
         },
       },
     ],
@@ -77,19 +77,112 @@ const tryExtractLawName = (query: string): { lawName: string; concept: string } 
   return null;
 };
 
-/** 遞迴移除物件中所有 `synonyms` 欄位（用於 fallback 重搜） */
-const stripSynonyms = (obj: unknown): unknown => {
-  if (Array.isArray(obj)) return obj.map(stripSynonyms);
-  if (obj && typeof obj === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj)) {
-      if (k === 'synonyms') continue;
-      out[k] = stripSynonyms(v);
-    }
-    return out;
+// ── DB Synonyms Loading ──
+
+/** Module-level TTL cache for synonym alias map (avoids full collection scan per request) */
+let _aliasCache: { data: Record<string, string>; ts: number } | null = null;
+const ALIAS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Load synonyms from lawdb.synonyms collection and convert to alias map.
+ * Each synonym doc has { _id, mappingType, synonyms: ["term1", "term2", ...] }.
+ * Returns a Record<string, string> mapping each alias → canonical name (first synonym).
+ * Results are cached with a 5-minute TTL at the module level.
+ */
+const loadSynonymsAsAliasMap = async (db: Db): Promise<Record<string, string>> => {
+  if (_aliasCache && Date.now() - _aliasCache.ts < ALIAS_CACHE_TTL) {
+    return _aliasCache.data;
   }
-  return obj;
+  const aliasMap: Record<string, string> = {};
+  try {
+    const synonymsColl = db.collection('synonyms');
+    const docs = await synonymsColl.find({}).toArray();
+    for (const doc of docs) {
+      const terms = doc.synonyms as string[] | undefined;
+      if (!terms || terms.length < 2) continue;
+      // First term is the canonical name, all others map to it
+      const canonical = terms[0];
+      for (let i = 1; i < terms.length; i++) {
+        aliasMap[terms[i]] = canonical;
+      }
+    }
+  } catch (err) {
+    console.warn('loadSynonymsAsAliasMap failed:', err);
+  }
+  _aliasCache = { data: aliasMap, ts: Date.now() };
+  return aliasMap;
 };
+
+// ── Embedding & Vector Search ──
+
+/**
+ * Call Voyage AI embedding API to get a 512-dim vector for the given text.
+ */
+const embedQuery = async (text: string, apiKey: string): Promise<number[]> => {
+  const res = await fetch('https://ai.mongodb.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'voyage-3.5',
+      input: [text],
+      input_type: 'query',
+      output_dimension: 512,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Embedding API HTTP ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const json = (await res.json()) as {
+    data?: { embedding: number[] }[];
+  };
+  if (!json.data?.[0]?.embedding) {
+    throw new Error(`Embedding API returned no data: ${JSON.stringify(json).slice(0, 200)}`);
+  }
+  return json.data[0].embedding;
+};
+
+const SHARED_PROJECT = {
+  _id: 1,
+  pcode: 1,
+  law_name: 1,
+  nature: 1,
+  category: 1,
+  chapter: 1,
+  article_no: 1,
+  content: 1,
+  aliases: 1,
+  last_update: 1,
+  url: {
+    $concat: ['https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=', '$pcode'],
+  },
+};
+
+/**
+ * Run $vectorSearch on the articles collection.
+ */
+const vectorSearch = async (
+  coll: Collection,
+  queryVector: number[],
+  limit: number,
+): Promise<LawArticle[]> =>
+  coll
+    .aggregate([
+      {
+        $vectorSearch: {
+          index: 'vector_index',
+          path: 'embedding',
+          queryVector,
+          numCandidates: limit * 10,
+          limit,
+        },
+      },
+      { $project: { ...SHARED_PROJECT, score: { $meta: 'vectorSearchScore' } } },
+    ])
+    .toArray() as unknown as Promise<LawArticle[]>;
 
 const MONGO_OPTS = {
   maxPoolSize: 1,
@@ -104,21 +197,39 @@ const MONGO_OPTS = {
 
 type Collection = ReturnType<ReturnType<MongoClient['db']>['collection']>;
 
+/** Append a nature filter clause to an Atlas Search compound query */
+const applyNatureFilter = (compound: Record<string, unknown>, nature?: string) => {
+  if (!nature) return;
+  const existing = (compound.filter as unknown[]) || [];
+  compound.filter = [...existing, { text: { query: nature, path: 'nature' } }];
+};
+
 interface SearchOpts {
   limit: number;
   nature?: string;
+  apiKey?: string;
+  dbAliases?: Record<string, string>;
 }
 
 /**
  * Internal: search with an existing collection handle.
  * All search strategies are here — no other function should duplicate this logic.
+ *
+ * Query classification:
+ *   ├─ 條號查詢 → S0 direct _id / S1 regex / S2 Atlas keyword（不變）
+ *   ├─ 法規+概念 → keyword Atlas Search（移除 synonyms）
+ *   └─ 純概念 → J 策略（rewrite → keyword, vector fallback）：
+ *       1. 查 CONCEPT_TO_LAW 改寫表
+ *       2. 有匹配 → keyword search → 直接回傳
+ *          └─ keyword 無結果 → vector fallback → keyword pure concept fallback
+ *       3. 無匹配 → vector search → keyword pure concept fallback
  */
 const searchWithCollection = async (
   coll: Collection,
   query: string,
   opts: SearchOpts,
 ): Promise<LawArticle[]> => {
-  const { limit, nature } = opts;
+  const { limit, nature, apiKey, dbAliases } = opts;
   const safeLimit = Math.min(Math.max(limit, 1), 50);
 
   // Guard: empty query would crash MongoDB Atlas Search compound.should[].text.query
@@ -135,7 +246,7 @@ const searchWithCollection = async (
   let artNormalized: string | undefined;
 
   if (articleMatch) {
-    artResolvedName = resolveAlias(articleMatch[1].trim());
+    artResolvedName = resolveAlias(articleMatch[1].trim(), dbAliases);
     artRawArticle = articleMatch[2].trim();
     artNormalized = normalizeArticleNo(artRawArticle);
   }
@@ -185,94 +296,7 @@ const searchWithCollection = async (
     }
   }
 
-  // ── Build Atlas Search compound query ──
-  let compound: Record<string, unknown>;
-
-  if (articleMatch && artResolvedName && artNormalized) {
-    compound = {
-      ...buildLawClause(artResolvedName),
-      should: [{ phrase: { query: artNormalized, path: 'article_no' } }],
-    };
-  } else if (lawConceptMatch || (!articleMatch && tryExtractLawName(query))) {
-    // Handles both "民法 過失相抵" (with space, via regex) and "民法過失相抵" (no space, via tryExtractLawName)
-    const extracted = lawConceptMatch
-      ? { lawName: lawConceptMatch[1], concept: lawConceptMatch[2] }
-      : tryExtractLawName(query)!;
-    const resolvedName = resolveAlias(extracted.lawName);
-    const concept = extracted.concept;
-    compound = {
-      ...buildLawClause(resolvedName),
-      should: [
-        {
-          text: {
-            query: concept,
-            path: 'chapter',
-            synonyms: 'law_synonyms',
-            score: { boost: { value: 5 } },
-          },
-        },
-        {
-          text: {
-            query: concept,
-            path: 'content',
-            synonyms: 'law_synonyms',
-            score: { boost: { value: 3 } },
-          },
-        },
-        {
-          text: {
-            query: concept,
-            path: 'category',
-            synonyms: 'law_synonyms',
-          },
-        },
-      ],
-      minimumShouldMatch: 1,
-    };
-  } else {
-    compound = {
-      should: [
-        {
-          text: {
-            query,
-            path: ['law_name', 'aliases'],
-            synonyms: 'law_synonyms',
-            score: { boost: { value: 1.5 } },
-          },
-        },
-        {
-          text: {
-            query,
-            path: 'chapter',
-            synonyms: 'law_synonyms',
-            score: { boost: { value: 3 } },
-          },
-        },
-        {
-          text: {
-            query,
-            path: 'content',
-            synonyms: 'law_synonyms',
-          },
-        },
-        {
-          text: {
-            query,
-            path: 'category',
-            synonyms: 'law_synonyms',
-            score: { boost: { value: 0.5 } },
-          },
-        },
-      ],
-      minimumShouldMatch: 1,
-    };
-  }
-
-  if (nature) {
-    const existing = (compound.filter as unknown[]) || [];
-    compound.filter = [...existing, { text: { query: nature, path: 'nature' } }];
-  }
-
+  // ── Helper: run Atlas Search keyword query ──
   const runAtlasSearch = async (c: Record<string, unknown>): Promise<LawArticle[]> =>
     coll
       .aggregate([
@@ -280,34 +304,163 @@ const searchWithCollection = async (
         { $limit: safeLimit },
         {
           $project: {
-            _id: 1,
-            pcode: 1,
-            law_name: 1,
-            nature: 1,
-            category: 1,
-            chapter: 1,
-            article_no: 1,
-            content: 1,
-            aliases: 1,
-            last_update: 1,
-            url: {
-              $concat: ['https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=', '$pcode'],
-            },
+            ...SHARED_PROJECT,
             score: { $meta: 'searchScore' },
           },
         },
       ])
       .toArray() as unknown as Promise<LawArticle[]>;
 
-  const results = await runAtlasSearch(compound);
+  // ── Build Atlas Search compound query ──
 
-  // Fallback: if concept search returns 0 results, retry without synonyms.
-  // Synonyms can sometimes reduce recall by redirecting to unrelated terms.
-  if (results.length === 0 && !articleMatch) {
-    return runAtlasSearch(stripSynonyms(compound) as Record<string, unknown>);
+  if (articleMatch && artResolvedName && artNormalized) {
+    // S2: article search via Atlas
+    const compound: Record<string, unknown> = {
+      ...buildLawClause(artResolvedName),
+      should: [{ phrase: { query: artNormalized, path: 'article_no' } }],
+    };
+    applyNatureFilter(compound, nature);
+    return runAtlasSearch(compound);
   }
 
-  return results;
+  if (lawConceptMatch || (!articleMatch && tryExtractLawName(query))) {
+    // Law name + concept keyword search (e.g. "民法 損害賠償" or "民法過失相抵")
+    const extracted = lawConceptMatch
+      ? { lawName: lawConceptMatch[1], concept: lawConceptMatch[2] }
+      : tryExtractLawName(query)!;
+    const resolvedName = resolveAlias(extracted.lawName, dbAliases);
+    const concept = extracted.concept;
+    const compound: Record<string, unknown> = {
+      ...buildLawClause(resolvedName),
+      should: [
+        {
+          text: {
+            query: concept,
+            path: 'chapter',
+            score: { boost: { value: 5 } },
+          },
+        },
+        {
+          text: {
+            query: concept,
+            path: 'content',
+            score: { boost: { value: 3 } },
+          },
+        },
+        {
+          text: {
+            query: concept,
+            path: 'category',
+          },
+        },
+      ],
+      minimumShouldMatch: 1,
+    };
+    applyNatureFilter(compound, nature);
+    return runAtlasSearch(compound);
+  }
+
+  // ── Pure concept: J strategy (rewrite → keyword, vector fallback) ──
+  // 1. Try CONCEPT_TO_LAW rewrite table
+  // 2. If matched → keyword search with rewritten lawName+concept → direct return
+  //    - If keyword empty → fallback to vector → fallback to keyword pure concept
+  // 3. If no match → vector search → fallback to keyword pure concept
+
+  const rw = tryRewriteQuery(query);
+
+  if (rw) {
+    // Rewrite table matched — keyword search (no RRF, direct return)
+    const resolvedName = resolveAlias(rw.lawName, dbAliases);
+    const kwCompound: Record<string, unknown> = {
+      ...buildLawClause(resolvedName),
+      should: [
+        {
+          text: {
+            query: rw.concept,
+            path: 'chapter',
+            score: { boost: { value: 5 } },
+          },
+        },
+        {
+          text: {
+            query: rw.concept,
+            path: 'content',
+            score: { boost: { value: 3 } },
+          },
+        },
+        {
+          text: {
+            query: rw.concept,
+            path: 'category',
+          },
+        },
+      ],
+      minimumShouldMatch: 1,
+    };
+    applyNatureFilter(kwCompound, nature);
+
+    const kwResults = await runAtlasSearch(kwCompound);
+
+    if (kwResults.length > 0) {
+      return kwResults;
+    }
+
+    // Keyword empty — fallback to vector, then keyword pure concept
+    if (apiKey) {
+      try {
+        const queryVector = await embedQuery(query, apiKey);
+        return vectorSearch(coll, queryVector, safeLimit);
+      } catch {
+        // Vector failed — fall through to keyword pure concept below
+      }
+    }
+  }
+
+  // No rewrite match — try vector search directly
+  if (!rw && apiKey) {
+    try {
+      const queryVector = await embedQuery(query, apiKey);
+      return vectorSearch(coll, queryVector, safeLimit);
+    } catch {
+      // Vector failed — fallback to keyword pure concept
+    }
+  }
+
+  // Final fallback: keyword pure concept search
+  const compound: Record<string, unknown> = {
+    should: [
+      {
+        text: {
+          query,
+          path: ['law_name', 'aliases'],
+          score: { boost: { value: 1.5 } },
+        },
+      },
+      {
+        text: {
+          query,
+          path: 'chapter',
+          score: { boost: { value: 3 } },
+        },
+      },
+      {
+        text: {
+          query,
+          path: 'content',
+        },
+      },
+      {
+        text: {
+          query,
+          path: 'category',
+          score: { boost: { value: 0.5 } },
+        },
+      },
+    ],
+    minimumShouldMatch: 1,
+  };
+  applyNatureFilter(compound, nature);
+  return runAtlasSearch(compound);
 };
 
 // ── Public APIs (manage MongoClient lifecycle, delegate to core) ──
@@ -318,9 +471,9 @@ const searchWithCollection = async (
  */
 export const searchLaw = async (
   mongoUrl: string,
-  opts: { query: string; limit?: number; nature?: string },
+  opts: { query: string; limit?: number; nature?: string; apiKey?: string },
 ): Promise<LawArticle[]> => {
-  const { query, limit: rawLimit, nature } = opts;
+  const { query, limit: rawLimit, nature, apiKey } = opts;
 
   if (!mongoUrl) {
     console.warn('searchLaw: MONGO_URL not set');
@@ -330,10 +483,14 @@ export const searchLaw = async (
   const client = new MongoClient(mongoUrl, MONGO_OPTS);
 
   try {
-    const coll = client.db('lawdb').collection('articles');
+    const db = client.db('lawdb');
+    const coll = db.collection('articles');
+    const dbAliases = await loadSynonymsAsAliasMap(db);
     return await searchWithCollection(coll, query, {
       limit: rawLimit || 10,
       nature,
+      apiKey,
+      dbAliases,
     });
   } finally {
     await client.close().catch(() => {});
@@ -389,14 +546,17 @@ export interface LawSearchSession {
   close: () => Promise<void>;
 }
 
-export const createLawSearchSession = (mongoUrl: string): LawSearchSession => {
+export const createLawSearchSession = (mongoUrl: string, apiKey?: string): LawSearchSession => {
   const client = new MongoClient(mongoUrl, MONGO_OPTS);
   let connected = false;
+  let cachedAliases: Record<string, string> | undefined;
 
   const ensureConnected = async () => {
     if (!connected) {
       await client.connect();
       connected = true;
+      // Load DB synonyms once per session
+      cachedAliases = await loadSynonymsAsAliasMap(client.db('lawdb'));
       // Suppress EventEmitter warnings on internal topology/pool emitters
       try {
         const topology = (client as unknown as Record<string, unknown>).topology;
@@ -418,7 +578,11 @@ export const createLawSearchSession = (mongoUrl: string): LawSearchSession => {
       if (!mongoUrl) return [];
       await ensureConnected();
       const coll = client.db('lawdb').collection('articles');
-      return searchWithCollection(coll, query, { limit: limit || 5 });
+      return searchWithCollection(coll, query, {
+        limit: limit || 5,
+        apiKey,
+        dbAliases: cachedAliases,
+      });
     },
     batchLookupByIds: async (ids: string[]): Promise<LawArticle[]> => {
       if (!mongoUrl || !ids.length) return [];

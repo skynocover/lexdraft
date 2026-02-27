@@ -5,6 +5,7 @@ export interface ToolContext {
   sendSSE: (event: SSEEvent) => Promise<void>;
   aiEnv: AIEnv;
   mongoUrl: string;
+  mongoApiKey?: string;
   signal?: AbortSignal;
 }
 

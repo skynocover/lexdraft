@@ -184,20 +184,6 @@ const buildArticleId = (lawName, articleNo) => {
   return `${pcode}-${num}`;
 };
 
-/** 遞迴移除物件中所有 `synonyms` 欄位（用於 fallback 重搜） */
-const stripSynonyms = (obj) => {
-  if (Array.isArray(obj)) return obj.map(stripSynonyms);
-  if (obj && typeof obj === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(obj)) {
-      if (k === 'synonyms') continue;
-      out[k] = stripSynonyms(v);
-    }
-    return out;
-  }
-  return obj;
-};
-
 // ── Regex patterns (from lawSearch.ts) ──
 
 const ARTICLE_REGEX = /^(.+?)\s*(第\s*\S+?\s*條.*)$/;
@@ -212,7 +198,7 @@ const buildLawClause = (resolvedName) => {
   }
   return {
     must: [
-      { text: { query: resolvedName, path: ['law_name', 'aliases'], synonyms: 'law_synonyms' } },
+      { text: { query: resolvedName, path: ['law_name', 'aliases'] } },
     ],
   };
 };
@@ -309,7 +295,6 @@ const searchWithCollection = async (coll, query, opts = {}) => {
           text: {
             query: concept,
             path: 'chapter',
-            synonyms: 'law_synonyms',
             score: { boost: { value: 5 } },
           },
         },
@@ -317,11 +302,10 @@ const searchWithCollection = async (coll, query, opts = {}) => {
           text: {
             query: concept,
             path: 'content',
-            synonyms: 'law_synonyms',
             score: { boost: { value: 3 } },
           },
         },
-        { text: { query: concept, path: 'category', synonyms: 'law_synonyms' } },
+        { text: { query: concept, path: 'category' } },
       ],
       minimumShouldMatch: 1,
     };
@@ -333,7 +317,6 @@ const searchWithCollection = async (coll, query, opts = {}) => {
           text: {
             query,
             path: ['law_name', 'aliases'],
-            synonyms: 'law_synonyms',
             score: { boost: { value: 1.5 } },
           },
         },
@@ -341,16 +324,14 @@ const searchWithCollection = async (coll, query, opts = {}) => {
           text: {
             query,
             path: 'chapter',
-            synonyms: 'law_synonyms',
             score: { boost: { value: 3 } },
           },
         },
-        { text: { query, path: 'content', synonyms: 'law_synonyms' } },
+        { text: { query, path: 'content' } },
         {
           text: {
             query,
             path: 'category',
-            synonyms: 'law_synonyms',
             score: { boost: { value: 0.5 } },
           },
         },
@@ -378,14 +359,7 @@ const searchWithCollection = async (coll, query, opts = {}) => {
       ])
       .toArray();
 
-  let results = await runAtlasSearch(compound);
-  let usedFallback = false;
-
-  // Synonym fallback: retry without synonyms if 0 results
-  if (results.length === 0 && !articleMatch) {
-    results = await runAtlasSearch(stripSynonyms(compound));
-    usedFallback = true;
-  }
+  const results = await runAtlasSearch(compound);
 
   return {
     results: results.map((r) => ({
@@ -396,7 +370,7 @@ const searchWithCollection = async (coll, query, opts = {}) => {
       score: r.score,
       contentPreview: r.content?.substring(0, 80),
     })),
-    strategy: `S2_atlas_${queryType}${usedFallback ? '_no_syn' : ''}`,
+    strategy: `S2_atlas_${queryType}`,
     time: Date.now() - start,
   };
 };

@@ -257,7 +257,7 @@ export const runReasoningStrategy = async (
   let timeoutNudged = false;
   let searchCount = 0;
   const startTime = Date.now();
-  const lawSession = createLawSearchSession(ctx.mongoUrl);
+  const lawSession = createLawSearchSession(ctx.mongoUrl, ctx.mongoApiKey);
 
   // Helper: call Claude with current messages (reasoning phase)
   const callReasoning = () =>

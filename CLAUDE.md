@@ -84,29 +84,49 @@ Cloudflare AI Gateway 代理 chunked response 時偶爾在 multi-byte UTF-8 邊�
 
 **不要在下游（stores、components、DB writes）加任何 U+FFFD 處理。** 所有清除只在上述兩個邊界進行。
 
-## Law Search (MongoDB Atlas Search)
+## Law Search (MongoDB Atlas Search + Vector Search)
 
-- **DB**: `lawdb.articles` (221,061 articles), index `law_search`, analyzer `lucene.smartcn`
-- **Env var**: `MONGO_URL` (mongodb+srv:// connection string)
-- **Document fields**: `_id` (`{pcode}-{number}`，如 `B0000001-184`), `pcode`, `law_name`, `nature`, `category`, `chapter`, `article_no`（如 `第 184 條`）, `content`, `aliases`, `last_update`
-- **Synonyms**: 137 groups in `synonyms` collection (e.g., 勞基法↔勞動基準法). Only works on smartcn-analyzed fields, not keyword fields. Cannot combine `fuzzy` + `synonyms`.
+- **DB**: `lawdb.articles` (221,061 articles), index `law_search` (smartcn) + `vector_index` (512 dim, cosine)
+- **Env var**: `MONGO_URL` (mongodb+srv:// connection string), `MONGO_API_KEY` (Voyage AI embedding API key)
+- **Document fields**: `_id` (`{pcode}-{number}`，如 `B0000001-184`), `pcode`, `law_name`, `nature`, `category`, `chapter`, `article_no`（如 `第 184 條`）, `content`, `aliases`, `last_update`, `embedding` (512 dim)
+- **Synonyms**: 172 groups in `synonyms` collection, loaded at application layer via `loadSynonymsAsAliasMap()`. Atlas Search `synonyms: "law_synonyms"` mapping 已移除（與 smartcn 不相容）
 - **Law URL pattern**: `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode={pcode}`
-- Keyword search only (not semantic) — concept queries have low precision
 
-### 搜尋策略與已知限制（`lawSearch.ts`）
+### 搜尋策略 — J（`lawSearch.ts`）
 
-`searchWithCollection()` 有 3 層 fallback：
+查詢分類與策略：
 
-1. **Strategy 0 — `_id` 直查 O(1)**：搜尋「民法第184條」→ 解析出 `B0000001-184` → `findOne({ _id })`，~25ms
-2. **Strategy 1 — regex 查詢**：Strategy 0 查不到時（如 PCODE_MAP 沒收錄的法規），用 `law_name` + `article_no` regex 匹配，~1000ms+
-3. **Strategy 2 — Atlas Search 全文搜尋**：非條號查詢（如「民法 損害賠償」）走 compound query，~30ms
-   - `buildLawClause()`: PCODE_MAP 有的法規用 `filter: pcode` 精確匹配，沒有的才 fallback `text` match on `law_name`
-   - `article_no` 用 `phrase` match（不是 `text`，`text` 會因 smartcn 分詞匹配所有條文）
-   - 0 結果時自動移除 `synonyms` 重搜一次
+1. **條號查詢**（如「民法第184條」）→ keyword 三層 fallback（不變）
+   - S0: `_id` 直查 O(1)，~25ms
+   - S1: regex 匹配，~1000ms+
+   - S2: Atlas Search keyword，~30ms
+2. **法規+概念**（如「民法 損害賠償」）→ keyword Atlas Search（移除 synonyms）
+3. **純概念**（如「損害賠償」「車禍賠償」）→ J 策略（rewrite → keyword, vector fallback）：
+   - 查 `CONCEPT_TO_LAW` 改寫表（~50 組，定義在 `lawConstants.ts`）
+   - 有匹配 → keyword search → 直接回傳
+     - keyword 無結果 → vector fallback → keyword pure concept fallback
+   - 無匹配 → vector search → keyword pure concept fallback
+
+### CONCEPT_TO_LAW 改寫表（`lawConstants.ts`）
+
+常見法律概念 → 目標法規 + 改寫詞，解決 keyword 搜尋的核心問題（如搜「損害賠償」不再回傳「核子損害賠償法」）：
+
+| 概念 | 目標法規 | 改寫詞 |
+|------|---------|--------|
+| 損害賠償 | 民法 | 損害賠償 |
+| 精神慰撫金 | 民法 | 慰撫金 |
+| 過失傷害 | 刑法 | 過失傷害 |
+| 車禍賠償 | 民法 | 損害賠償 |
+| 定型化契約 | 消費者保護法 | 定型化契約 |
+| 解僱 | 勞動基準法 | 終止契約 |
+
+新增概念時在 `CONCEPT_TO_LAW` 中添加即可，`tryRewriteQuery()` 會自動使用。
 
 ### 搜尋測試腳本
 
-`scripts/law-search-test/search-test.mjs` — 52 個測試案例，驗證所有搜尋策略。修改 `lawSearch.ts` 或 `lawConstants.ts` 後務必跑一次。詳見 `scripts/law-search-test/README.md`。
+- `scripts/law-search-test/search-test.mjs` — 52 個回歸測試（keyword 為主）
+
+修改 `lawSearch.ts` 或 `lawConstants.ts` 後務必跑測試確認。
 
 注意：測試腳本中的 `PCODE_MAP` 和 `ALIAS_MAP` 是從 `lawConstants.ts` 複製的，修改 `lawConstants.ts` 後需同步更新測試腳本。
 
@@ -118,16 +138,15 @@ Cloudflare AI Gateway 代理 chunked response 時偶爾在 multi-byte UTF-8 邊�
 
 ### 概念搜尋已知限制
 
-Atlas Search + smartcn 的概念搜尋對關鍵字選擇很敏感：
+純 keyword + smartcn 的概念搜尋對關鍵字選擇很敏感（已由 CONCEPT_TO_LAW 改寫表部分解決）：
 
 | 能搜到          | 搜不到               | 原因                               |
 | --------------- | -------------------- | ---------------------------------- |
 | `民法 侵權行為` | `民法 精神慰撫金`    | 法條用「慰撫金」不用「精神慰撫金」 |
 | `民法 損害賠償` | `民法 不能工作 損失` | 法條用「勞動能力」不用「不能工作」 |
 | `民法 毀損`     | `民法 物之毀損`      | 「物之」干擾 tokenization          |
-| `與有過失`      | `過失傷害 賠償責任`  | 純概念搜尋 recall 極低             |
 
-優化方向：用更短、更接近法條原文的關鍵字；避免口語化的複合詞
+改寫表已涵蓋「精神慰撫金→慰撫金」「勞動能力減損→勞動能力」等常見轉換。未涵蓋的口語查詢走 vector search fallback。
 
 ## Critical Rules
 
