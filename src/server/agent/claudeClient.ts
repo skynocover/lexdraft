@@ -276,24 +276,39 @@ export const callClaude = async (
 ): Promise<{ content: string; usage: ClaudeUsage; truncated: boolean }> => {
   const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/anthropic/v1/messages`;
 
-  const response = await fetch(gatewayUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    }),
+  const body = JSON.stringify({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }],
   });
 
-  if (!response.ok) {
+  let response: Response | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    response = await fetch(gatewayUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+        'anthropic-version': '2023-06-01',
+      },
+      body,
+    });
+
+    if (response.ok) break;
+
+    if (attempt < 2 && (response.status === 429 || response.status >= 500)) {
+      console.warn(`[callClaude] ${response.status} on attempt ${attempt + 1}, retrying...`);
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+      continue;
+    }
+
     const errText = await response.text();
     throw new Error(`Claude API error: ${response.status} - ${errText}`);
+  }
+
+  if (!response || !response.ok) {
+    throw new Error('callClaude: exhausted retries');
   }
 
   const data = (await response.json()) as ClaudeResponse;
