@@ -115,7 +115,9 @@ ${fileText}
 
 請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。
 - 每個 section 的 relevant_law_ids 應依照[逐爭點分析]中各爭點的 key_law_ids 分配
-- 每個內容段落（非前言/結論）的 relevant_file_ids 必須列出該段撰寫時需要引用的檔案 ID，確保 Writer 能產生引用標記。根據段落主題從[案件檔案]中選擇對應的檔案`;
+- 每個內容段落（非前言/結論）的 relevant_file_ids 必須列出該段撰寫時需要引用的檔案 ID，確保 Writer 能產生引用標記。根據段落主題從[案件檔案]中選擇對應的檔案
+- 每個內容段落的 dispute_id 必須填入對應爭點的真實 ID（即[爭點清單]中方括號內的 ID，如「${store.legalIssues[0]?.id || ''}」），不要自己編造 ID，前言和結論為 null
+- 每個 claim 的 dispute_id 也必須使用[爭點清單]中的真實 ID`;
 };
 
 // ── Tool Definitions (Claude format) ──

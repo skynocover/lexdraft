@@ -51,7 +51,7 @@ export const CLAIMS_RULES = `═══ Claims 規則 ═══
 - supporting：輔助（支持同段落的主要主張）
 
 ### 攻防配對
-- dispute_id：連結到對應爭點的 ID
+- dispute_id：連結到對應爭點的真實 ID（必須使用[爭點清單]中方括號內的 ID，不要自己編造）
 - responds_to：攻防配對，填入所回應的 claim ID
   - rebuttal claim 必須有 responds_to（指向被反駁的 claim）
   - supporting claim 必須有 responds_to（指向它輔助的 primary claim）
@@ -64,7 +64,7 @@ export const SECTION_RULES = `═══ 段落規則 ═══
 - legal_basis：引用的法條 ID（必須是已查到全文的法條，且必須在 relevant_law_ids 中）
 - fact_application：事實如何涵攝到法律要件
 - conclusion：本段小結論
-- dispute_id：連結到對應爭點的 ID（前言和結論不需要）
+- dispute_id：連結到對應爭點的真實 ID（前言和結論為 null，其餘段落必須填入[爭點清單]中的 ID）
 - relevant_file_ids：列出本段撰寫時需要引用的來源檔案 ID（重要！確保每個論述段都有對應的來源檔案，否則 Writer 無法產生引用標記）
 - relevant_law_ids：列出本段需要引用的法條 ID
 - legal_reasoning：本段的法律推理摘要（不超過 500 字），包含：
@@ -82,7 +82,7 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
       "claim_type": "primary",
       "statement": "對方主張的描述",
       "assigned_section": null,
-      "dispute_id": "issue_1",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
       "responds_to": null
     },
     {
@@ -91,7 +91,7 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
       "claim_type": "rebuttal",
       "statement": "反駁對方主張的一句話描述",
       "assigned_section": "section_2",
-      "dispute_id": "issue_1",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
       "responds_to": "their_claim_1"
     }
   ],
@@ -99,6 +99,7 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
     {
       "id": "section_1",
       "section": "壹、前言",
+      "dispute_id": null,
       "argumentation": {
         "legal_basis": [],
         "fact_application": "簡述案件背景",
@@ -113,7 +114,7 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
       "id": "section_2",
       "section": "貳、事實及理由",
       "subsection": "一、侵權行為確已成立",
-      "dispute_id": "issue_1",
+      "dispute_id": "（填入[爭點清單]中的真實 ID，前言和結論為 null）",
       "argumentation": {
         "legal_basis": ["B0000001-184"],
         "fact_application": "事實涵攝描述",
