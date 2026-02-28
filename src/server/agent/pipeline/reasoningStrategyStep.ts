@@ -108,7 +108,6 @@ const STRATEGY_RESPONSE_SCHEMA: Record<string, unknown> = {
           },
           claims: { type: 'ARRAY', items: { type: 'STRING' } },
           relevant_file_ids: { type: 'ARRAY', items: { type: 'STRING' } },
-          relevant_law_ids: { type: 'ARRAY', items: { type: 'STRING' } },
           facts_to_use: {
             type: 'ARRAY',
             nullable: true,
@@ -124,14 +123,7 @@ const STRATEGY_RESPONSE_SCHEMA: Record<string, unknown> = {
           },
           legal_reasoning: { type: 'STRING', nullable: true },
         },
-        required: [
-          'id',
-          'section',
-          'argumentation',
-          'claims',
-          'relevant_file_ids',
-          'relevant_law_ids',
-        ],
+        required: ['id', 'section', 'argumentation', 'claims', 'relevant_file_ids'],
       },
     },
   },
@@ -517,7 +509,12 @@ export const runReasoningStrategy = async (
     await progress?.onOutputStart();
 
     const jsonMessage = buildJsonOutputMessage(store, input);
-    return await callJsonAndParse(jsonMessage, store.legalIssues, callJsonOutput);
+    return await callJsonAndParse(
+      jsonMessage,
+      store.legalIssues,
+      store.perIssueAnalysis,
+      callJsonOutput,
+    );
   } finally {
     await lawSession.close();
   }
@@ -533,9 +530,82 @@ const tryParse = (text: string): ReasoningStrategyOutput | null => {
   }
 };
 
+// ── Programmatic Enrichment (補齊 AI 偷懶填空的欄位) ──
+
+const enrichStrategyOutput = (
+  output: ReasoningStrategyOutput,
+  perIssueAnalysis: PerIssueAnalysis[],
+): void => {
+  const { claims, sections } = output;
+
+  // 1. 修正 section dispute_id — 從其 claims 推導
+  for (const sec of sections) {
+    if (!sec.dispute_id && sec.claims.length > 0) {
+      const sectionClaimIds = new Set(sec.claims);
+      const disputeIds = new Set(
+        claims.filter((c) => sectionClaimIds.has(c.id) && c.dispute_id).map((c) => c.dispute_id!),
+      );
+      if (disputeIds.size === 1) {
+        sec.dispute_id = [...disputeIds][0];
+      }
+    }
+  }
+
+  // 2. 修正 claim dispute_id — 從其 assigned_section 的 section 取
+  const sectionMap = new Map(sections.map((s) => [s.id, s]));
+  for (const claim of claims) {
+    if (!claim.dispute_id && claim.assigned_section) {
+      const sec = sectionMap.get(claim.assigned_section);
+      if (sec?.dispute_id) {
+        claim.dispute_id = sec.dispute_id;
+      }
+    }
+  }
+
+  // 3. 修正 section claims[] 一致性 — claim.assigned_section 指向 section 但 section.claims 沒有它
+  for (const claim of claims) {
+    if (claim.assigned_section) {
+      const sec = sectionMap.get(claim.assigned_section);
+      if (sec && !sec.claims.includes(claim.id)) {
+        sec.claims.push(claim.id);
+      }
+    }
+  }
+
+  // 4. 填 argumentation.legal_basis（如果空且有 dispute_id）
+  const analysisMap = new Map(perIssueAnalysis.map((a) => [a.issue_id, a]));
+  for (const sec of sections) {
+    if (sec.dispute_id && sec.argumentation.legal_basis.length === 0) {
+      const analysis = analysisMap.get(sec.dispute_id);
+      if (analysis && analysis.key_law_ids.length > 0) {
+        sec.argumentation.legal_basis = [...analysis.key_law_ids];
+      }
+    }
+  }
+
+  // 5. 填 relevant_law_ids（最後做，依賴 dispute_id 和 legal_basis）
+  for (const sec of sections) {
+    sec.relevant_law_ids = sec.relevant_law_ids || [];
+    if (!sec.dispute_id) continue;
+
+    const analysis = analysisMap.get(sec.dispute_id);
+    const fromAnalysis = analysis?.key_law_ids || [];
+    const fromBasis = sec.argumentation.legal_basis || [];
+
+    const merged = new Set([...sec.relevant_law_ids, ...fromAnalysis, ...fromBasis]);
+    sec.relevant_law_ids = [...merged];
+  }
+
+  const enrichedCount = sections.filter((s) => s.relevant_law_ids.length > 0).length;
+  console.log(
+    `[reasoningStrategy] enrichStrategyOutput: ${enrichedCount}/${sections.length} sections have relevant_law_ids`,
+  );
+};
+
 const callJsonAndParse = async (
   userMessage: string,
   legalIssues: ContextStore['legalIssues'],
+  perIssueAnalysis: PerIssueAnalysis[],
   callJsonOutput: (
     msg: string,
   ) => Promise<{ content: string; usage: { output_tokens: number }; truncated: boolean }>,
@@ -554,6 +624,7 @@ const callJsonAndParse = async (
   }
 
   let output = tryParse(resp.content);
+  if (output) enrichStrategyOutput(output, perIssueAnalysis);
 
   // Retry on parse failure
   if (!output) {
@@ -566,6 +637,7 @@ const callJsonAndParse = async (
     const retryResp = await callJsonOutput(retryMsg);
 
     output = tryParse(retryResp.content);
+    if (output) enrichStrategyOutput(output, perIssueAnalysis);
 
     if (!output) {
       console.error(
@@ -590,6 +662,7 @@ const callJsonAndParse = async (
   const fixResp = await callJsonOutput(fixMsg);
 
   const fixOutput = tryParse(fixResp.content);
+  if (fixOutput) enrichStrategyOutput(fixOutput, perIssueAnalysis);
 
   return fixOutput || output;
 };
