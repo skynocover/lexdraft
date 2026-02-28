@@ -113,7 +113,9 @@ ${lawText || '（無）'}
 [案件檔案]
 ${fileText}
 
-請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。每個 section 的 relevant_law_ids 應依照[逐爭點分析]中各爭點的 key_law_ids 分配。`;
+請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。
+- 每個 section 的 relevant_law_ids 應依照[逐爭點分析]中各爭點的 key_law_ids 分配
+- 每個內容段落（非前言/結論）的 relevant_file_ids 必須列出該段撰寫時需要引用的檔案 ID，確保 Writer 能產生引用標記。根據段落主題從[案件檔案]中選擇對應的檔案`;
 };
 
 // ── Tool Definitions (Claude format) ──

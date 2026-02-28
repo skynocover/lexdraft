@@ -16,6 +16,7 @@ import type {
   PerIssueAnalysis,
 } from './pipeline/types';
 import type { OrchestratorOutput } from './orchestratorAgent';
+import { parseJsonField } from './toolHelpers';
 
 export interface CaseMetadata {
   caseNumber: string;
@@ -118,6 +119,8 @@ export class ContextStore {
       title: string | null;
       our_position: string | null;
       their_position: string | null;
+      law_refs: string | null;
+      evidence: string | null;
     }>,
   ) => {
     this.legalIssues = disputeList.map((d) => ({
@@ -125,8 +128,8 @@ export class ContextStore {
       title: d.title || '未命名爭點',
       our_position: d.our_position || '',
       their_position: d.their_position || '',
-      key_evidence: [],
-      mentioned_laws: [],
+      key_evidence: parseJsonField<string[]>(d.evidence, []),
+      mentioned_laws: parseJsonField<string[]>(d.law_refs, []),
       facts: [],
     }));
   };

@@ -150,6 +150,41 @@ Cloudflare AI Gateway 代理 chunked response 時偶爾在 multi-byte UTF-8 邊�
 
 改寫表已涵蓋「精神慰撫金→慰撫金」「勞動能力減損→勞動能力」等常見轉換。未涵蓋的口語查詢走 vector search fallback。
 
+## Local D1 Database Queries
+
+查詢本地 D1 資料庫使用 `wrangler d1 execute`：
+
+```bash
+# 基本查詢（加 --json 方便程式解析）
+npx wrangler d1 execute lexdraft-db --local --command "SQL" --json 2>/dev/null
+
+# 列出所有表
+npx wrangler d1 execute lexdraft-db --local --command "SELECT name FROM sqlite_master WHERE type='table'"
+
+# 查詢特定表的欄位
+npx wrangler d1 execute lexdraft-db --local --command "PRAGMA table_info(cases)"
+```
+
+重點：
+- 一律加 `--local`，不要用 `--remote`（不要動正式區）
+- database name 是 `lexdraft-db`（來自 `wrangler.jsonc`）
+- Schema 定義在 `src/server/db/schema.ts`
+
+### D1 Table Schema Quick Reference
+
+| Table | PK | Key Columns | JSON Columns |
+|-------|-----|------------|--------------|
+| **cases** | id | user_id, title, case_number, court, case_type, plaintiff, defendant, client_role, case_instructions | law_refs (`[{id,law_name,article,full_text,is_manual}]`), timeline |
+| **briefs** | id | case_id, brief_type, title, version | content_structured (`{paragraphs:[{id,section,subsection,content_md,segments,citations,dispute_id}]}`) |
+| **files** | id | case_id, filename, r2_key, status, category, doc_date, full_text, summary, content_md | — |
+| **claims** | id | **case_id** (not brief_id!), side, claim_type, statement, assigned_section, dispute_id, responds_to | — |
+| **disputes** | id | case_id, number, title, our_position, their_position | evidence, law_refs |
+| **damages** | id | case_id, category, description, amount, basis, dispute_id | evidence_refs |
+| **messages** | id | case_id, role, content | metadata |
+| **brief_versions** | id | brief_id, version_no, label, content_structured, created_by | content_structured (same as briefs) |
+
+⚠️ **常見陷阱**：`claims` 表的外鍵是 `case_id`，不是 `brief_id`。`content_structured` 只在 `briefs` 和 `brief_versions` 表，不在 `cases` 表。
+
 ## Critical Rules
 
 ### ✅ DO

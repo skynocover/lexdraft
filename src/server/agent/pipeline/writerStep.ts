@@ -170,6 +170,10 @@ export const writeSection = async (
     });
   }
 
+  // ── Build document inventory for instruction ──
+  const fileDocNames = documents.filter((d) => d.doc_type === 'file').map((d) => d.title);
+  const lawDocNames = documents.filter((d) => d.doc_type === 'law').map((d) => d.title);
+
   // ── Build Writer instruction with 3-layer context ──
   const dispute = strategySection.dispute_id
     ? store.legalIssues.find((d) => d.id === strategySection.dispute_id)
@@ -208,9 +212,7 @@ export const writeSection = async (
   // Focus layer: argumentation framework
   const argText = writerCtx.argumentation;
   const legalBasisText =
-    argText.legal_basis.length > 0
-      ? `法律依據：${argText.legal_basis.join('、')}`
-      : '法律依據：（無）';
+    argText.legal_basis.length > 0 ? `法律依據：${argText.legal_basis.join('、')}` : '';
 
   // Focus layer: facts to use
   const factsText =
@@ -239,18 +241,27 @@ export const writeSection = async (
     ? `\n  律師處理指引：${meta.caseInstructions}`
     : '';
 
-  let instruction = `你是台灣資深訴訟律師。請根據提供的論證結構和來源文件，撰寫法律書狀段落。
+  const docLines: string[] = [];
+  if (fileDocNames.length > 0)
+    docLines.push(`  案件文件：${fileDocNames.map((n) => `「${n}」`).join('、')}`);
+  if (lawDocNames.length > 0)
+    docLines.push(`  法條文件：${lawDocNames.map((n) => `「${n}」`).join('、')}`);
+  const docListText =
+    docLines.length > 0
+      ? `\n\n[提供的來源文件]（你必須從這些文件中引用）\n${docLines.join('\n')}`
+      : '';
+
+  let instruction = `你是台灣資深訴訟律師。請根據提供的來源文件撰寫法律書狀段落。
 
 [書狀全局資訊]
   書狀類型：${writerCtx.briefType}${caseMetaLines ? '\n' + caseMetaLines : ''}${instructionsLine}
   完整大綱：
-${outlineText}
+${outlineText}${docListText}
 
 [本段負責的 Claims]
 ${claimsText}
 
-[本段論證結構]
-  ${legalBasisText}
+[本段論證結構]${legalBasisText ? `\n  ${legalBasisText}` : ''}
   事實適用：${argText.fact_application}
   結論：${argText.conclusion}`;
 
@@ -300,6 +311,7 @@ ${completedText}`;
 - 對 supporting claim（輔助），需與同段落的主要主張呼應
 - 絕對不要輸出任何 XML 標籤（如 <document_context> 等）
 - 絕對不要使用 emoji 或特殊符號
+- 絕對不要在書狀中提及「論證結構」「來源文件」「提供的文件」等內部指令術語，直接以律師口吻撰寫
 - 直接撰寫段落內容，不需要加入章節標題
 - 絕對不要使用 markdown 語法（包括 #、>、**、* 等標記），輸出純文字段落
 - 段落長度控制在 150-400 字之間
@@ -379,7 +391,7 @@ ${completedText}`;
 // ── Cleanup: remove uncited non-manual law refs after pipeline ──
 
 export const cleanupUncitedLaws = async (ctx: PipelineContext, paragraphs: Paragraph[]) => {
-  // Collect all cited law labels from the written paragraphs
+  // Collect all cited law labels from Citations API markers
   const citedLabels = new Set<string>();
   for (const p of paragraphs) {
     for (const c of p.citations) {
@@ -394,20 +406,45 @@ export const cleanupUncitedLaws = async (ctx: PipelineContext, paragraphs: Parag
     }
   }
 
-  // Remove non-manual law refs that aren't cited
-  const beforeRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
-  const hasUncited = beforeRefs.some((ref) => {
+  // Collect full text for text-mention detection
+  const fullText = paragraphs.map((p) => p.content_md).join('\n');
+
+  // Check if a law is mentioned in the brief text (e.g., "民法第191-2條"), with cache
+  const textMentionCache = new Map<string, boolean>();
+  const isMentionedInText = (lawName: string, article: string): boolean => {
+    const key = `${lawName}|${article}`;
+    if (textMentionCache.has(key)) return textMentionCache.get(key)!;
+    const numMatch = article.match(/(\d[\d-]*)/);
+    if (!numMatch) {
+      textMentionCache.set(key, false);
+      return false;
+    }
+    const num = numMatch[1];
+    const pattern = new RegExp(`${lawName}[第§]\\s*${num.replace('-', '[-之]')}\\s*條?`);
+    const result = pattern.test(fullText);
+    textMentionCache.set(key, result);
+    return result;
+  };
+
+  // Predicate: should this law ref be removed?
+  const shouldRemove = (ref: {
+    is_manual?: boolean;
+    law_name: string;
+    article: string;
+  }): boolean => {
     if (ref.is_manual) return false;
     const label = `${ref.law_name} ${ref.article}`;
-    return !citedLabels.has(label);
-  });
+    if (citedLabels.has(label)) return false;
+    if (isMentionedInText(ref.law_name, ref.article)) return false;
+    return true;
+  };
+
+  // Remove non-manual law refs that aren't cited AND aren't mentioned in text
+  const beforeRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
+  const hasUncited = beforeRefs.some(shouldRemove);
 
   if (hasUncited) {
-    const remaining = await removeLawRefsWhere(ctx.drizzle, ctx.caseId, (ref) => {
-      if (ref.is_manual) return false;
-      const label = `${ref.law_name} ${ref.article}`;
-      return !citedLabels.has(label);
-    });
+    const remaining = await removeLawRefsWhere(ctx.drizzle, ctx.caseId, shouldRemove);
 
     await ctx.sendSSE({
       type: 'brief_update',

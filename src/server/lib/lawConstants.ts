@@ -206,6 +206,9 @@ export const CONCEPT_TO_LAW: Record<string, { law: string; concept?: string }> =
   共同侵權: { law: '民法', concept: '共同不法' },
   名譽侵害: { law: '民法', concept: '名譽' },
   動力車輛: { law: '民法' },
+  物之毀損: { law: '民法', concept: '毀損' },
+  物之損害: { law: '民法', concept: '毀損' },
+  財物損害: { law: '民法', concept: '毀損' },
   工作物所有人: { law: '民法', concept: '工作物' },
   // 民法 — 物權
   善意取得: { law: '民法', concept: '善意受讓' },
