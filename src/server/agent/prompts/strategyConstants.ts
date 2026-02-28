@@ -74,6 +74,8 @@ export const SECTION_RULES = `═══ 段落規則 ═══
 
 export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
 
+段落 ID 命名規則：前言 section_1、第一個子段落 section_2_1、第二個子段落 section_2_2、損害賠償 section_3（若有）、結論 section_last。子段落 ID 格式為 section_{大段號}_{子段號}。
+
 {
   "claims": [
     {
@@ -90,7 +92,7 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
       "side": "ours",
       "claim_type": "rebuttal",
       "statement": "反駁對方主張的一句話描述",
-      "assigned_section": "section_2",
+      "assigned_section": "section_2_1",
       "dispute_id": "（填入[爭點清單]中的真實 ID）",
       "responds_to": "their_claim_1"
     }
@@ -111,7 +113,7 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
       "legal_reasoning": ""
     },
     {
-      "id": "section_2",
+      "id": "section_2_1",
       "section": "貳、事實及理由",
       "subsection": "一、侵權行為確已成立",
       "dispute_id": "（填入[爭點清單]中的真實 ID，前言和結論為 null）",

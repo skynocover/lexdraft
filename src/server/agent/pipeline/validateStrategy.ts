@@ -45,7 +45,7 @@ export const validateStrategyOutput = (
   }
 
   // 1. Every non-intro/conclusion section has at least one claim
-  const skipKeywords = ['前言', '結論', '結語'];
+  const skipKeywords = ['前言', '結論', '結語', '損害賠償'];
   for (const section of output.sections) {
     const isSkippable = skipKeywords.some((k) => section.section.includes(k));
     if (!isSkippable && section.claims.length === 0) {

@@ -1,3 +1,5 @@
+import { stripFFFD } from '../lib/sanitize';
+
 interface AIEnv {
   CF_ACCOUNT_ID: string;
   CF_GATEWAY_ID: string;
@@ -35,8 +37,11 @@ interface CallAIOptions {
 
 const MODEL = 'google-ai-studio/gemini-2.5-flash';
 
+export const getGatewayBaseUrl = (env: AIEnv): string =>
+  `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}`;
+
 function getGatewayUrl(env: AIEnv): string {
-  return `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`;
+  return `${getGatewayBaseUrl(env)}/compat/chat/completions`;
 }
 
 /**
@@ -150,6 +155,84 @@ export const callAI = async (
   };
   const truncated = data.choices[0]?.finish_reason === 'length';
   return { content: data.choices[0]?.message?.content || '', usage, truncated };
+};
+
+// ── Gemini Native (provider-native endpoint, constrained decoding) ──
+
+const GEMINI_NATIVE_MODEL = 'gemini-2.5-flash';
+
+interface GeminiNativeOptions {
+  maxTokens?: number;
+  responseSchema?: Record<string, unknown>;
+  signal?: AbortSignal;
+}
+
+/**
+ * Call Gemini via AI Gateway's provider-native endpoint.
+ * Uses `responseSchema` constrained decoding to guarantee JSON schema compliance.
+ */
+export const callGeminiNative = async (
+  env: AIEnv,
+  systemPrompt: string,
+  userMessage: string,
+  opts?: GeminiNativeOptions,
+): Promise<{
+  content: string;
+  usage: { input_tokens: number; output_tokens: number };
+  truncated: boolean;
+}> => {
+  const url = `${getGatewayBaseUrl(env)}/google-ai-studio/v1beta/models/${GEMINI_NATIVE_MODEL}:generateContent`;
+
+  const body: Record<string, unknown> = {
+    contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    generationConfig: {
+      maxOutputTokens: opts?.maxTokens || 4096,
+      responseMimeType: 'application/json',
+      ...(opts?.responseSchema ? { responseSchema: opts.responseSchema } : {}),
+    },
+  };
+
+  const bodyStr = JSON.stringify(body);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+    },
+    body: bodyStr,
+    signal: opts?.signal,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error(
+      `Gemini Native ${response.status} | url=${url}\nrequest_body_length=${bodyStr.length}ch\nresponse: ${errText.slice(0, 500)}`,
+    );
+    throw new Error(`Gemini Native error: ${response.status} - ${errText}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+      finishReason?: string;
+    }>;
+    usageMetadata?: {
+      promptTokenCount?: number;
+      candidatesTokenCount?: number;
+    };
+  };
+
+  const candidate = data.candidates?.[0];
+  const rawContent = candidate?.content?.parts?.[0]?.text || '';
+  const content = stripFFFD(rawContent);
+  const truncated = candidate?.finishReason === 'MAX_TOKENS';
+  const usage = {
+    input_tokens: data.usageMetadata?.promptTokenCount || 0,
+    output_tokens: data.usageMetadata?.candidatesTokenCount || 0,
+  };
+
+  return { content, usage, truncated };
 };
 
 // ── Gemini Tool-Loop (non-streaming, for pipeline Reasoning phase) ──

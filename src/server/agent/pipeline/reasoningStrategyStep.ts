@@ -3,12 +3,12 @@
 
 import {
   callClaudeToolLoop,
-  callClaude,
   extractToolCalls,
   type ClaudeMessage,
   type ClaudeContentBlock,
   type ClaudeToolDefinition,
 } from '../claudeClient';
+import { callGeminiNative } from '../aiClient';
 import { createLawSearchSession, type LawSearchSession } from '../../lib/lawSearch';
 import { upsertManyLawRefs } from '../../lib/lawRefsJson';
 import type { LawRefItem } from '../../lib/lawRefsJson';
@@ -23,7 +23,6 @@ import {
   STRATEGY_JSON_SCHEMA,
 } from '../prompts/strategyConstants';
 import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy';
-import { jsonrepair } from 'jsonrepair';
 import type {
   ReasoningStrategyInput,
   ReasoningStrategyOutput,
@@ -57,6 +56,87 @@ ${SECTION_RULES}
 - 只輸出 JSON，不要加 markdown code block 或其他文字
 
 ${STRATEGY_JSON_SCHEMA}`;
+
+// ── Gemini responseSchema (OpenAPI format, constrained decoding) ──
+// Mirrors Claim, StrategySection, ArgumentationFramework, FactUsage in ./types.ts.
+// Keep in sync when modifying the TypeScript interfaces.
+
+const STRATEGY_RESPONSE_SCHEMA: Record<string, unknown> = {
+  type: 'OBJECT',
+  properties: {
+    claims: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          id: { type: 'STRING' },
+          side: { type: 'STRING', enum: ['ours', 'theirs'] },
+          claim_type: { type: 'STRING', enum: ['primary', 'rebuttal', 'supporting'] },
+          statement: { type: 'STRING' },
+          assigned_section: { type: 'STRING', nullable: true },
+          dispute_id: { type: 'STRING', nullable: true },
+          responds_to: { type: 'STRING', nullable: true },
+        },
+        required: [
+          'id',
+          'side',
+          'claim_type',
+          'statement',
+          'assigned_section',
+          'dispute_id',
+          'responds_to',
+        ],
+      },
+    },
+    sections: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          id: { type: 'STRING' },
+          section: { type: 'STRING' },
+          subsection: { type: 'STRING', nullable: true },
+          dispute_id: { type: 'STRING', nullable: true },
+          argumentation: {
+            type: 'OBJECT',
+            properties: {
+              legal_basis: { type: 'ARRAY', items: { type: 'STRING' } },
+              fact_application: { type: 'STRING' },
+              conclusion: { type: 'STRING' },
+            },
+            required: ['legal_basis', 'fact_application', 'conclusion'],
+          },
+          claims: { type: 'ARRAY', items: { type: 'STRING' } },
+          relevant_file_ids: { type: 'ARRAY', items: { type: 'STRING' } },
+          relevant_law_ids: { type: 'ARRAY', items: { type: 'STRING' } },
+          facts_to_use: {
+            type: 'ARRAY',
+            nullable: true,
+            items: {
+              type: 'OBJECT',
+              properties: {
+                fact_id: { type: 'STRING' },
+                assertion_type: { type: 'STRING' },
+                usage: { type: 'STRING' },
+              },
+              required: ['fact_id', 'assertion_type', 'usage'],
+            },
+          },
+          legal_reasoning: { type: 'STRING', nullable: true },
+        },
+        required: [
+          'id',
+          'section',
+          'argumentation',
+          'claims',
+          'relevant_file_ids',
+          'relevant_law_ids',
+        ],
+      },
+    },
+  },
+  required: ['claims', 'sections'],
+};
 
 /**
  * Build a condensed user message for the separate JSON output call.
@@ -113,11 +193,14 @@ ${lawText || '（無）'}
 [案件檔案]
 ${fileText}
 
+[dispute_id 對照表 — 請從此處精確複製 ID，逐字元比對，不要憑記憶拼寫]
+${store.legalIssues.map((issue, i) => `  爭點${i + 1}（${issue.title}）: "${issue.id}"`).join('\n')}
+
 請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。
 - 每個 section 的 relevant_law_ids 應依照[逐爭點分析]中各爭點的 key_law_ids 分配
 - 每個內容段落（非前言/結論）的 relevant_file_ids 必須列出該段撰寫時需要引用的檔案 ID，確保 Writer 能產生引用標記。根據段落主題從[案件檔案]中選擇對應的檔案
-- 每個內容段落的 dispute_id 必須填入對應爭點的真實 ID（即[爭點清單]中方括號內的 ID，如「${store.legalIssues[0]?.id || ''}」），不要自己編造 ID，前言和結論為 null
-- 每個 claim 的 dispute_id 也必須使用[爭點清單]中的真實 ID`;
+- 每個內容段落的 dispute_id 必須從上方對照表原封不動複製，前言和結論為 null
+- 每個 claim 的 dispute_id 也必須從上方對照表原封不動複製`;
 };
 
 // ── Tool Definitions (Claude format) ──
@@ -310,9 +393,12 @@ export const runReasoningStrategy = async (
       max_tokens: MAX_TOKENS,
     });
 
-  // Helper: separate clean call for JSON output (Claude, prompt-based JSON)
+  // Helper: separate clean call for JSON output (Gemini 2.5 Flash, provider-native constrained decoding)
   const callJsonOutput = (msg: string) =>
-    callClaude(ctx.aiEnv, JSON_OUTPUT_SYSTEM_PROMPT, msg, JSON_OUTPUT_MAX_TOKENS);
+    callGeminiNative(ctx.aiEnv, JSON_OUTPUT_SYSTEM_PROMPT, msg, {
+      maxTokens: JSON_OUTPUT_MAX_TOKENS,
+      responseSchema: STRATEGY_RESPONSE_SCHEMA,
+    });
 
   try {
     // ── Reasoning: 法律推理 tool-loop ──
@@ -431,7 +517,7 @@ export const runReasoningStrategy = async (
     await progress?.onOutputStart();
 
     const jsonMessage = buildJsonOutputMessage(store, input);
-    return await callJsonAndParse(jsonMessage, store, input, callJsonOutput);
+    return await callJsonAndParse(jsonMessage, store.legalIssues, callJsonOutput);
   } finally {
     await lawSession.close();
   }
@@ -440,29 +526,16 @@ export const runReasoningStrategy = async (
 // ── Parse + Validate + Retry (for separate JSON output call) ──
 
 const tryParse = (text: string): ReasoningStrategyOutput | null => {
-  // First try normal parse (handles markdown blocks, trailing commas, balanced brace extraction)
   try {
     return parseStrategyOutput(text) as ReasoningStrategyOutput;
   } catch {
-    // noop
+    return null;
   }
-
-  // Use jsonrepair to fix all common LLM JSON issues:
-  // missing quotes, unescaped control chars, truncated JSON, single quotes, etc.
-  try {
-    const repaired = jsonrepair(text);
-    return parseStrategyOutput(repaired) as ReasoningStrategyOutput;
-  } catch {
-    // noop
-  }
-
-  return null;
 };
 
 const callJsonAndParse = async (
   userMessage: string,
-  store: ContextStore,
-  input: ReasoningStrategyInput,
+  legalIssues: ContextStore['legalIssues'],
   callJsonOutput: (
     msg: string,
   ) => Promise<{ content: string; usage: { output_tokens: number }; truncated: boolean }>,
@@ -488,7 +561,7 @@ const callJsonAndParse = async (
       `[reasoningStrategy] JSON output parse failed (first 300 chars): ${resp.content.slice(0, 300)}`,
     );
     const retryMsg =
-      buildJsonOutputMessage(store, input) +
+      userMessage +
       '\n\n重要：只輸出純 JSON，不要加 markdown code block、換行解釋或任何其他文字。確保 JSON string 值中沒有未轉義的換行字元。';
     const retryResp = await callJsonOutput(retryMsg);
 
@@ -503,13 +576,13 @@ const callJsonAndParse = async (
   }
 
   // Validate structure
-  const validation = validateStrategyOutput(output, store.legalIssues);
+  const validation = validateStrategyOutput(output, legalIssues);
   if (validation.valid) return output;
 
   // Retry with validation errors
   console.warn('[reasoningStrategy] Validation failed, retrying:', validation.errors);
   const fixMsg =
-    buildJsonOutputMessage(store, input) +
+    userMessage +
     '\n\n你上次的輸出有以下結構問題，請修正：\n' +
     validation.errors.map((e, i) => `${i + 1}. ${e}`).join('\n') +
     '\n\n重要：只輸出純 JSON。';

@@ -1,0 +1,608 @@
+{
+  "phase1": {
+    "model": "Claude Haiku 4.5",
+    "time_ms": 116449,
+    "cost": 0.0698632,
+    "rounds": 2,
+    "search_count": 4,
+    "laws_found": [
+      "B0000001-215",
+      "B0000001-227-1",
+      "B0000001-196",
+      "B0000001-217",
+      "B0000001-220",
+      "B0000001-223",
+      "B0000001-191-2",
+      "B0000001-961",
+      "B0000001-946"
+    ],
+    "input_tokens": 23869,
+    "output_tokens": 12692,
+    "reasoning_summary": "本案被告王建宏駕駛自小客車左轉未讓直行車先行，違反道交安全規則§102(1)(7)，依民法§191-2條（動力車輛駕駛人責任）應負損害賠償責任。被告已自認肇事，車鑑定會認定陳美玲無肇事因素，排除過失相抵。各項損害均有診斷證明書、薪資證明、醫院收據等充分證據支持：醫療費41,550元、交通費13,300元、不能工作損失156,000元（3個月）、機車修復費12,850元、精神慰撫金200,000元。對方若質疑金額，應依損害性質逐一反駁：工作損失應計3個月（非2個月）係因診斷記載5個月復健及患者自述；精神慰撫金應達200,000元（非50,000元）係因傷勢涉及多處創傷及後遺症、情節重大。",
+    "per_issue_analysis": [
+      {
+        "issue_id": "Fc6FVvy_z9PPhZrpDUi2a",
+        "chosen_basis": "民法第191-2條（動力車輛駕駛人責任）、備位：民法第184條第2項（違反保護他人之法律）",
+        "key_law_ids": [
+          "B0000001-191-2",
+          "B0000001-184"
+        ],
+        "element_mapping": "構成要件：(1)王建宏駕駛自小客車——事實明確；(2)使用中加損害——左轉碰撞機車，陳美玲受傷；(3)因果關係——左轉未讓直行車→碰撞→身體傷害，因果關係直接；(4)被告防止注意——被告未盡防止損害之注意，違反交通規則左轉未讓直行車先行。被告已自認肇事責任，陳美玲無肇事因素（車鑑定會認定），排除過失相抵（民法217條）。",
+        "defense_response": "對方可能主張應過失相抵，但車鑑定會已認定陳美玲無肇事因素，此抗辯應予排除。被告已自認肇事，僅爭執損害金額，不爭執肇事責任，故本爭點應無太大困難。"
+      },
+      {
+        "issue_id": "cI0e8dHW93MIG63geTjZb",
+        "chosen_basis": "民法第193條第1項（身體侵害導致增加生活上之需要）、附則：民法第213條（回復原狀所必要費用）",
+        "key_law_ids": [
+          "B0000001-193",
+          "B0000001-213"
+        ],
+        "element_mapping": "構成要件：(1)不法侵害他人身體或健康——王建宏碰撞導致陳美玲受傷（左側鎖骨骨折、左膝挫傷、全身多處擦挫傷、頭部外傷）；(2)因此增加生活上之需要——診斷證明書明確記載傷勢，必然產生醫療費用；(3)費用必要性與合理性——41,550元為臺北市立聯合醫院仁愛院區實際收費，有醫療專業支持，無不必要或過度檢查用藥之證據。根據§213條，「因回復原狀而應給付金錢者」應予認可。",
+        "defense_response": "對方可能主張請求金額過高，但無具體證據否定各項費用的必要性。若對方質疑個別項目，應提供醫院收據逐一說明（如掛號費、檢查費、藥費、住院費等）。法律上§193條明確規定身體侵害所衍生的必要費用均應賠償，不因保險給付而減免。41,550元應予認可。"
+      },
+      {
+        "issue_id": "1JGurg0TgVmt8hoiXOT_5",
+        "chosen_basis": "民法第193條第1項（身體侵害導致增加生活上之需要）、附則：民法第213條、民法第216條（所失利益）",
+        "key_law_ids": [
+          "B0000001-193",
+          "B0000001-213",
+          "B0000001-216"
+        ],
+        "element_mapping": "構成要件：(1)不法侵害身體或健康——同上；(2)因此增加生活上之需要——陳美玲因傷勢需要定期到醫院接受治療及復健（自113年10月5日至114年3月28日，共5個月）；(3)交通費用必要性——就醫、復健往返所需交通費用屬必要支出，不能避免；(4)金額合理性——13,300元÷5個月≈2,660元/月，或按就診次數計算，應屬合理。根據§213條「因回復原狀而應給付金錢者，自損害發生時起，加給利息」及§216條，所失利益涵蓋交通費用。",
+        "defense_response": "對方可能主張金額過高，但應提供具體的就診次數、交通方式（大眾運輸或計程車）及費用明細。初診+定期復健至少10-15次，合理交通費用應在13,000-14,000元間。若對方質疑應以「日常交通」標準計算，應區分：日常交通vs醫療必要交通，後者應由加害人負擔。"
+      },
+      {
+        "issue_id": "ez6o71RTI747ET9lSSeRl",
+        "chosen_basis": "民法第193條第1項（喪失或減少勞動能力）、附則：民法第216條（所失利益）",
+        "key_law_ids": [
+          "B0000001-193",
+          "B0000001-216"
+        ],
+        "element_mapping": "構成要件：(1)不法侵害身體或健康——同上；(2)因此喪失或減少勞動能力——診斷證明書明確記載「患者自述因傷勢導致無法正常工作3個月」，醫師囑言建議休養8週，實際請假記錄自113年10月5日至114年1月5日計92日（約3個月）；(3)所失利益的計算——陳美玲為資深平面設計師，在職及薪資證明顯示事故前6個月平均月薪約52,000元（推導自156,000÷3），因傷3個月無法工作損失=52,000×3=156,000元；(4)可預期性——依通常情形，平面設計師因多處創傷（左鎖骨骨折、左膝受傷）需要3個月恢復期，屬於可預期之損害。",
+        "defense_response": "對方可能主張應以2個月計算，理由可能為：(a)醫囑8週（≈56天）即為恢復期；(b)患者2個月後可部分工作。我方反駁策略：(1)醫囑8週僅為基本恢復期，不代表已能恢復工作能力；(2)診斷證明書第二份明確記載自12月2日至3月28日仍在接受「復健治療」，長期復健說明傷勢持續影響；(3)患者自述「無法正常工作3個月」為患者對自身能力恢復的直接陳述；(4)實際請假記錄92日也支持3個月計算；(5)平面設計師工作特性（需要精細手指操作、肩膀穩定性），左鎖骨骨折及左膝損傷影響甚鉅，不能在8周內恢復。156,000元應予支持。"
+      },
+      {
+        "issue_id": "xbkEbsTi6Fr_Iy1zG_A6w",
+        "chosen_basis": "民法第196條（不法毀損他人之物），附則：民法第213條、民法第215條",
+        "key_law_ids": [
+          "B0000001-196",
+          "B0000001-213",
+          "B0000001-215"
+        ],
+        "element_mapping": "構成要件：(1)不法毀損他人之物——王建宏碰撞陳美玲機車，導致機車受損；(2)物因毀損所減少之價額——修復費用12,850元為機車恢復原狀所必要；(3)修復費用合理性——應提供修廠估價單、發票及修復清單，證明12,850元為實際必要修復費用。根據§196條，賠償額以「減少之價額」計算，即修復費或現值差額中較低者。§213條「因回復原狀而應給付金錢者」亦支持此請求；§215條「不能回復原狀或回復顯有重大困難者，應以金錢賠償其損害」為補充。",
+        "defense_response": "對方可能主張修復費用過高或超過車輛現值。我方應：(1)提供修廠發票及修復清單，逐一說明各項修復費用（烤漆、鈑金、零件等）；(2)證明車輛係可修復狀態，非全損；(3)若對方質疑修廠報價，可提供其他修廠報價對照；(4)強調§196條標準乃「減少之價額」，修復費用即為實際減損。12,850元應予認可（需附修廠發票證明）。"
+      },
+      {
+        "issue_id": "PCjbszyB_MK2N9quzY7Gn",
+        "chosen_basis": "民法第195條第1項（不法侵害他人身體、健康，被害人雖非財產損害亦得請求賠償相當金額）",
+        "key_law_ids": [
+          "B0000001-195",
+          "B0000001-216"
+        ],
+        "element_mapping": "構成要件：(1)不法侵害他人身體、健康——王建宏碰撞導致陳美玲左側鎖骨骨折、左膝挫傷、全身多處擦挫傷、頭部外傷；(2)情節重大——傷勢涉及多個身體部位，其中左側鎖骨骨折需要手術，非輕傷；醫囑建議休養8週，實際復健5個月；診斷證明書記載「左肩關節活動度受限」及「韌帶損傷後遺症」，暗示可能有永久性影響；(3)非財產上損害——身體創傷導致身心痛苦、恐懼、生活品質下降；(4)金額合理性——200,000元為合理範圍，係依傷勢嚴重程度、恢復期長度、後遺症可能性、工作能力喪失期間等因素綜合評估。",
+        "defense_response": "對方主張50,000元，差距達300%。我方應從多角度論述200,000元的合理性：(1)傷勢嚴重性：多處創傷（頭、肩、膝）遠超輕傷標準（輕傷通常30,000-50,000元）；(2)恢復期長度：5個月復健期說明傷勢影響持久；(3)後遺症風險：診斷書提及「活動度受限」、「韌帶損傷後遺症」，不排除永久性影響；(4)與實損相當：實損總計~224,000元，精神慰撫金200,000元佔實損89%，此比例符合「情節重大」之要求；(5)職業特性：平面設計師需要手臂靈活度，肩膀損傷影響職業前景；(6)判決參考標準：類似案件（多處創傷+長期復健）之精神慰撫金通常100,000-250,000元，本案200,000元在此範圍內且偏保守。對方若堅持50,000元，應予駁回，或至少應提高至100,000元以上。"
+      }
+    ],
+    "supplemented_laws": [
+      "民法 第 215 條",
+      "民法 第 227-1 條",
+      "民法 第 196 條",
+      "民法 第 217 條",
+      "民法 第 220 條",
+      "民法 第 223 條",
+      "民法 第 191-2 條",
+      "民法 第 961 條",
+      "民法 第 946 條"
+    ]
+  },
+  "phase2": {
+    "Gemini 2.5 Flash": [
+      {
+        "total_time_ms": 32591,
+        "estimated_cost": 0.004971,
+        "input_tokens": 5580,
+        "output_tokens": 6890,
+        "json_parse_ok": true,
+        "validation_pass": true,
+        "validation_errors": [],
+        "num_claims": 19,
+        "num_sections": 9,
+        "issue_coverage": 6,
+        "dispute_id_correct": 24,
+        "sections": [
+          {
+            "id": "section_1",
+            "section": "壹、前言",
+            "subsection": null,
+            "dispute_id": null,
+            "legal_basis": [],
+            "relevant_law_ids": [],
+            "relevant_file_ids": [
+              "K-wSajc1LWxlv0LIrmQCY",
+              "lkI_QOFJByfHfwbcOZF6c"
+            ],
+            "legal_reasoning": "本案背景說明，確立訴訟目的。"
+          },
+          {
+            "id": "section_2_1",
+            "section": "貳、事實及理由",
+            "subsection": "一、被告應負全部損害賠償責任",
+            "dispute_id": "Fc6FVvy_z9PPhZrpDUi2a",
+            "legal_basis": [
+              "B0000001-191-2",
+              "B0000001-184",
+              "B0000001-217"
+            ],
+            "relevant_law_ids": [
+              "B0000001-191-2",
+              "B0000001-184",
+              "B0000001-217"
+            ],
+            "relevant_file_ids": [
+              "K-wSajc1LWxlv0LIrmQCY",
+              "y8GUrBmVjHUW1I34HvRm5"
+            ],
+            "legal_reasoning": "以民法第191條之2作為主要的請求權基礎，並輔以第184條第2項之違反保護他人法律規定。強調被告已自認肇事且鑑定會排除原告過失，以確立被告完全責任。"
+          },
+          {
+            "id": "section_2_2",
+            "section": "貳、事實及理由",
+            "subsection": "二、醫療費用之請求",
+            "dispute_id": "cI0e8dHW93MIG63geTjZb",
+            "legal_basis": [
+              "B0000001-193",
+              "B0000001-213"
+            ],
+            "relevant_law_ids": [
+              "B0000001-193",
+              "B0000001-213"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "依民法第193條第1項及第213條請求醫療費用，強調其必要性與合理性，並以醫院收據證明，反駁對方無具體事證之質疑。"
+          },
+          {
+            "id": "section_2_3",
+            "section": "貳、事實及理由",
+            "subsection": "三、交通費用之請求",
+            "dispute_id": "1JGurg0TgVmt8hoiXOT_5",
+            "legal_basis": [
+              "B0000001-193",
+              "B0000001-213",
+              "B0000001-216"
+            ],
+            "relevant_law_ids": [
+              "B0000001-193",
+              "B0000001-213",
+              "B0000001-216"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "依民法第193條第1項及第213條請求交通費用，強調就醫復健的必要性，並計算月平均費用，反駁對方無具體事證之質疑。"
+          },
+          {
+            "id": "section_2_4",
+            "section": "貳、事實及理由",
+            "subsection": "四、不能工作損失之請求",
+            "dispute_id": "ez6o71RTI747ET9lSSeRl",
+            "legal_basis": [
+              "B0000001-193",
+              "B0000001-216"
+            ],
+            "relevant_law_ids": [
+              "B0000001-193",
+              "B0000001-216"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "P1fJOs5NDU-SFacOtuPZT",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "依民法第193條第1項及第216條請求不能工作損失，重點在於證明3個月期間的合理性，透過診斷證明、患者自述及職業特性來反駁對方僅限於2個月的主張。"
+          },
+          {
+            "id": "section_2_5",
+            "section": "貳、事實及理由",
+            "subsection": "五、機車修復費用之請求",
+            "dispute_id": "xbkEbsTi6Fr_Iy1zG_A6w",
+            "legal_basis": [
+              "B0000001-196",
+              "B0000001-213",
+              "B0000001-215"
+            ],
+            "relevant_law_ids": [
+              "B0000001-196",
+              "B0000001-213",
+              "B0000001-215"
+            ],
+            "relevant_file_ids": [
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "依民法第196條及第213條請求機車修復費用，強調其回復原狀的必要性及合理性，並提供發票作為證據，反駁對方無具體事證之質疑。"
+          },
+          {
+            "id": "section_2_6",
+            "section": "貳、事實及理由",
+            "subsection": "六、精神慰撫金之請求",
+            "dispute_id": "PCjbszyB_MK2N9quzY7Gn",
+            "legal_basis": [
+              "B0000001-195"
+            ],
+            "relevant_law_ids": [
+              "B0000001-195"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "依民法第195條第1項請求精神慰撫金，著重於傷勢的嚴重性、長期影響及對生活品質的損害，並引用判決參考標準支持20萬元之合理性，反駁對方主張之5萬元過低。"
+          },
+          {
+            "id": "section_3",
+            "section": "參、損害賠償計算",
+            "subsection": null,
+            "dispute_id": null,
+            "legal_basis": [],
+            "relevant_law_ids": [],
+            "relevant_file_ids": [
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "將各項請求金額明細化，並加總得出總求償金額。"
+          },
+          {
+            "id": "section_4",
+            "section": "肆、結論",
+            "subsection": null,
+            "dispute_id": null,
+            "legal_basis": [],
+            "relevant_law_ids": [],
+            "relevant_file_ids": [],
+            "legal_reasoning": "總結本案事實與法律依據，重申請求被告賠償全部損害，並明確訴之聲明。"
+          }
+        ]
+      },
+      {
+        "total_time_ms": 31191,
+        "estimated_cost": 0.0051553499999999995,
+        "input_tokens": 5581,
+        "output_tokens": 7197,
+        "json_parse_ok": true,
+        "validation_pass": true,
+        "validation_errors": [],
+        "num_claims": 19,
+        "num_sections": 9,
+        "issue_coverage": 6,
+        "dispute_id_correct": 24,
+        "sections": [
+          {
+            "id": "section_1",
+            "section": "壹、前言",
+            "subsection": null,
+            "dispute_id": null,
+            "legal_basis": [],
+            "relevant_law_ids": [],
+            "relevant_file_ids": [
+              "K-wSajc1LWxlv0LIrmQCY",
+              "y8GUrBmVjHUW1I34HvRm5",
+              "lkI_QOFJByfHfwbcOZF6c"
+            ],
+            "legal_reasoning": ""
+          },
+          {
+            "id": "section_2_1",
+            "section": "貳、事實及理由",
+            "subsection": "一、被告應負全部損害賠償責任",
+            "dispute_id": "Fc6FVvy_z9PPhZrpDUi2a",
+            "legal_basis": [
+              "B0000001-191-2",
+              "B0000001-184",
+              "B0000001-217"
+            ],
+            "relevant_law_ids": [
+              "B0000001-191-2",
+              "B0000001-184",
+              "B0000001-217"
+            ],
+            "relevant_file_ids": [
+              "K-wSajc1LWxlv0LIrmQCY",
+              "y8GUrBmVjHUW1I34HvRm5"
+            ],
+            "legal_reasoning": "以民法第191條之2作為動力車輛駕駛人責任之主要請求權基礎，備位請求權基礎為民法第184條第2項之違反保護他人之法律。因被告已自認肇事責任，且經鑑定原告無肇事因素，故無過失相抵之疑慮，被告需負完全賠償責任。"
+          },
+          {
+            "id": "section_2_2",
+            "section": "貳、事實及理由",
+            "subsection": "二、原告之醫療費用請求有據",
+            "dispute_id": "cI0e8dHW93MIG63geTjZb",
+            "legal_basis": [
+              "B0000001-193",
+              "B0000001-213"
+            ],
+            "relevant_law_ids": [
+              "B0000001-193",
+              "B0000001-213"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "民法第193條主要規範身體健康受損害時所增加之生活需要費用，而醫療費屬於此類。結合民法第213條回復原狀原則，只要是必要且合理的醫療支出，無論對造是否質疑金額高低，皆應賠償。本案有醫院收據佐證，故應獲支持。"
+          },
+          {
+            "id": "section_2_3",
+            "section": "貳、事實及理由",
+            "subsection": "三、原告之交通費用請求有據",
+            "dispute_id": "1JGurg0TgVmt8hoiXOT_5",
+            "legal_basis": [
+              "B0000001-193",
+              "B0000001-213",
+              "B0000001-216"
+            ],
+            "relevant_law_ids": [
+              "B0000001-193",
+              "B0000001-213",
+              "B0000001-216"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "交通費用雖非直接的醫療行為，但屬於因身體傷害而衍生的間接損失，可歸類為民法第193條第1項所稱『增加生活上之需要』。其計算上應考量合理性，本案中原告定期就醫及復健，此金額應屬合理所失利益，故可依民法第213條及第216條請求。"
+          },
+          {
+            "id": "section_2_4",
+            "section": "貳、事實及理由",
+            "subsection": "四、原告之不能工作損失請求有據",
+            "dispute_id": "ez6o71RTI747ET9lSSeRl",
+            "legal_basis": [
+              "B0000001-193",
+              "B0000001-216"
+            ],
+            "relevant_law_ids": [
+              "B0000001-193",
+              "B0000001-216"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "P1fJOs5NDU-SFacOtuPZT",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "不能工作損失屬於未來所失利益，可依民法第193條第1項及第216條請求。計算期間應參考診斷證明書、恢復情況及實際工作能力受損期間，本案中患者自述與實際請假相符，且考量工作性質，3個月的恢復期具有合理性，故應以3個月計算。"
+          },
+          {
+            "id": "section_2_5",
+            "section": "貳、事實及理由",
+            "subsection": "五、原告之財物損害（機車修復費）請求有據",
+            "dispute_id": "xbkEbsTi6Fr_Iy1zG_A6w",
+            "legal_basis": [
+              "B0000001-196",
+              "B0000001-213",
+              "B0000001-215"
+            ],
+            "relevant_law_ids": [
+              "B0000001-196",
+              "B0000001-213",
+              "B0000001-215"
+            ],
+            "relevant_file_ids": [
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "機車修復費屬於財物損害，依民法第196條規定請求。修復費用以回復原狀為原則，故依民法第213條請求。若修復費用超過現值，應以現值為限，但本案修復費用合理，故可主張全部修復費用為減少之價額。需附上修復發票與清單證明其必要性與合理性。"
+          },
+          {
+            "id": "section_2_6",
+            "section": "貳、事實及理由",
+            "subsection": "六、原告之精神慰撫金請求有據",
+            "dispute_id": "PCjbszyB_MK2N9quzY7Gn",
+            "legal_basis": [
+              "B0000001-195"
+            ],
+            "relevant_law_ids": [
+              "B0000001-195"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "精神慰撫金（非財產上損害）依民法第195條第1項請求。其數額應由法院依職權斟酌當事人之一切情狀，如受傷程度、影響生活及工作、社會地位、財產狀況等。本案中原告有多處重創及長期復健，且有後遺症風險，其職業亦受影響，故200,000元之請求具有合理性與必要性，並非漫無標準。應強調傷勢的嚴重性及對生活品質的實質影響來支持該金額。"
+          },
+          {
+            "id": "section_3",
+            "section": "參、損害賠償計算",
+            "subsection": null,
+            "dispute_id": null,
+            "legal_basis": [],
+            "relevant_law_ids": [],
+            "relevant_file_ids": [
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "損害賠償之計算應逐項列明並提供計算依據，以符合具體性原則。此段落將所有已主張之損害金額彙總，明確指出總請求金額，作為訴之聲明依據，並引用證據檔案支持各項計算。"
+          },
+          {
+            "id": "section_4",
+            "section": "肆、結論",
+            "subsection": null,
+            "dispute_id": null,
+            "legal_basis": [],
+            "relevant_law_ids": [],
+            "relevant_file_ids": [],
+            "legal_reasoning": "結論段落總結案件核心事實與法律主張，重申被告的應負責任，並再次強調原告請求的合法性與合理性，禮貌性地請求法院支持其訴訟聲明。"
+          }
+        ]
+      },
+      {
+        "total_time_ms": 31434,
+        "estimated_cost": 0.00460515,
+        "input_tokens": 5581,
+        "output_tokens": 6280,
+        "json_parse_ok": true,
+        "validation_pass": true,
+        "validation_errors": [],
+        "num_claims": 16,
+        "num_sections": 9,
+        "issue_coverage": 6,
+        "dispute_id_correct": 21,
+        "sections": [
+          {
+            "id": "section_1",
+            "section": "壹、前言",
+            "subsection": null,
+            "dispute_id": null,
+            "legal_basis": [],
+            "relevant_law_ids": [],
+            "relevant_file_ids": [
+              "K-wSajc1LWxlv0LIrmQCY",
+              "y8GUrBmVjHUW1I34HvRm5",
+              "lkI_QOFJByfHfwbcOZF6c"
+            ],
+            "legal_reasoning": ""
+          },
+          {
+            "id": "section_2_1",
+            "section": "貳、事實及理由",
+            "subsection": "一、被告應負全部損害賠償責任",
+            "dispute_id": "Fc6FVvy_z9PPhZrpDUi2a",
+            "legal_basis": [
+              "B0000001-191-2",
+              "B0000001-184"
+            ],
+            "relevant_law_ids": [
+              "B0000001-191-2",
+              "B0000001-184",
+              "B0000001-217"
+            ],
+            "relevant_file_ids": [
+              "K-wSajc1LWxlv0LIrmQCY",
+              "y8GUrBmVjHUW1I34HvRm5"
+            ],
+            "legal_reasoning": "以民法第191條之2動力車輛駕駛人責任為請求權基礎，輔以民法第184條第2項違反保護他人之法律。強調被告已自認肇事且車鑑會排除原告過失因素，藉此排除對方的過失相抵抗辯。"
+          },
+          {
+            "id": "section_2_2",
+            "section": "貳、事實及理由",
+            "subsection": "二、醫療費用之請求",
+            "dispute_id": "cI0e8dHW93MIG63geTjZb",
+            "legal_basis": [
+              "B0000001-193",
+              "B0000001-213"
+            ],
+            "relevant_law_ids": [
+              "B0000001-193",
+              "B0000001-213"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "主張醫療費用為身體侵害所增加之生活需要，且有憑證支持其必要性與合理性。強調被告若質疑，應提出具體證據反駁，而非空泛主張過高。"
+          },
+          {
+            "id": "section_2_3",
+            "section": "貳、事實及理由",
+            "subsection": "三、交通費用之請求",
+            "dispute_id": "1JGurg0TgVmt8hoiXOT_5",
+            "legal_basis": [
+              "B0000001-193",
+              "B0000001-213",
+              "B0000001-216"
+            ],
+            "relevant_law_ids": [
+              "B0000001-193",
+              "B0000001-213",
+              "B0000001-216"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "將交通費用涵攝於民法第193條所稱「增加生活上之需要」以及第213條回復原狀所必需之費用，並強調此為就醫必要之支出，與日常交通不同。"
+          },
+          {
+            "id": "section_2_4",
+            "section": "貳、事實及理由",
+            "subsection": "四、不能工作損失之請求",
+            "dispute_id": "ez6o71RTI747ET9lSSeRl",
+            "legal_basis": [
+              "B0000001-193",
+              "B0000001-216"
+            ],
+            "relevant_law_ids": [
+              "B0000001-193",
+              "B0000001-216"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "P1fJOs5NDU-SFacOtuPZT",
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "反駁對方僅以醫師建議休養週數計算工作損失，強調實際工作能力喪失期間應考量傷勢影響程度、復健期長短及工作性質。以診斷證明書中復健紀錄與實際請假天數支持3個月之請求。"
+          },
+          {
+            "id": "section_2_5",
+            "section": "貳、事實及理由",
+            "subsection": "五、機車修復費用之請求",
+            "dispute_id": "xbkEbsTi6Fr_Iy1zG_A6w",
+            "legal_basis": [
+              "B0000001-196",
+              "B0000001-213",
+              "B0000001-215"
+            ],
+            "relevant_law_ids": [
+              "B0000001-196",
+              "B0000001-213",
+              "B0000001-215"
+            ],
+            "relevant_file_ids": [
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": "援引民法第196條作為核心請求權基礎，並輔以第213條及第215條，強調修復費用即為物毀損所減少之價額，且有憑證佐證其合理性。"
+          },
+          {
+            "id": "section_2_6",
+            "section": "貳、事實及理由",
+            "subsection": "六、精神慰撫金之請求",
+            "dispute_id": "PCjbszyB_MK2N9quzY7Gn",
+            "legal_basis": [
+              "B0000001-195"
+            ],
+            "relevant_law_ids": [
+              "B0000001-195"
+            ],
+            "relevant_file_ids": [
+              "kjjKH6P7fGLFFDZIvwz-q",
+              "q4Olx2tCQd4vBl19M6ntU",
+              "P1fJOs5NDU-SFacOtuPZT"
+            ],
+            "legal_reasoning": "以民法第195條第1項為請求權基礎，詳述原告傷勢的嚴重性、治療與復健期間、可能後遺症，以及對其職業與生活造成的負面影響，以支持20萬元精神慰撫金的合理性，反駁被告5萬元的低估主張。"
+          },
+          {
+            "id": "section_3",
+            "section": "參、損害賠償計算",
+            "subsection": null,
+            "dispute_id": null,
+            "legal_basis": [],
+            "relevant_law_ids": [],
+            "relevant_file_ids": [
+              "q4Olx2tCQd4vBl19M6ntU"
+            ],
+            "legal_reasoning": ""
+          },
+          {
+            "id": "section_4",
+            "section": "肆、結論",
+            "subsection": null,
+            "dispute_id": null,
+            "legal_basis": [],
+            "relevant_law_ids": [],
+            "relevant_file_ids": [],
+            "legal_reasoning": ""
+          }
+        ]
+      }
+    ]
+  }
+}

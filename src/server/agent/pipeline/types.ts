@@ -82,10 +82,6 @@ export interface StrategySection {
 export interface StrategyOutput {
   claims: Claim[];
   sections: StrategySection[];
-  claim_coverage_check?: {
-    uncovered_their_claims: string[];
-    note: string;
-  };
 }
 
 // ── Found Law ──

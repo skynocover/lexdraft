@@ -1,5 +1,5 @@
 import type { Citation } from '../../client/stores/useBriefStore';
-import type { AIEnv } from './aiClient';
+import { getGatewayBaseUrl, type AIEnv } from './aiClient';
 import { nanoid } from 'nanoid';
 import { stripFFFD } from '../lib/sanitize';
 
@@ -187,7 +187,7 @@ export const callClaudeWithCitations = async (
   };
 
   // Route through Cloudflare AI Gateway → Anthropic
-  const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/anthropic/v1/messages`;
+  const gatewayUrl = `${getGatewayBaseUrl(env)}/anthropic/v1/messages`;
 
   const response = await fetch(gatewayUrl, {
     method: 'POST',
@@ -274,7 +274,7 @@ export const callClaude = async (
   userMessage: string,
   maxTokens = 4096,
 ): Promise<{ content: string; usage: ClaudeUsage; truncated: boolean }> => {
-  const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/anthropic/v1/messages`;
+  const gatewayUrl = `${getGatewayBaseUrl(env)}/anthropic/v1/messages`;
 
   const body = JSON.stringify({
     model: 'claude-haiku-4-5-20251001',
@@ -400,7 +400,7 @@ export const callClaudeToolLoop = async (
   env: AIEnv,
   options: ClaudeToolLoopOptions,
 ): Promise<ClaudeToolLoopResponse> => {
-  const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/anthropic/v1/messages`;
+  const gatewayUrl = `${getGatewayBaseUrl(env)}/anthropic/v1/messages`;
 
   const body = {
     model: options.model,
