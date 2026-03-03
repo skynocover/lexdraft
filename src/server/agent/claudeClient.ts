@@ -142,8 +142,11 @@ interface DocumentChunkMap {
   chunks: string[];
 }
 
+const CITATIONS_MODEL = 'claude-sonnet-4-6';
+const PLANNER_MODEL = 'claude-haiku-4-5-20251001';
+
 /**
- * Call Claude Haiku 4.5 with Citations API enabled (custom content format),
+ * Call Claude with Citations API enabled (custom content format),
  * routed through Cloudflare AI Gateway for unified billing.
  */
 export const callClaudeWithCitations = async (
@@ -176,7 +179,7 @@ export const callClaudeWithCitations = async (
   });
 
   const body = {
-    model: 'claude-haiku-4-5-20251001',
+    model: CITATIONS_MODEL,
     max_tokens: 4096,
     messages: [
       {
@@ -265,7 +268,7 @@ export const callClaudeWithCitations = async (
 };
 
 /**
- * Call Claude Haiku 4.5 without citations (for Planner sub-agent).
+ * Call Claude without citations (for Planner sub-agent).
  * Routed through Cloudflare AI Gateway.
  */
 export const callClaude = async (
@@ -277,7 +280,7 @@ export const callClaude = async (
   const gatewayUrl = `${getGatewayBaseUrl(env)}/anthropic/v1/messages`;
 
   const body = JSON.stringify({
-    model: 'claude-haiku-4-5-20251001',
+    model: PLANNER_MODEL,
     max_tokens: maxTokens,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],

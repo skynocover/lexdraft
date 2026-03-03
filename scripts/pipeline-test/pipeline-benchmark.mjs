@@ -31,7 +31,7 @@ const getArg = (name, fallback) => {
 const NUM_RUNS = parseInt(getArg('--runs', '3'), 10);
 const CASE_ID = getArg('--case-id', 'z4keVNfyuKvL68Xg1qPl2');
 const BASE_URL = getArg('--url', 'http://localhost:5173');
-const CHAT_MESSAGE = '請幫我撰寫書狀';
+const CHAT_MESSAGE = getArg('--message', '請幫我撰寫準備書狀');
 
 // Load auth token
 const loadAuthToken = () => {
