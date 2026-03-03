@@ -30,6 +30,7 @@ import type {
   ReasoningStrategyOutput,
   FetchedLaw,
   PerIssueAnalysis,
+  LegalIssue,
 } from './types';
 import type { PipelineContext } from '../briefPipeline';
 import type { ContextStore } from '../contextStore';
@@ -191,6 +192,7 @@ ${fileText}
 ${store.legalIssues.map((issue, i) => `  爭點${i + 1}（${issue.title}）: "${issue.id}"`).join('\n')}
 
 請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。
+- 每個非前言/結論的 section 必須填寫 subsection（格式：一、描述性標題），依序編號（一、二、三…）。前言和結論的 subsection 為 null
 - 每個 section 的 relevant_law_ids 應依照[逐爭點分析]中各爭點的 key_law_ids 分配
 - 每個內容段落（非前言/結論）的 relevant_file_ids 必須列出該段撰寫時需要引用的檔案 ID，確保 Writer 能產生引用標記。根據段落主題從[案件檔案]中選擇對應的檔案
 - 每個內容段落的 dispute_id 必須從上方對照表原封不動複製，前言和結論為 null
@@ -551,18 +553,94 @@ const tryParse = (text: string): ReasoningStrategyOutput | null => {
 
 // ── Programmatic Enrichment (補齊 AI 偷懶填空的欄位) ──
 
+const CHINESE_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+
+/**
+ * Levenshtein distance between two strings.
+ * Used to fuzzy-match corrupted dispute_ids from Gemini output.
+ */
+const levenshtein = (a: string, b: string): number => {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+};
+
+/**
+ * Try to find the closest valid issue ID for a corrupted dispute_id.
+ * Returns the match if Levenshtein distance ≤ 3 (nanoid is 21 chars, so 3 edits is ~14% error).
+ */
+const fuzzyMatchDisputeId = (corrupted: string, validIds: Set<string>): string | null => {
+  if (validIds.has(corrupted)) return null; // already valid
+
+  // Strip whitespace that Gemini sometimes inserts
+  const stripped = corrupted.replace(/\s/g, '');
+  if (validIds.has(stripped)) return stripped;
+
+  let bestId: string | null = null;
+  let bestDist = Infinity;
+  for (const id of validIds) {
+    const dist = levenshtein(stripped, id);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestId = id;
+    }
+  }
+  return bestDist <= 3 ? bestId : null;
+};
+
+/** Fix corrupted dispute_ids in an array of items (sections or claims). Returns count of fixes. */
+const fixCorruptedDisputeIds = (
+  items: Array<{ dispute_id?: string | null }>,
+  validIds: Set<string>,
+  label: string,
+): number => {
+  let fixed = 0;
+  for (const item of items) {
+    if (item.dispute_id && !validIds.has(item.dispute_id)) {
+      const match = fuzzyMatchDisputeId(item.dispute_id, validIds);
+      if (match) {
+        console.warn(`[enrichment] fixed ${label} dispute_id: "${item.dispute_id}" → "${match}"`);
+        item.dispute_id = match;
+        fixed++;
+      }
+    }
+  }
+  return fixed;
+};
+
 const enrichStrategyOutput = (
   output: ReasoningStrategyOutput,
   perIssueAnalysis: PerIssueAnalysis[],
+  legalIssues: LegalIssue[] = [],
 ): void => {
   const { claims, sections } = output;
   const stats = {
+    disputeIdFixed: 0,
     sectionDisputeFromClaim: 0,
     claimDisputeFromSection: 0,
     claimConsistency: 0,
     legalBasis: 0,
     lawIds: 0,
+    subsection: 0,
   };
+
+  // 0. 修正 corrupted dispute_id（Gemini 經常抄錯 nanoid）
+  if (legalIssues.length > 0) {
+    const validIds = new Set(legalIssues.map((i) => i.id));
+    stats.disputeIdFixed += fixCorruptedDisputeIds(sections, validIds, 'section');
+    stats.disputeIdFixed += fixCorruptedDisputeIds(claims, validIds, 'claim');
+  }
 
   // 1. 修正 section dispute_id — 從其 claims 推導
   for (const sec of sections) {
@@ -628,6 +706,30 @@ const enrichStrategyOutput = (
     if (sec.relevant_law_ids.length > before) stats.lawIds++;
   }
 
+  // 6. 填 subsection（有 dispute_id 但沒 subsection 的段落，從爭點標題推導）
+  if (legalIssues.length > 0) {
+    const issueMap = new Map(legalIssues.map((i) => [i.id, i]));
+    // Group sections by parent section name to assign numbering
+    const parentCounters: Record<string, number> = {};
+
+    for (const sec of sections) {
+      if (sec.subsection || !sec.dispute_id) continue;
+
+      const issue = issueMap.get(sec.dispute_id);
+      if (!issue) continue;
+
+      const parent = sec.section;
+      const idx = parentCounters[parent] || 0;
+      const num = CHINESE_NUMS[idx] || `${idx + 1}`;
+
+      // Truncate dispute title to keep subsection concise (max 15 chars)
+      const title = issue.title.length > 15 ? issue.title.slice(0, 15) : issue.title;
+      sec.subsection = `${num}、${title}`;
+      parentCounters[parent] = idx + 1;
+      stats.subsection++;
+    }
+  }
+
   // Summary log
   const enrichedCount = sections.filter((s) => s.relevant_law_ids.length > 0).length;
   const totalLawIds = sections.reduce((sum, s) => sum + s.relevant_law_ids.length, 0);
@@ -635,11 +737,13 @@ const enrichStrategyOutput = (
 
   console.log(
     `[enrichment] ${totalPatched} patches applied — ` +
+      `dispute_id_fixed: ${stats.disputeIdFixed}, ` +
       `sec.dispute_id←claim: ${stats.sectionDisputeFromClaim}, ` +
       `claim.dispute_id←sec: ${stats.claimDisputeFromSection}, ` +
       `claim↔sec consistency: ${stats.claimConsistency}, ` +
       `legal_basis: ${stats.legalBasis}, ` +
-      `law_ids: ${stats.lawIds}`,
+      `law_ids: ${stats.lawIds}, ` +
+      `subsection: ${stats.subsection}`,
   );
   console.log(
     `[enrichment] result: ${enrichedCount}/${sections.length} sections have law_ids (${totalLawIds} total)`,
@@ -680,9 +784,10 @@ type JsonOutputFn = (
 const tryParseAndEnrich = (
   text: string,
   perIssueAnalysis: PerIssueAnalysis[],
+  legalIssues: LegalIssue[] = [],
 ): ReasoningStrategyOutput | null => {
   const output = tryParse(text);
-  if (output) enrichStrategyOutput(output, perIssueAnalysis);
+  if (output) enrichStrategyOutput(output, perIssueAnalysis, legalIssues);
   return output;
 };
 
@@ -699,7 +804,7 @@ const callJsonAndParse = async (
     `[reasoningStrategy] JSON output: truncated=${resp.truncated}, output_tokens=${resp.usage.output_tokens}, text_length=${resp.content.length}`,
   );
 
-  let output = tryParseAndEnrich(resp.content, perIssueAnalysis);
+  let output = tryParseAndEnrich(resp.content, perIssueAnalysis, legalIssues);
 
   // Retry on parse failure
   if (!output) {
@@ -711,7 +816,7 @@ const callJsonAndParse = async (
         '\n\n重要：只輸出純 JSON，不要加 markdown code block、換行解釋或任何其他文字。確保 JSON string 值中沒有未轉義的換行字元。';
 
     const retryResp = await callJsonOutput(retryMsg);
-    output = tryParseAndEnrich(retryResp.content, perIssueAnalysis);
+    output = tryParseAndEnrich(retryResp.content, perIssueAnalysis, legalIssues);
 
     // If retry also truncated and parse still failed, try once more with stronger constraint
     if (!output && retryResp.truncated) {
@@ -721,7 +826,7 @@ const callJsonAndParse = async (
         TRUNCATION_RETRY_SUFFIX +
         '\n- 每個 string 欄位盡量精簡，避免冗餘描述\n- 如果有超過 8 個 sections，合併相似段落';
       const compactResp = await callJsonOutput(compactMsg);
-      output = tryParseAndEnrich(compactResp.content, perIssueAnalysis);
+      output = tryParseAndEnrich(compactResp.content, perIssueAnalysis, legalIssues);
     }
 
     if (!output) {
@@ -747,7 +852,21 @@ const callJsonAndParse = async (
   const fixResp = await callJsonOutput(fixMsg);
 
   const fixOutput = tryParse(fixResp.content);
-  if (fixOutput) enrichStrategyOutput(fixOutput, perIssueAnalysis);
+  if (fixOutput) {
+    enrichStrategyOutput(fixOutput, perIssueAnalysis, legalIssues);
 
-  return fixOutput || output;
+    // Re-validate the fix attempt
+    const fixValidation = validateStrategyOutput(fixOutput, legalIssues);
+    if (fixValidation.valid) return fixOutput;
+
+    // Fix attempt still invalid — enrichment may have repaired dispute_ids,
+    // so use it if it's better than the original (fewer errors)
+    console.warn(
+      `[reasoningStrategy] Fix attempt still has ${fixValidation.errors.length} errors (original had ${validation.errors.length})`,
+    );
+    if (fixValidation.errors.length < validation.errors.length) return fixOutput;
+  }
+
+  // Fall back to the original enriched output (enrichment's fuzzy match may have fixed it)
+  return output;
 };

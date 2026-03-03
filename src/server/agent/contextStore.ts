@@ -113,7 +113,7 @@ export class ContextStore {
    * 3-tier law fallback for a section:
    * 1. relevant_law_ids (from enrichment) → use those
    * 2. perIssueAnalysis.key_law_ids for matching dispute → fallback
-   * 3. ALL found laws → ultimate fallback (intro/conclusion or when above are empty)
+   * 3. dispute_id=null (intro/conclusion) → empty; content sections → ALL found laws as safety net
    */
   private resolveLawsForSection = (
     section: { relevant_law_ids: string[]; dispute_id?: string | null },
@@ -140,9 +140,14 @@ export class ContextStore {
       }
     }
 
-    // Tier 3: give all found laws (for intro/conclusion or when no dispute mapping)
+    // Tier 3: intro/conclusion (dispute_id=null) → no laws needed;
+    // content sections that missed tier 1+2 → all laws as safety net
+    if (!section.dispute_id) {
+      console.warn(`[contextStore] law fallback tier-3: dispute=null (intro/conclusion) → 0 laws`);
+      return [];
+    }
     console.warn(
-      `[contextStore] law fallback tier-3: dispute=${section.dispute_id || 'null'} → ALL ${allLaws.length} laws`,
+      `[contextStore] law fallback tier-3: dispute=${section.dispute_id} → ALL ${allLaws.length} laws`,
     );
     return allLaws;
   };

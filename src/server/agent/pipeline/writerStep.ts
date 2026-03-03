@@ -147,9 +147,8 @@ export const writeSection = async (
 ): Promise<Paragraph> => {
   const documents: ClaudeDocument[] = [];
 
-  // ── Focus layer: relevant files (fallback to ALL files if strategy didn't specify) ──
-  const effectiveFileIds =
-    writerCtx.fileIds.length > 0 ? writerCtx.fileIds : [...fileContentMap.keys()];
+  // ── Focus layer: relevant files (no fallback — intro/conclusion don't need all files) ──
+  const effectiveFileIds = writerCtx.fileIds;
 
   for (const fileId of effectiveFileIds) {
     const file = fileContentMap.get(fileId);

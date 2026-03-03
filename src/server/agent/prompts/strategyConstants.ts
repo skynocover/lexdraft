@@ -70,6 +70,8 @@ export const CLAIMS_RULES = `═══ Claims 規則 ═══
 export const SECTION_RULES = `═══ 段落規則 ═══
 
 - 每個段落需要有完整的論證框架（大前提—小前提—結論）
+- section：大段名稱（如「壹、前言」「貳、事實及理由」「參、結論」）
+- subsection：子段標題（如「一、侵權行為之成立」「二、醫療費用」）。前言和結論為 null，其餘每個段落必須填寫 subsection，格式為「一、描述性標題」「二、描述性標題」，依序編號
 - legal_basis：引用的法條 ID（必須是已查到全文的法條，且必須在 relevant_law_ids 中）
 - fact_application：事實如何涵攝到法律要件
 - conclusion：本段小結論
@@ -85,10 +87,12 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
 
 段落 ID 命名規則：前言 section_1、第一個子段落 section_2_1、第二個子段落 section_2_2、損害賠償 section_3（若有）、結論 section_last。子段落 ID 格式為 section_{大段號}_{子段號}。
 
+重要：前言和結論不需要 subsection，其餘每個段落必須填寫 subsection（格式：一、描述性標題）。
+
 {
   "claims": [
     {
-      "id": "their_claim_1",
+      "id": "their_claim_dispute1",
       "side": "theirs",
       "claim_type": "primary",
       "statement": "對方主張的描述",
@@ -97,19 +101,29 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
       "responds_to": null
     },
     {
-      "id": "our_claim_1",
+      "id": "our_claim_dispute1_primary",
+      "side": "ours",
+      "claim_type": "primary",
+      "statement": "我方主要主張",
+      "assigned_section": "section_2_1",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "responds_to": null
+    },
+    {
+      "id": "our_claim_dispute1_rebuttal1",
       "side": "ours",
       "claim_type": "rebuttal",
       "statement": "反駁對方主張的一句話描述",
       "assigned_section": "section_2_1",
       "dispute_id": "（填入[爭點清單]中的真實 ID）",
-      "responds_to": "their_claim_1"
+      "responds_to": "their_claim_dispute1"
     }
   ],
   "sections": [
     {
       "id": "section_1",
       "section": "壹、前言",
+      "subsection": null,
       "dispute_id": null,
       "argumentation": {
         "legal_basis": [],
@@ -124,14 +138,14 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
     {
       "id": "section_2_1",
       "section": "貳、事實及理由",
-      "subsection": "一、侵權行為確已成立",
-      "dispute_id": "（填入[爭點清單]中的真實 ID，前言和結論為 null）",
+      "subsection": "一、侵權行為之成立",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
       "argumentation": {
         "legal_basis": ["B0000001-184"],
         "fact_application": "事實涵攝描述",
         "conclusion": "本段結論"
       },
-      "claims": ["our_claim_1", "our_claim_2"],
+      "claims": ["our_claim_dispute1_primary", "our_claim_dispute1_rebuttal1"],
       "relevant_file_ids": ["file_1"],
       "relevant_law_ids": ["B0000001-184"],
       "facts_to_use": [
@@ -144,8 +158,40 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
       "legal_reasoning": "以 184-1前段為主要請求權基礎..."
     },
     {
+      "id": "section_2_2",
+      "section": "貳、事實及理由",
+      "subsection": "二、醫療費用之請求",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "argumentation": {
+        "legal_basis": ["B0000001-193"],
+        "fact_application": "醫療費用事實涵攝",
+        "conclusion": "醫療費用應予認定"
+      },
+      "claims": ["our_claim_dispute2_primary"],
+      "relevant_file_ids": ["file_2"],
+      "relevant_law_ids": ["B0000001-193"],
+      "legal_reasoning": "以民法§193為請求權基礎..."
+    },
+    {
+      "id": "section_2_3",
+      "section": "貳、事實及理由",
+      "subsection": "三、精神慰撫金之請求",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "argumentation": {
+        "legal_basis": ["B0000001-195"],
+        "fact_application": "精神損害事實涵攝",
+        "conclusion": "慰撫金請求合理"
+      },
+      "claims": ["our_claim_dispute3_primary"],
+      "relevant_file_ids": ["file_1"],
+      "relevant_law_ids": ["B0000001-195"],
+      "legal_reasoning": "以民法§195為請求權基礎..."
+    },
+    {
       "id": "section_last",
       "section": "參、結論",
+      "subsection": null,
+      "dispute_id": null,
       "argumentation": {
         "legal_basis": [],
         "fact_application": "",
