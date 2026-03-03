@@ -165,10 +165,9 @@
   - 方案：前言和結論不需要 review layer，可與中間段同時起跑；不同爭點的中間段也可並行，只有同爭點子段需要順序
   - 預估效果：6 段 → 2-3 波並行，Writer 總時間減少 40-60%
   - 風險：段落銜接可能不如現在流暢，需實驗驗證
-- [ ] **P1. Step 0 抽為獨立函式**
-  - 現況：`briefPipeline.ts` 的 Step 0 有多條分支（有/無既有爭點），約 400 行佔 pipeline 40%
-  - 方案：抽成 `runStep0CaseAnalysis(ctx, store, progress): StepZeroOutput`，主函式只包含 4 step 順序呼叫
-  - 效果：可讀性大幅提升，方便單獨測試 Step 0
+- [x] **P1. Step 0 抽為獨立函式**
+  - 完成：`caseAnalysisStep.ts`（572 行）抽出 Step 0 邏輯，`briefPipeline.ts` 從 961→431 行
+  - `PipelineContext` 移到 `pipeline/types.ts` 避免循環依賴
 - [ ] **P2. Enrichment validation logging**
   - 現況：`enrichStrategyOutput()` 補齊 AI 偷懶填空的 `relevant_law_ids`、`dispute_id`、`legal_basis`
   - 方案：加入 validation warning — 如果 enrichment 補了超過 50% 的欄位，log 警告以追蹤 AI 品質趨勢

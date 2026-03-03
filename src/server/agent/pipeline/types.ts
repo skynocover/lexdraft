@@ -2,6 +2,24 @@
 // Shared types for the brief writing pipeline
 
 import type { Paragraph, Citation, TextSegment } from '../../../client/stores/useBriefStore';
+import type { getDB } from '../../db';
+import type { AIEnv } from '../aiClient';
+import type { SSEEvent } from '../../../shared/types';
+
+// ── Pipeline Context (shared across all steps) ──
+
+export interface PipelineContext {
+  caseId: string;
+  briefType: string;
+  title: string;
+  signal: AbortSignal;
+  sendSSE: (event: SSEEvent) => Promise<void>;
+  db: D1Database;
+  drizzle: ReturnType<typeof getDB>;
+  aiEnv: AIEnv;
+  mongoUrl: string;
+  mongoApiKey?: string;
+}
 
 // ── Structured Fact (事實爭議分類) ──
 

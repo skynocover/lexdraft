@@ -3,8 +3,7 @@ import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
 import { fetchAndCacheUncitedMentions } from '../../lib/lawRefService';
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
-import type { StrategyOutput } from './types';
-import type { PipelineContext } from '../briefPipeline';
+import type { StrategyOutput, PipelineContext } from './types';
 import type { ContextStore } from '../contextStore';
 import type { Paragraph, TextSegment, Citation } from '../../../client/stores/useBriefStore';
 

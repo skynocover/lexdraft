@@ -1,56 +1,27 @@
 import { eq, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import {
-  files,
-  briefs,
-  cases,
-  disputes,
-  damages,
-  briefVersions,
-  claims,
-  templates,
-} from '../db/schema';
-import { getDB } from '../db';
-import { readLawRefs, upsertManyLawRefs } from '../lib/lawRefsJson';
+import { briefs, briefVersions, claims } from '../db/schema';
+import { upsertManyLawRefs } from '../lib/lawRefsJson';
 import type { LawRefItem } from '../lib/lawRefsJson';
-import {
-  runCaseReader,
-  runIssueAnalyzer,
-  type OrchestratorOutput,
-  type IssueAnalyzerOutput,
-  type OrchestratorProgressCallback,
-} from './orchestratorAgent';
-import { parseJsonField, loadReadyFiles, toolError, toolSuccess } from './toolHelpers';
+import { toolError, toolSuccess } from './toolHelpers';
 import { ContextStore } from './contextStore';
-import type { LegalIssue, TimelineItem, DamageItem } from './pipeline/types';
 import type { ToolResult } from './tools/types';
 import type { Paragraph } from '../../client/stores/useBriefStore';
-import { DEFAULT_TEMPLATES, autoSelectTemplate } from '../lib/defaultTemplates';
-import type { AIEnv } from './aiClient';
-import type { SSEEvent, PipelineStep, PipelineStepChild } from '../../shared/types';
+import type { PipelineStep, PipelineStepChild } from '../../shared/types';
 import { writeSection, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
-import type { FileRow } from './pipeline/writerStep';
 import { runLawFetch, truncateLawContent } from './pipeline/lawFetchStep';
 import {
   runReasoningStrategy,
   type ReasoningStrategyProgressCallback,
 } from './pipeline/reasoningStrategyStep';
-import type { ReasoningStrategyInput, ReasoningStrategyOutput } from './pipeline/types';
+import type {
+  ReasoningStrategyInput,
+  ReasoningStrategyOutput,
+  PipelineContext,
+} from './pipeline/types';
+import { runCaseAnalysis } from './pipeline/caseAnalysisStep';
 
-// ── Types ──
-
-export interface PipelineContext {
-  caseId: string;
-  briefType: string;
-  title: string;
-  signal: AbortSignal;
-  sendSSE: (event: SSEEvent) => Promise<void>;
-  db: D1Database;
-  drizzle: ReturnType<typeof getDB>;
-  aiEnv: AIEnv;
-  mongoUrl: string;
-  mongoApiKey?: string;
-}
+export type { PipelineContext } from './pipeline/types';
 
 // ── Progress Tracker (4 steps) ──
 
@@ -146,482 +117,18 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
   let currentStep = STEP_CASE;
 
   try {
-    // ═══ Step 0: Case Reader + Issue Analyzer — 案件分析 ═══
+    // ═══ Step 0: Case Analysis ═══
     if (ctx.signal.aborted) return toolError('已取消');
     await progress.startStep(STEP_CASE);
 
-    let readyFiles: Awaited<ReturnType<typeof loadReadyFiles>>;
-    let existingDisputes, existingDamages, briefId, caseRow;
-    let allFileContents: {
-      id: string;
-      filename: string;
-      full_text: string | null;
-      content_md: string | null;
-    }[];
-    let allLawRefRows: LawRefItem[];
-    try {
-      [
-        readyFiles,
-        existingDisputes,
-        existingDamages,
-        briefId,
-        caseRow,
-        allFileContents,
-        allLawRefRows,
-      ] = await Promise.all([
-        loadReadyFiles(ctx.db, ctx.caseId),
-        ctx.drizzle.select().from(disputes).where(eq(disputes.case_id, ctx.caseId)),
-        ctx.drizzle.select().from(damages).where(eq(damages.case_id, ctx.caseId)),
-        createBriefInDB(ctx),
-        ctx.drizzle
-          .select({
-            plaintiff: cases.plaintiff,
-            defendant: cases.defendant,
-            case_number: cases.case_number,
-            court: cases.court,
-            client_role: cases.client_role,
-            case_instructions: cases.case_instructions,
-            timeline: cases.timeline,
-            template_id: cases.template_id,
-          })
-          .from(cases)
-          .where(eq(cases.id, ctx.caseId))
-          .then(
-            (rows) =>
-              rows[0] || {
-                plaintiff: null,
-                defendant: null,
-                case_number: null,
-                court: null,
-                client_role: null,
-                case_instructions: null,
-                timeline: null,
-                template_id: null,
-              },
-          ),
-        // File full text for Step 3 Writer (Citations API document blocks)
-        ctx.drizzle
-          .select({
-            id: files.id,
-            filename: files.filename,
-            full_text: files.full_text,
-            content_md: files.content_md,
-          })
-          .from(files)
-          .where(eq(files.case_id, ctx.caseId)),
-        // Existing law refs for Step 2 Strategist (user-added laws)
-        readLawRefs(ctx.drizzle, ctx.caseId),
-      ]);
-    } catch (e) {
-      // loadReadyFiles throws a ToolResult when no files are ready
-      if (e && typeof e === 'object' && 'result' in e) return e as unknown as ToolResult;
-      throw e;
-    }
-
-    // Parse existing timeline from DB
-    const existingTimeline = parseJsonField<TimelineItem[]>(caseRow.timeline, []);
-
-    // Build file content map for Step 3 Writer (Citations API)
-    const fileContentMap = new Map<string, FileRow>(allFileContents.map((f) => [f.id, f]));
-
-    // Set up progress children for file reads
-    const readChildren: PipelineStepChild[] = [];
-
-    // Parse file summaries once — reused in both branches
-    const parsedFiles = readyFiles.map((f) => {
-      const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
-      return {
-        id: f.id,
-        filename: f.filename,
-        category: f.category,
-        parsedSummary: (summary.summary as string) || null,
-      };
+    const step0 = await runCaseAnalysis(ctx, store, {
+      setChildren: (children) => progress.setStepChildren(STEP_CASE, children),
     });
 
-    store.briefType = ctx.briefType;
-    store.caseMetadata = {
-      caseNumber: caseRow.case_number || '',
-      court: caseRow.court || '',
-      clientRole: caseRow.client_role || '',
-      caseInstructions: caseRow.case_instructions || '',
-    };
-
-    // ── 載入範本（如有選擇）──
-    let templateContentMd: string | null = null;
-    if (caseRow.template_id) {
-      try {
-        if (caseRow.template_id === 'auto') {
-          // AI 自動選擇：根據 briefType 匹配最佳預設範本
-          const autoTpl = autoSelectTemplate(ctx.briefType);
-          templateContentMd = autoTpl.content_md;
-          console.log(
-            `[briefPipeline] Auto-selected template: ${autoTpl.title} (${autoTpl.id}) for briefType=${ctx.briefType}`,
-          );
-        } else if (caseRow.template_id.startsWith('default-')) {
-          const dt = DEFAULT_TEMPLATES.find((t) => t.id === caseRow.template_id);
-          templateContentMd = dt?.content_md ?? null;
-        } else {
-          const tplRows = await ctx.drizzle
-            .select({ content_md: templates.content_md })
-            .from(templates)
-            .where(eq(templates.id, caseRow.template_id));
-          templateContentMd = tplRows[0]?.content_md ?? null;
-        }
-      } catch (err) {
-        console.error('[briefPipeline] Failed to load template:', err);
-      }
-    }
-
-    // ── Three-way parallel: disputes + damages + timeline (check-and-reuse) ──
-
-    // Only skip if disputes have meaningful content (non-empty positions)
-    const hasUsableDisputes =
-      existingDisputes.length > 0 &&
-      existingDisputes.some((d) => d.our_position?.trim() || d.their_position?.trim());
-
-    // Tool context for calling existing tool handlers
-    const toolCtx = {
-      sendSSE: ctx.sendSSE,
-      aiEnv: ctx.aiEnv,
-      mongoUrl: ctx.mongoUrl,
-    };
-
-    // ── Dispute promise ──
-    const disputePromise = (async (): Promise<OrchestratorOutput | null> => {
-      let orchestratorOutput: OrchestratorOutput | null = null;
-
-      if (hasUsableDisputes) {
-        // Use existing disputes — skip Case Reader + Issue Analyzer entirely
-        console.log(
-          `Skipping Step 0: reusing ${existingDisputes.length} existing disputes for case ${ctx.caseId}`,
-        );
-
-        const existingLegalIssues: LegalIssue[] = existingDisputes.map((d) => ({
-          id: d.id,
-          title: d.title || '未命名爭點',
-          our_position: d.our_position || '',
-          their_position: d.their_position || '',
-          key_evidence: parseJsonField<string[]>(d.evidence, []),
-          mentioned_laws: parseJsonField<string[]>(d.law_refs, []),
-          facts: [],
-        }));
-
-        // Build caseSummary from pre-parsed file summaries (no LLM call)
-        const caseSummary = parsedFiles
-          .map((f) => `${f.filename}: ${f.parsedSummary || ''}`)
-          .join('\n');
-
-        orchestratorOutput = {
-          caseSummary,
-          parties: {
-            plaintiff: caseRow.plaintiff || '',
-            defendant: caseRow.defendant || '',
-          },
-          timelineSummary: '',
-          legalIssues: existingLegalIssues,
-          informationGaps: [],
-        };
-
-        store.seedFromOrchestrator(orchestratorOutput);
-
-        // Show quick progress
-        readChildren.push({ label: '沿用既有爭點', status: 'done' });
-        await progress.setStepChildren(STEP_CASE, [...readChildren]);
-      } else {
-        // No existing disputes — run full Case Reader + Issue Analyzer
-
-        const orchestratorInput = {
-          readyFiles: parsedFiles.map((f) => ({
-            id: f.id,
-            filename: f.filename,
-            category: f.category,
-            summary: f.parsedSummary,
-          })),
-          existingParties: { plaintiff: caseRow.plaintiff, defendant: caseRow.defendant },
-          caseMetadata: {
-            caseNumber: caseRow.case_number || '',
-            court: caseRow.court || '',
-            clientRole: caseRow.client_role || '',
-            caseInstructions: caseRow.case_instructions || '',
-          },
-          briefType: ctx.briefType,
-        };
-
-        const orchestratorProgress: OrchestratorProgressCallback = {
-          onFileReadStart: async (filename) => {
-            readChildren.push({ label: `閱讀 ${filename}`, status: 'running' });
-            await progress.setStepChildren(STEP_CASE, [...readChildren]);
-          },
-          onFileReadDone: async (filename) => {
-            const idx = readChildren.findIndex(
-              (c) => c.label === `閱讀 ${filename}` && c.status === 'running',
-            );
-            if (idx >= 0) {
-              readChildren[idx] = { ...readChildren[idx], status: 'done' };
-              await progress.setStepChildren(STEP_CASE, [...readChildren]);
-            }
-          },
-          onCaseSummaryStart: async () => {
-            readChildren.push({ label: '案件摘要', status: 'running' });
-            await progress.setStepChildren(STEP_CASE, [...readChildren]);
-          },
-          onCaseSummaryDone: async () => {
-            const idx = readChildren.findIndex(
-              (c) => c.label === '案件摘要' && c.status === 'running',
-            );
-            if (idx >= 0) {
-              readChildren[idx] = { ...readChildren[idx], status: 'done' };
-              await progress.setStepChildren(STEP_CASE, [...readChildren]);
-            }
-          },
-          onIssueAnalysisStart: async () => {
-            readChildren.push({ label: '爭點分析', status: 'running' });
-            await progress.setStepChildren(STEP_CASE, [...readChildren]);
-          },
-        };
-
-        // Shared fallback: run analyze_disputes
-        const fallbackToAnalyzeDisputes = async () => {
-          const { handleAnalyzeDisputes } = await import('./tools/analyzeDisputes');
-          const result = await handleAnalyzeDisputes({}, ctx.caseId, ctx.db, ctx.drizzle, {
-            sendSSE: ctx.sendSSE,
-            aiEnv: ctx.aiEnv,
-            mongoUrl: ctx.mongoUrl,
-          });
-          if (result.success) {
-            return ctx.drizzle.select().from(disputes).where(eq(disputes.case_id, ctx.caseId));
-          }
-          return [];
-        };
-
-        try {
-          // Agent 0a: Case Reader
-          const caseReaderOutput = await runCaseReader(
-            ctx.aiEnv,
-            ctx.drizzle,
-            orchestratorInput,
-            ctx.signal,
-            orchestratorProgress,
-          );
-
-          // Agent 0b: Issue Analyzer
-          let issueAnalyzerOutput: IssueAnalyzerOutput;
-          try {
-            await orchestratorProgress.onIssueAnalysisStart();
-            issueAnalyzerOutput = await runIssueAnalyzer(
-              ctx.aiEnv,
-              caseReaderOutput,
-              ctx.briefType,
-              ctx.signal,
-              store.caseMetadata,
-            );
-          } catch (issueErr) {
-            console.error('Issue Analyzer failed, falling back to analyze_disputes:', issueErr);
-
-            const disputeList = await fallbackToAnalyzeDisputes();
-            issueAnalyzerOutput = {
-              legalIssues: disputeList.map((d) => ({
-                id: d.id,
-                title: d.title || '未命名爭點',
-                our_position: d.our_position || '',
-                their_position: d.their_position || '',
-                key_evidence: parseJsonField<string[]>(d.evidence, []),
-                mentioned_laws: parseJsonField<string[]>(d.law_refs, []),
-                facts: [],
-              })),
-              informationGaps: [],
-            };
-          }
-
-          orchestratorOutput = {
-            caseSummary: caseReaderOutput.caseSummary,
-            parties: caseReaderOutput.parties,
-            timelineSummary: caseReaderOutput.timelineSummary,
-            legalIssues: issueAnalyzerOutput.legalIssues,
-            informationGaps: issueAnalyzerOutput.informationGaps,
-          };
-
-          store.seedFromOrchestrator(orchestratorOutput);
-        } catch (orchErr) {
-          console.error('Case Reader failed, falling back to analyze_disputes:', orchErr);
-
-          const disputeList = await fallbackToAnalyzeDisputes();
-          store.seedFromDisputes(disputeList);
-        }
-
-        // Sync disputes to DB if Orchestrator produced new issues (batch for D1 param limit)
-        if (orchestratorOutput && orchestratorOutput.legalIssues.length > 0) {
-          await ctx.drizzle.delete(disputes).where(eq(disputes.case_id, ctx.caseId));
-          const DISPUTE_BATCH_SIZE = 10;
-          for (let i = 0; i < orchestratorOutput.legalIssues.length; i += DISPUTE_BATCH_SIZE) {
-            const batch = orchestratorOutput.legalIssues.slice(i, i + DISPUTE_BATCH_SIZE);
-            await ctx.drizzle.insert(disputes).values(
-              batch.map((issue) => ({
-                id: issue.id,
-                case_id: ctx.caseId,
-                number: 0,
-                title: issue.title,
-                our_position: issue.our_position,
-                their_position: issue.their_position,
-                evidence: issue.key_evidence.length > 0 ? JSON.stringify(issue.key_evidence) : null,
-                law_refs:
-                  issue.mentioned_laws.length > 0 ? JSON.stringify(issue.mentioned_laws) : null,
-              })),
-            );
-          }
-
-          await ctx.sendSSE({
-            type: 'brief_update',
-            brief_id: '',
-            action: 'set_disputes',
-            data: orchestratorOutput.legalIssues.map((d, i) => ({
-              id: d.id,
-              case_id: ctx.caseId,
-              number: i + 1,
-              title: d.title,
-              our_position: d.our_position,
-              their_position: d.their_position,
-              evidence: d.key_evidence,
-              law_refs: d.mentioned_laws,
-              facts: d.facts,
-            })),
-          });
-
-          await ctx.sendSSE({
-            type: 'brief_update',
-            brief_id: '',
-            action: 'set_parties',
-            data: orchestratorOutput.parties,
-          });
-        }
-      }
-
-      return orchestratorOutput;
-    })();
-
-    // ── Damages promise ──
-    const damagesPromise = (async (): Promise<DamageItem[]> => {
-      if (existingDamages.length > 0) {
-        readChildren.push({ label: '沿用既有金額', status: 'done' });
-        await progress.setStepChildren(STEP_CASE, [...readChildren]);
-        return existingDamages.map((d) => ({
-          category: d.category,
-          description: d.description,
-          amount: d.amount,
-        }));
-      }
-
-      readChildren.push({ label: '分析金額', status: 'running' });
-      await progress.setStepChildren(STEP_CASE, [...readChildren]);
-
-      const { handleCalculateDamages } = await import('./tools/calculateDamages');
-      const result = await handleCalculateDamages({}, ctx.caseId, ctx.db, ctx.drizzle, toolCtx);
-
-      // Update progress child
-      const idx = readChildren.findIndex((c) => c.label === '分析金額' && c.status === 'running');
-      if (idx >= 0) {
-        readChildren[idx] = {
-          ...readChildren[idx],
-          status: result.success ? 'done' : 'error',
-        };
-        await progress.setStepChildren(STEP_CASE, [...readChildren]);
-      }
-
-      if (!result.success) return [];
-
-      // Reload from DB (targeted select — only needed fields)
-      return ctx.drizzle
-        .select({
-          category: damages.category,
-          description: damages.description,
-          amount: damages.amount,
-        })
-        .from(damages)
-        .where(eq(damages.case_id, ctx.caseId));
-    })();
-
-    // ── Timeline promise ──
-    const timelinePromise = (async (): Promise<TimelineItem[]> => {
-      if (existingTimeline.length > 0) {
-        readChildren.push({ label: '沿用既有時間軸', status: 'done' });
-        await progress.setStepChildren(STEP_CASE, [...readChildren]);
-        return existingTimeline;
-      }
-
-      readChildren.push({ label: '分析時間軸', status: 'running' });
-      await progress.setStepChildren(STEP_CASE, [...readChildren]);
-
-      const { handleGenerateTimeline } = await import('./tools/generateTimeline');
-      const result = await handleGenerateTimeline({}, ctx.caseId, ctx.db, ctx.drizzle, toolCtx);
-
-      // Update progress child
-      const idx = readChildren.findIndex((c) => c.label === '分析時間軸' && c.status === 'running');
-      if (idx >= 0) {
-        readChildren[idx] = {
-          ...readChildren[idx],
-          status: result.success ? 'done' : 'error',
-        };
-        await progress.setStepChildren(STEP_CASE, [...readChildren]);
-      }
-
-      if (!result.success) return [];
-
-      // Reload from DB
-      const row = await ctx.drizzle
-        .select({ timeline: cases.timeline })
-        .from(cases)
-        .where(eq(cases.id, ctx.caseId))
-        .then((rows) => rows[0]);
-      return parseJsonField<TimelineItem[]>(row?.timeline, []);
-    })();
-
-    // ── Await all three in parallel ──
-    const [orchestratorOutput, finalDamages, finalTimeline] = await Promise.all([
-      disputePromise,
-      damagesPromise,
-      timelinePromise,
-    ]);
-
-    // Store damages + timeline in ContextStore
-    store.damages = finalDamages;
-    store.timeline = finalTimeline;
-
-    // Clean up: mark any stale running children as done
-    let childrenChanged = false;
-    for (let i = 0; i < readChildren.length; i++) {
-      if (readChildren[i].status === 'running') {
-        readChildren[i] = { ...readChildren[i], status: 'done' };
-        childrenChanged = true;
-      }
-    }
-    if (childrenChanged) {
-      await progress.setStepChildren(STEP_CASE, [...readChildren]);
-    }
-
-    // Build step content
-    const criticalGaps = orchestratorOutput
-      ? orchestratorOutput.informationGaps
-          .filter((g) => g.severity === 'critical')
-          .map((g) => ({ description: g.description, suggestion: g.suggestion }))
-      : [];
-
-    await progress.completeStep(
-      STEP_CASE,
-      `${readyFiles.length} 份檔案、${store.legalIssues.length} 個爭點、${finalDamages.length} 項金額、${finalTimeline.length} 個時間事件`,
-      {
-        type: 'case_confirm',
-        files: readyFiles.map((f) => f.filename),
-        issues: store.legalIssues.map((d) => ({
-          id: d.id,
-          title: d.title,
-        })),
-        parties: orchestratorOutput?.parties,
-        gaps: criticalGaps.length > 0 ? criticalGaps : undefined,
-      },
-    );
+    await progress.completeStep(STEP_CASE, step0.stepDetail, step0.stepContent);
 
     // Identify user-added laws (is_manual = true)
-    const userAddedLaws = allLawRefRows
+    const userAddedLaws = step0.allLawRefRows
       .filter((r) => r.is_manual && r.full_text)
       .map((r) => ({
         id: r.id,
@@ -641,8 +148,8 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       ctx.mongoUrl,
       {
         legalIssues: store.legalIssues,
-        userAddedLaws: allLawRefRows.filter((r) => r.is_manual),
-        existingLawRefs: allLawRefRows,
+        userAddedLaws: step0.allLawRefRows.filter((r) => r.is_manual),
+        existingLawRefs: step0.allLawRefRows,
       },
       ctx.mongoApiKey,
     );
@@ -732,14 +239,14 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       fetchedLaws: fetchedLawsArray
         .filter((l) => l.source !== 'user_manual')
         .map(truncateLawContent),
-      fileSummaries: parsedFiles.map((f) => ({
+      fileSummaries: step0.parsedFiles.map((f) => ({
         id: f.id,
         filename: f.filename,
         category: f.category,
         summary: f.parsedSummary || '無摘要',
       })),
-      damages: finalDamages,
-      timeline: finalTimeline,
+      damages: store.damages,
+      timeline: store.timeline,
       userAddedLaws,
       caseMetadata: store.caseMetadata,
     };
@@ -749,7 +256,7 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       store,
       strategyInput,
       strategyProgress,
-      templateContentMd,
+      step0.templateContentMd,
     );
 
     // Set found laws in ContextStore (fetchedLaws + supplementedLaws)
@@ -836,10 +343,10 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
 
         const paragraph = await writeSection(
           ctx,
-          briefId,
+          step0.briefId,
           strategySection,
           writerCtx,
-          fileContentMap,
+          step0.fileContentMap,
           store,
         );
 
@@ -869,22 +376,22 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
           content_structured: JSON.stringify({ paragraphs }),
           updated_at: new Date().toISOString(),
         })
-        .where(eq(briefs.id, briefId));
+        .where(eq(briefs.id, step0.briefId));
     }
 
     // ═══ Cleanup: delete uncited non-manual law refs ═══
     await cleanupUncitedLaws(ctx, paragraphs);
 
     // Save version snapshot (one version for entire pipeline)
-    const finalBrief = await ctx.drizzle.select().from(briefs).where(eq(briefs.id, briefId));
+    const finalBrief = await ctx.drizzle.select().from(briefs).where(eq(briefs.id, step0.briefId));
     if (finalBrief.length) {
       const [{ value: versionCount }] = await ctx.drizzle
         .select({ value: count() })
         .from(briefVersions)
-        .where(eq(briefVersions.brief_id, briefId));
+        .where(eq(briefVersions.brief_id, step0.briefId));
       await ctx.drizzle.insert(briefVersions).values({
         id: nanoid(),
-        brief_id: briefId,
+        brief_id: step0.briefId,
         version_no: versionCount + 1,
         label: `AI 撰寫完成（${paragraphs.length} 段）`,
         content_structured: finalBrief[0].content_structured || JSON.stringify({ paragraphs: [] }),
@@ -912,6 +419,9 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
 
     return toolSuccess(resultMsg);
   } catch (err) {
+    // loadReadyFiles throws a ToolResult when no files are ready — propagate it
+    if (err && typeof err === 'object' && 'result' in err) return err as unknown as ToolResult;
+
     const errMsg = err instanceof Error ? err.message : '未知錯誤';
     // Mark whichever step was running as error so the UI shows the cause
     try {
@@ -921,40 +431,4 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     }
     return toolError(`Pipeline 執行失敗：${errMsg}`);
   }
-};
-
-// ── Helpers ──
-
-const createBriefInDB = async (ctx: PipelineContext): Promise<string> => {
-  const briefId = nanoid();
-  const now = new Date().toISOString();
-
-  await ctx.drizzle.insert(briefs).values({
-    id: briefId,
-    case_id: ctx.caseId,
-    brief_type: ctx.briefType,
-    title: ctx.title,
-    content_structured: JSON.stringify({ paragraphs: [] }),
-    version: 1,
-    created_at: now,
-    updated_at: now,
-  });
-
-  await ctx.sendSSE({
-    type: 'brief_update',
-    brief_id: briefId,
-    action: 'create_brief',
-    data: {
-      id: briefId,
-      case_id: ctx.caseId,
-      brief_type: ctx.briefType,
-      title: ctx.title,
-      content_structured: { paragraphs: [] },
-      version: 1,
-      created_at: now,
-      updated_at: now,
-    },
-  });
-
-  return briefId;
 };

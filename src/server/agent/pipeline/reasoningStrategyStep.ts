@@ -32,7 +32,7 @@ import type {
   PerIssueAnalysis,
   LegalIssue,
 } from './types';
-import type { PipelineContext } from '../briefPipeline';
+import type { PipelineContext } from './types';
 import type { ContextStore } from '../contextStore';
 
 // ── Constants ──
