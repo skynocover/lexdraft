@@ -196,7 +196,6 @@ export interface OrchestratorInput {
   caseMetadata?: {
     caseNumber: string;
     court: string;
-    caseType: string;
     clientRole: string;
     caseInstructions: string;
   };
@@ -265,7 +264,6 @@ export interface IssueAnalyzerInput {
   caseMetadata?: {
     caseNumber: string;
     court: string;
-    caseType: string;
     clientRole: string;
     caseInstructions: string;
   };

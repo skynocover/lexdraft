@@ -174,6 +174,11 @@ export const writeSection = async (
   const fileDocNames = documents.filter((d) => d.doc_type === 'file').map((d) => d.title);
   const lawDocNames = documents.filter((d) => d.doc_type === 'law').map((d) => d.title);
 
+  const sectionKey = getSectionKey(strategySection.section, strategySection.subsection);
+  console.log(
+    `[writer] section="${sectionKey}" laws=${lawDocNames.length} files=${fileDocNames.length}`,
+  );
+
   // ── Build Writer instruction with 3-layer context ──
   const dispute = strategySection.dispute_id
     ? store.legalIssues.find((d) => d.id === strategySection.dispute_id)

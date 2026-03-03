@@ -237,7 +237,6 @@ export const runIssueAnalyzer = async (
   caseMetadata?: {
     caseNumber: string;
     court: string;
-    caseType: string;
     clientRole: string;
     caseInstructions: string;
   },

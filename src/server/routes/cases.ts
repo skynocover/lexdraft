@@ -49,7 +49,6 @@ casesRouter.post('/', async (c) => {
     title: string;
     case_number?: string;
     court?: string;
-    case_type?: string;
     plaintiff?: string;
     defendant?: string;
     client_role?: string;
@@ -67,7 +66,6 @@ casesRouter.post('/', async (c) => {
     title,
     case_number: body.case_number?.trim() || null,
     court: body.court?.trim() || null,
-    case_type: body.case_type?.trim() || null,
     plaintiff: body.plaintiff?.trim() || null,
     defendant: body.defendant?.trim() || null,
     client_role: body.client_role?.trim() || null,
@@ -100,11 +98,11 @@ casesRouter.put('/:id', async (c) => {
     title?: string;
     case_number?: string;
     court?: string;
-    case_type?: string;
     plaintiff?: string;
     defendant?: string;
     client_role?: string;
     case_instructions?: string;
+    template_id?: string | null;
   }>();
 
   const db = getDB(c.env.DB);
@@ -116,12 +114,12 @@ casesRouter.put('/:id', async (c) => {
   if (body.title !== undefined) updates.title = body.title.trim();
   if (body.case_number !== undefined) updates.case_number = body.case_number.trim() || null;
   if (body.court !== undefined) updates.court = body.court.trim() || null;
-  if (body.case_type !== undefined) updates.case_type = body.case_type.trim() || null;
   if (body.plaintiff !== undefined) updates.plaintiff = body.plaintiff.trim() || null;
   if (body.defendant !== undefined) updates.defendant = body.defendant.trim() || null;
   if (body.client_role !== undefined) updates.client_role = body.client_role.trim() || null;
   if (body.case_instructions !== undefined)
     updates.case_instructions = body.case_instructions.trim() || null;
+  if (body.template_id !== undefined) updates.template_id = body.template_id || null;
 
   await db.update(cases).set(updates).where(eq(cases.id, id));
 

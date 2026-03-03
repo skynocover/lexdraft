@@ -85,11 +85,6 @@ export function CaseList() {
                     <div className="mt-1 flex items-center gap-3">
                       {c.case_number && <span className="text-xs text-t3">{c.case_number}</span>}
                       {c.court && <span className="text-xs text-t3">{c.court}</span>}
-                      {c.case_type && (
-                        <span className="rounded bg-bg-3 px-1.5 py-0.5 text-[11px] text-t2">
-                          {c.case_type}
-                        </span>
-                      )}
                     </div>
                     {(c.plaintiff || c.defendant) && (
                       <p className="mt-1 text-xs text-t3">

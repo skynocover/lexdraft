@@ -1,6 +1,15 @@
-import { eq } from 'drizzle-orm';
+import { eq, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { files, briefs, cases, disputes, damages, briefVersions, claims } from '../db/schema';
+import {
+  files,
+  briefs,
+  cases,
+  disputes,
+  damages,
+  briefVersions,
+  claims,
+  templates,
+} from '../db/schema';
 import { getDB } from '../db';
 import { readLawRefs, upsertManyLawRefs } from '../lib/lawRefsJson';
 import type { LawRefItem } from '../lib/lawRefsJson';
@@ -16,6 +25,7 @@ import { ContextStore } from './contextStore';
 import type { LegalIssue, TimelineItem, DamageItem } from './pipeline/types';
 import type { ToolResult } from './tools/types';
 import type { Paragraph } from '../../client/stores/useBriefStore';
+import { DEFAULT_TEMPLATES, autoSelectTemplate } from '../lib/defaultTemplates';
 import type { AIEnv } from './aiClient';
 import type { SSEEvent, PipelineStep, PipelineStepChild } from '../../shared/types';
 import { writeSection, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
@@ -169,10 +179,10 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
             defendant: cases.defendant,
             case_number: cases.case_number,
             court: cases.court,
-            case_type: cases.case_type,
             client_role: cases.client_role,
             case_instructions: cases.case_instructions,
             timeline: cases.timeline,
+            template_id: cases.template_id,
           })
           .from(cases)
           .where(eq(cases.id, ctx.caseId))
@@ -183,10 +193,10 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
                 defendant: null,
                 case_number: null,
                 court: null,
-                case_type: null,
                 client_role: null,
                 case_instructions: null,
                 timeline: null,
+                template_id: null,
               },
           ),
         // File full text for Step 3 Writer (Citations API document blocks)
@@ -232,10 +242,35 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     store.caseMetadata = {
       caseNumber: caseRow.case_number || '',
       court: caseRow.court || '',
-      caseType: caseRow.case_type || '',
       clientRole: caseRow.client_role || '',
       caseInstructions: caseRow.case_instructions || '',
     };
+
+    // ── 載入範本（如有選擇）──
+    let templateContentMd: string | null = null;
+    if (caseRow.template_id) {
+      try {
+        if (caseRow.template_id === 'auto') {
+          // AI 自動選擇：根據 briefType 匹配最佳預設範本
+          const autoTpl = autoSelectTemplate(ctx.briefType);
+          templateContentMd = autoTpl.content_md;
+          console.log(
+            `[briefPipeline] Auto-selected template: ${autoTpl.title} (${autoTpl.id}) for briefType=${ctx.briefType}`,
+          );
+        } else if (caseRow.template_id.startsWith('default-')) {
+          const dt = DEFAULT_TEMPLATES.find((t) => t.id === caseRow.template_id);
+          templateContentMd = dt?.content_md ?? null;
+        } else {
+          const tplRows = await ctx.drizzle
+            .select({ content_md: templates.content_md })
+            .from(templates)
+            .where(eq(templates.id, caseRow.template_id));
+          templateContentMd = tplRows[0]?.content_md ?? null;
+        }
+      } catch (err) {
+        console.error('[briefPipeline] Failed to load template:', err);
+      }
+    }
 
     // ── Three-way parallel: disputes + damages + timeline (check-and-reuse) ──
 
@@ -306,7 +341,6 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
           caseMetadata: {
             caseNumber: caseRow.case_number || '',
             court: caseRow.court || '',
-            caseType: caseRow.case_type || '',
             clientRole: caseRow.client_role || '',
             caseInstructions: caseRow.case_instructions || '',
           },
@@ -715,6 +749,7 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       store,
       strategyInput,
       strategyProgress,
+      templateContentMd,
     );
 
     // Set found laws in ContextStore (fetchedLaws + supplementedLaws)
@@ -843,14 +878,14 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     // Save version snapshot (one version for entire pipeline)
     const finalBrief = await ctx.drizzle.select().from(briefs).where(eq(briefs.id, briefId));
     if (finalBrief.length) {
-      const versionCount = await ctx.drizzle
-        .select()
+      const [{ value: versionCount }] = await ctx.drizzle
+        .select({ value: count() })
         .from(briefVersions)
         .where(eq(briefVersions.brief_id, briefId));
       await ctx.drizzle.insert(briefVersions).values({
         id: nanoid(),
         brief_id: briefId,
-        version_no: versionCount.length + 1,
+        version_no: versionCount + 1,
         label: `AI 撰寫完成（${paragraphs.length} 段）`,
         content_structured: finalBrief[0].content_structured || JSON.stringify({ paragraphs: [] }),
         created_at: new Date().toISOString(),

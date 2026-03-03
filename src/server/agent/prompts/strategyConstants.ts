@@ -2,41 +2,50 @@
 // Used by both reasoningStrategyPrompt.ts (Reasoning 階段) and
 // reasoningStrategyStep.ts (Structuring 階段) to avoid duplication.
 
-export const BRIEF_STRUCTURE_CONVENTIONS = `═══ 書狀結構慣例（依民事訴訟法及實務慣例）═══
+// 通用撰寫原則（所有書狀都適用，不含具體結構）
+export const WRITING_CONVENTIONS = `═══ 書狀撰寫慣例 ═══
 
-每份書狀必須包含「前言」和「結論」段落。段落編號使用中文數字：壹、貳、參…，子段落使用一、二、三…。
+段落編號使用中文數字：壹、貳、參…，子段落使用一、二、三…。
+每份書狀應包含前言（或當事人）段落與結論段落。`;
 
-### 民事起訴狀（complaint）
+// 無 template 時的 fallback（key = briefType）
+export const BRIEF_TYPE_FALLBACK_STRUCTURES: Record<string, string> = {
+  complaint: `### 民事起訴狀（complaint）
 壹、前言（案件背景、當事人關係）
 貳、事實及理由
   依爭點逐一展開，每個爭點一個子段落（一、二、三…）
   每段應包含：請求權基礎 → 構成要件涵攝 → 小結論
 參、損害賠償計算（如涉及金額請求）
   逐項列明各項損害金額及計算依據
-肆、結論（綜上所述，請求鈞院判決如訴之聲明）
-
-### 民事答辯狀（defense）
+肆、結論（綜上所述，請求鈞院判決如訴之聲明）`,
+  defense: `### 民事答辯狀（defense）
 壹、前言（答辯立場概述）
 貳、答辯理由
   逐一針對原告主張反駁，每點一個子段落
   對事實面：說明真實情形、反駁原告事實錯誤
   對法律面：提出時效抗辯、過失相抵等法律主張
-參、結論（請求駁回原告之訴，訴訟費用由原告負擔）
-
-### 民事準備書狀（preparation）
+參、結論（請求駁回原告之訴，訴訟費用由原告負擔）`,
+  preparation: `### 民事準備書狀（preparation）
 壹、前言（說明本狀目的、補充或回應之事項）
 貳、對對造主張之意見
   逐一針對對方書狀攻防回應，每點一個子段落
 參、補充論述（如有新事實、新證據或新法律主張）
-肆、結論
-
-### 上訴狀（appeal）
+肆、結論`,
+  appeal: `### 上訴狀（appeal）
 壹、前言（表明不服之判決）
 貳、原判決違誤之處
   逐一指出原判決認事用法之錯誤
   每點應說明：原判決如何認定 → 為何有誤 → 正確應如何
 參、上訴理由（補充事實及證據）
-肆、結論（請求廢棄原判決，改判如上訴聲明）`;
+肆、結論（請求廢棄原判決，改判如上訴聲明）`,
+};
+
+// Helper: 有 template 回空、無 template 回 fallback
+export const getStructureGuidance = (briefType: string, hasTemplate: boolean): string => {
+  if (hasTemplate) return '';
+  const fallback = BRIEF_TYPE_FALLBACK_STRUCTURES[briefType];
+  return fallback ? `\n═══ ${briefType} 書狀結構 ═══\n\n${fallback}` : '';
+};
 
 export const CLAIMS_RULES = `═══ Claims 規則 ═══
 

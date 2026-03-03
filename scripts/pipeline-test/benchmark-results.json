@@ -1,0 +1,250 @@
+{
+  "caseId": "z4keVNfyuKvL68Xg1qPl2",
+  "timestamp": "2026-03-03T01:40:41.410Z",
+  "numRuns": 3,
+  "baseline": {
+    "briefId": "c9voh2csfaO8g7NFoLna6",
+    "numParagraphs": 8,
+    "totalLaw": 11,
+    "totalFile": 30,
+    "totalCites": 41,
+    "totalChars": 7114,
+    "zeroLawContent": "2/6",
+    "zeroCiteAll": "2/8",
+    "sections": [
+      {
+        "label": "壹、前言",
+        "lawCites": 5,
+        "fileCites": 15,
+        "charCount": 1886
+      },
+      {
+        "label": "貳、對對造主張之意見",
+        "lawCites": 2,
+        "fileCites": 2,
+        "charCount": 620
+      },
+      {
+        "label": "貳、對對造主張之意見",
+        "lawCites": 0,
+        "fileCites": 4,
+        "charCount": 691
+      },
+      {
+        "label": "貳、對對造主張之意見",
+        "lawCites": 2,
+        "fileCites": 1,
+        "charCount": 640
+      },
+      {
+        "label": "貳、對對造主張之意見",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 989
+      },
+      {
+        "label": "貳、對對造主張之意見",
+        "lawCites": 1,
+        "fileCites": 2,
+        "charCount": 649
+      },
+      {
+        "label": "貳、對對造主張之意見",
+        "lawCites": 1,
+        "fileCites": 6,
+        "charCount": 915
+      },
+      {
+        "label": "參、結論",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 724
+      }
+    ]
+  },
+  "runs": [
+    {
+      "briefId": "oHhbVAUHTmaDK97Cn00EC",
+      "numParagraphs": 8,
+      "totalLaw": 18,
+      "totalFile": 46,
+      "totalCites": 64,
+      "totalChars": 9626,
+      "zeroLawContent": "1/6",
+      "zeroCiteAll": "0/8",
+      "sections": [
+        {
+          "label": "壹、前言",
+          "lawCites": 6,
+          "fileCites": 18,
+          "charCount": 2875
+        },
+        {
+          "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害賠償責任",
+          "lawCites": 2,
+          "fileCites": 6,
+          "charCount": 2190
+        },
+        {
+          "label": "貳、對對造主張之意見 > 二、醫療費用之請求合法有據",
+          "lawCites": 2,
+          "fileCites": 2,
+          "charCount": 593
+        },
+        {
+          "label": "貳、對對造主張之意見 > 三、復健交通費用之請求符合法令",
+          "lawCites": 2,
+          "fileCites": 2,
+          "charCount": 527
+        },
+        {
+          "label": "貳、對對造主張之意見 > 四、不能工作損失應以實際喪失勞動能力期間計算",
+          "lawCites": 0,
+          "fileCites": 4,
+          "charCount": 984
+        },
+        {
+          "label": "貳、對對造主張之意見 > 五、財物損害（機車修復費）之請求正當",
+          "lawCites": 2,
+          "fileCites": 1,
+          "charCount": 492
+        },
+        {
+          "label": "貳、對對造主張之意見 > 六、精神慰撫金之請求數額合理",
+          "lawCites": 2,
+          "fileCites": 4,
+          "charCount": 872
+        },
+        {
+          "label": "參、結論",
+          "lawCites": 2,
+          "fileCites": 9,
+          "charCount": 1093
+        }
+      ],
+      "elapsed": 396.6
+    },
+    {
+      "briefId": "T-f3kgsj-AHvz832gAUVq",
+      "numParagraphs": 8,
+      "totalLaw": 16,
+      "totalFile": 43,
+      "totalCites": 59,
+      "totalChars": 6592,
+      "zeroLawContent": "2/6",
+      "zeroCiteAll": "1/8",
+      "sections": [
+        {
+          "label": "壹、前言",
+          "lawCites": 5,
+          "fileCites": 15,
+          "charCount": 1835
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 2,
+          "fileCites": 3,
+          "charCount": 510
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 2,
+          "fileCites": 3,
+          "charCount": 531
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 571
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 0,
+          "fileCites": 6,
+          "charCount": 983
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 1,
+          "fileCites": 1,
+          "charCount": 467
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 2,
+          "fileCites": 4,
+          "charCount": 760
+        },
+        {
+          "label": "參、結論",
+          "lawCites": 4,
+          "fileCites": 11,
+          "charCount": 935
+        }
+      ],
+      "elapsed": 232.3
+    },
+    {
+      "briefId": "tYFOjhP-CJJHMDNTwJq2i",
+      "numParagraphs": 8,
+      "totalLaw": 13,
+      "totalFile": 44,
+      "totalCites": 57,
+      "totalChars": 6450,
+      "zeroLawContent": "1/6",
+      "zeroCiteAll": "1/8",
+      "sections": [
+        {
+          "label": "壹、前言",
+          "lawCites": 2,
+          "fileCites": 14,
+          "charCount": 1398
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 449
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 1,
+          "fileCites": 3,
+          "charCount": 563
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 2,
+          "fileCites": 3,
+          "charCount": 605
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 2,
+          "fileCites": 8,
+          "charCount": 1119
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 2,
+          "fileCites": 1,
+          "charCount": 553
+        },
+        {
+          "label": "貳、對對造主張之意見",
+          "lawCites": 1,
+          "fileCites": 6,
+          "charCount": 917
+        },
+        {
+          "label": "參、結論",
+          "lawCites": 3,
+          "fileCites": 9,
+          "charCount": 846
+        }
+      ],
+      "elapsed": 239.3
+    }
+  ]
+}

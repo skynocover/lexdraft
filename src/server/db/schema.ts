@@ -19,13 +19,24 @@ export const cases = sqliteTable('cases', {
   title: text('title').notNull(),
   case_number: text('case_number'),
   court: text('court'),
-  case_type: text('case_type'),
   plaintiff: text('plaintiff'),
   defendant: text('defendant'),
   client_role: text('client_role'), // 'plaintiff' | 'defendant' — 我方立場
   case_instructions: text('case_instructions'), // 律師 AI 處理指引
   law_refs: text('law_refs'),
   timeline: text('timeline'), // JSON array of timeline events
+  template_id: text('template_id'), // nullable, 選用的書狀範本
+  created_at: text('created_at'),
+  updated_at: text('updated_at'),
+});
+
+// 3.1.1 templates — 書狀範本（user-level，不綁案件）
+export const templates = sqliteTable('templates', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  category: text('category'), // 分組用（民事訴訟、家事事件...）
+  content_md: text('content_md'), // markdown 格式範本內容
+  is_default: integer('is_default').default(0), // 1=系統預設, 0=自訂
   created_at: text('created_at'),
   updated_at: text('updated_at'),
 });

@@ -232,7 +232,6 @@ export interface ReasoningStrategyInput {
   caseMetadata?: {
     caseNumber: string;
     court: string;
-    caseType: string;
     clientRole: string;
     caseInstructions: string;
   };

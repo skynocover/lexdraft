@@ -8,6 +8,7 @@ import { OutlinePanel } from './OutlinePanel';
 import { VersionPreviewEditor } from './VersionPreviewEditor';
 import { LawViewer } from './LawViewer';
 import { LawSearchViewer } from './LawSearchViewer';
+import { TemplateEditor } from './TemplateEditor';
 import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
 
 interface EditorPanelProps {
@@ -64,7 +65,9 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
       <TabBar panelId={panelId} />
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {activeTab?.type === 'brief' && isFocused && <OutlinePanel />}
-        {activeTab?.type === 'brief' ? (
+        {activeTab?.type === 'template' ? (
+          <TemplateEditor />
+        ) : activeTab?.type === 'brief' ? (
           <BriefEditor content={currentBrief?.content_structured ?? null} />
         ) : activeTab?.type === 'file' ? (
           <FileViewer

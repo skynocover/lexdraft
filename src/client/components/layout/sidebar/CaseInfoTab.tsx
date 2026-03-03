@@ -1,28 +1,47 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useCaseStore } from '../../../stores/useCaseStore';
-import { Loader2 } from 'lucide-react';
-import { CASE_TYPES, COURTS } from '../../../lib/caseConstants';
+import { useTemplateStore, type TemplateSummary } from '../../../stores/useTemplateStore';
+import { useTabStore } from '../../../stores/useTabStore';
+import { Loader2, ExternalLink, Plus, Sparkles } from 'lucide-react';
+import { COURTS } from '../../../lib/caseConstants';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '../../ui/select';
 
 interface FormData {
   title: string;
   case_number: string;
   court: string;
-  case_type: string;
+  template_id: string;
   client_role: string;
   plaintiff: string;
   defendant: string;
   case_instructions: string;
 }
 
+/** 預設值：新案件預設 AI 自動選擇 */
+const DEFAULT_TEMPLATE_ID = 'auto';
+
 export const CaseInfoTab = () => {
   const currentCase = useCaseStore((s) => s.currentCase);
   const updateCase = useCaseStore((s) => s.updateCase);
+  const templates = useTemplateStore((s) => s.templates);
+  const loadTemplates = useTemplateStore((s) => s.loadTemplates);
+  const createTemplate = useTemplateStore((s) => s.createTemplate);
+  const openTemplateTab = useTabStore((s) => s.openTemplateTab);
 
   const [form, setForm] = useState<FormData>({
     title: '',
     case_number: '',
     court: '',
-    case_type: '',
+    template_id: DEFAULT_TEMPLATE_ID,
     client_role: '',
     plaintiff: '',
     defendant: '',
@@ -31,13 +50,21 @@ export const CaseInfoTab = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // 載入範本列表
+  useEffect(() => {
+    if (templates.length === 0) {
+      loadTemplates();
+    }
+  }, [templates.length, loadTemplates]);
+
   useEffect(() => {
     if (currentCase) {
       setForm({
         title: currentCase.title || '',
         case_number: currentCase.case_number || '',
         court: currentCase.court || '',
-        case_type: currentCase.case_type || '',
+        // 沒有設定 template_id 時預設為 auto
+        template_id: currentCase.template_id || DEFAULT_TEMPLATE_ID,
         client_role: currentCase.client_role || '',
         plaintiff: currentCase.plaintiff || '',
         defendant: currentCase.defendant || '',
@@ -48,11 +75,12 @@ export const CaseInfoTab = () => {
 
   const dirty = useMemo(() => {
     if (!currentCase) return false;
+    const currentTemplateId = currentCase.template_id || DEFAULT_TEMPLATE_ID;
     return (
       form.title !== (currentCase.title || '') ||
       form.case_number !== (currentCase.case_number || '') ||
       form.court !== (currentCase.court || '') ||
-      form.case_type !== (currentCase.case_type || '') ||
+      form.template_id !== currentTemplateId ||
       form.client_role !== (currentCase.client_role || '') ||
       form.plaintiff !== (currentCase.plaintiff || '') ||
       form.defendant !== (currentCase.defendant || '') ||
@@ -60,10 +88,55 @@ export const CaseInfoTab = () => {
     );
   }, [form, currentCase]);
 
+  // 範本分組
+  const { customTemplates, defaultCategories } = useMemo(() => {
+    const custom: TemplateSummary[] = [];
+    const defaultsByCategory = new Map<string, TemplateSummary[]>();
+
+    for (const t of templates) {
+      if (t.is_default === 1) {
+        const cat = t.category || '其他';
+        if (!defaultsByCategory.has(cat)) defaultsByCategory.set(cat, []);
+        defaultsByCategory.get(cat)!.push(t);
+      } else {
+        custom.push(t);
+      }
+    }
+
+    return {
+      customTemplates: custom,
+      defaultCategories: [...defaultsByCategory.entries()],
+    };
+  }, [templates]);
+
   const set =
     (key: keyof FormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const handleTemplateChange = (value: string) => {
+    setForm((f) => ({ ...f, template_id: value }));
+
+    // 立即儲存 template_id
+    if (currentCase) {
+      updateCase(currentCase.id, {
+        template_id: value === 'none' ? null : value,
+      });
+    }
+  };
+
+  const handlePreviewTemplate = () => {
+    if (!form.template_id || form.template_id === 'auto' || form.template_id === 'none') return;
+    const tpl = templates.find((t) => t.id === form.template_id);
+    if (tpl) {
+      openTemplateTab(tpl.id, tpl.title);
+    }
+  };
+
+  const handleCreateTemplate = async () => {
+    const tpl = await createTemplate();
+    openTemplateTab(tpl.id, tpl.title);
+  };
 
   const handleSave = async () => {
     if (!currentCase) return;
@@ -78,7 +151,7 @@ export const CaseInfoTab = () => {
         title: form.title.trim(),
         case_number: form.case_number.trim() || null,
         court: form.court.trim() || null,
-        case_type: form.case_type || null,
+        template_id: form.template_id === 'none' ? null : form.template_id || null,
         client_role: (form.client_role as 'plaintiff' | 'defendant') || null,
         plaintiff: form.plaintiff.trim() || null,
         defendant: form.defendant.trim() || null,
@@ -101,6 +174,9 @@ export const CaseInfoTab = () => {
 
   const inputClass =
     'w-full rounded border border-bd bg-bg-3 px-2.5 py-1.5 text-xs text-t1 outline-none placeholder:text-t3 focus:border-ac';
+
+  const showPreview =
+    form.template_id && form.template_id !== 'auto' && form.template_id !== 'none';
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto p-3">
@@ -142,17 +218,70 @@ export const CaseInfoTab = () => {
           </div>
         </div>
 
-        {/* 案件類型 */}
+        {/* 書狀範本 */}
         <div>
-          <label className="mb-1 block text-xs text-t2">案件類型</label>
-          <select value={form.case_type} onChange={set('case_type')} className={inputClass}>
-            <option value="">請選擇</option>
-            {CASE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          <label className="mb-1 block text-xs text-t2">書狀範本</label>
+          <Select value={form.template_id || 'auto'} onValueChange={handleTemplateChange}>
+            <SelectTrigger className={inputClass}>
+              <SelectValue placeholder="AI 自動選擇" />
+            </SelectTrigger>
+            <SelectContent position="popper" className="max-h-72">
+              <SelectItem value="auto">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-ac" />
+                  <span>AI 自動選擇</span>
+                </span>
+              </SelectItem>
+              <SelectItem value="none">不使用範本</SelectItem>
+              <SelectSeparator />
+
+              {/* 我的範本 */}
+              {customTemplates.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>我的範本</SelectLabel>
+                  {customTemplates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.title}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+
+              {/* 系統範本按 category 分組 */}
+              {defaultCategories.map(([cat, items]) => (
+                <SelectGroup key={cat}>
+                  <SelectLabel>{cat}</SelectLabel>
+                  {items.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.title}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="mt-1 flex items-center gap-2">
+            {form.template_id === 'auto' && (
+              <p className="text-[10px] text-t3">AI 會根據書狀類型自動選擇最合適的範本</p>
+            )}
+            {showPreview && (
+              <button
+                onClick={handlePreviewTemplate}
+                className="flex items-center gap-1 text-[10px] text-ac transition hover:underline"
+              >
+                <span>點擊預覽</span>
+                <ExternalLink size={10} />
+              </button>
+            )}
+          </div>
+          {/* 新增自訂範本 */}
+          <button
+            onClick={handleCreateTemplate}
+            className="mt-1.5 flex w-full items-center justify-center gap-1 rounded border border-dashed border-bd py-1.5 text-[11px] text-t3 transition hover:border-ac hover:text-ac"
+          >
+            <Plus size={12} />
+            <span>新增自訂範本</span>
+          </button>
         </div>
 
         {/* 我方立場 */}

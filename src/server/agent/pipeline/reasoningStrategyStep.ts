@@ -17,12 +17,14 @@ import {
   buildReasoningStrategyInput,
 } from '../prompts/reasoningStrategyPrompt';
 import {
-  BRIEF_STRUCTURE_CONVENTIONS,
+  WRITING_CONVENTIONS,
+  getStructureGuidance,
   CLAIMS_RULES,
   SECTION_RULES,
   STRATEGY_JSON_SCHEMA,
 } from '../prompts/strategyConstants';
 import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy';
+import { templateToPrompt } from './templateHelper';
 import type {
   ReasoningStrategyInput,
   ReasoningStrategyOutput,
@@ -38,14 +40,14 @@ const MAX_ROUNDS = 6;
 const MAX_SEARCHES = 6;
 const SOFT_TIMEOUT_MS = 25000;
 const MAX_TOKENS = 8192;
-const JSON_OUTPUT_MAX_TOKENS = 16384;
+const JSON_OUTPUT_MAX_TOKENS = 32768;
 const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 
 // ── JSON Output System Prompt (separate call, clean context) ──
 
 const JSON_OUTPUT_SYSTEM_PROMPT = `你是一位資深台灣訴訟律師的策略輸出助手。你將收到律師的推理摘要、爭點清單、和可用法條，你的任務是根據這些資料輸出結構化的論證策略 JSON。
 
-${BRIEF_STRUCTURE_CONVENTIONS}
+${WRITING_CONVENTIONS}
 
 ${CLAIMS_RULES}
 
@@ -362,11 +364,18 @@ export const runReasoningStrategy = async (
   store: ContextStore,
   input: ReasoningStrategyInput,
   progress?: ReasoningStrategyProgressCallback,
+  templateContentMd?: string | null,
 ): Promise<ReasoningStrategyOutput> => {
   await progress?.onReasoningStart();
 
+  const hasTemplate = !!(templateContentMd && templateContentMd.trim());
   const systemPrompt = REASONING_STRATEGY_SYSTEM_PROMPT;
-  const userMessage = buildReasoningStrategyInput(input);
+  let userMessage = buildReasoningStrategyInput(input, hasTemplate);
+
+  // 注入完整 markdown 範本到 Reasoning prompt
+  if (hasTemplate) {
+    userMessage += templateToPrompt(templateContentMd!);
+  }
   const messages: ClaudeMessage[] = [{ role: 'user', content: userMessage }];
 
   let finalized = false;
@@ -386,8 +395,13 @@ export const runReasoningStrategy = async (
     });
 
   // Helper: separate clean call for JSON output (Gemini 2.5 Flash, provider-native constrained decoding)
+  // 有 template → 注入完整 markdown 範本；無 template → 注入 briefType fallback 結構
+  const structuringSystemPrompt = hasTemplate
+    ? JSON_OUTPUT_SYSTEM_PROMPT + templateToPrompt(templateContentMd!)
+    : JSON_OUTPUT_SYSTEM_PROMPT + getStructureGuidance(input.briefType, false);
+
   const callJsonOutput = (msg: string) =>
-    callGeminiNative(ctx.aiEnv, JSON_OUTPUT_SYSTEM_PROMPT, msg, {
+    callGeminiNative(ctx.aiEnv, structuringSystemPrompt, msg, {
       maxTokens: JSON_OUTPUT_MAX_TOKENS,
       responseSchema: STRATEGY_RESPONSE_SCHEMA,
     });
@@ -444,6 +458,11 @@ export const runReasoningStrategy = async (
           finalized = true;
           store.setReasoningSummary(summary);
           store.setPerIssueAnalysis(perIssue);
+
+          console.log(
+            `[reasoning] finalized: ${perIssue.length} issues, key_law_ids=[${perIssue.flatMap((a) => a.key_law_ids).join(', ')}]`,
+          );
+
           resultBlocks.push({ type: 'tool_result', tool_use_id: tc.id, content: '推理完成。' });
           await progress?.onFinalized();
         }
@@ -537,6 +556,13 @@ const enrichStrategyOutput = (
   perIssueAnalysis: PerIssueAnalysis[],
 ): void => {
   const { claims, sections } = output;
+  const stats = {
+    sectionDisputeFromClaim: 0,
+    claimDisputeFromSection: 0,
+    claimConsistency: 0,
+    legalBasis: 0,
+    lawIds: 0,
+  };
 
   // 1. 修正 section dispute_id — 從其 claims 推導
   for (const sec of sections) {
@@ -547,6 +573,7 @@ const enrichStrategyOutput = (
       );
       if (disputeIds.size === 1) {
         sec.dispute_id = [...disputeIds][0];
+        stats.sectionDisputeFromClaim++;
       }
     }
   }
@@ -558,6 +585,7 @@ const enrichStrategyOutput = (
       const sec = sectionMap.get(claim.assigned_section);
       if (sec?.dispute_id) {
         claim.dispute_id = sec.dispute_id;
+        stats.claimDisputeFromSection++;
       }
     }
   }
@@ -568,6 +596,7 @@ const enrichStrategyOutput = (
       const sec = sectionMap.get(claim.assigned_section);
       if (sec && !sec.claims.includes(claim.id)) {
         sec.claims.push(claim.id);
+        stats.claimConsistency++;
       }
     }
   }
@@ -579,6 +608,7 @@ const enrichStrategyOutput = (
       const analysis = analysisMap.get(sec.dispute_id);
       if (analysis && analysis.key_law_ids.length > 0) {
         sec.argumentation.legal_basis = [...analysis.key_law_ids];
+        stats.legalBasis++;
       }
     }
   }
@@ -592,23 +622,75 @@ const enrichStrategyOutput = (
     const fromAnalysis = analysis?.key_law_ids || [];
     const fromBasis = sec.argumentation.legal_basis || [];
 
+    const before = sec.relevant_law_ids.length;
     const merged = new Set([...sec.relevant_law_ids, ...fromAnalysis, ...fromBasis]);
     sec.relevant_law_ids = [...merged];
+    if (sec.relevant_law_ids.length > before) stats.lawIds++;
   }
 
+  // Summary log
   const enrichedCount = sections.filter((s) => s.relevant_law_ids.length > 0).length;
+  const totalLawIds = sections.reduce((sum, s) => sum + s.relevant_law_ids.length, 0);
+  const totalPatched = Object.values(stats).reduce((a, b) => a + b, 0);
+
   console.log(
-    `[reasoningStrategy] enrichStrategyOutput: ${enrichedCount}/${sections.length} sections have relevant_law_ids`,
+    `[enrichment] ${totalPatched} patches applied — ` +
+      `sec.dispute_id←claim: ${stats.sectionDisputeFromClaim}, ` +
+      `claim.dispute_id←sec: ${stats.claimDisputeFromSection}, ` +
+      `claim↔sec consistency: ${stats.claimConsistency}, ` +
+      `legal_basis: ${stats.legalBasis}, ` +
+      `law_ids: ${stats.lawIds}`,
   );
+  console.log(
+    `[enrichment] result: ${enrichedCount}/${sections.length} sections have law_ids (${totalLawIds} total)`,
+  );
+
+  // Per-section detail for debugging
+  for (const sec of sections) {
+    const label = sec.subsection ? `${sec.section} > ${sec.subsection}` : sec.section;
+    console.log(
+      `[enrichment]   "${label}" dispute=${sec.dispute_id || 'null'} ` +
+        `laws=[${sec.relevant_law_ids.join(', ')}] ` +
+        `basis=[${sec.argumentation.legal_basis.join(', ')}]`,
+    );
+  }
+
+  if (totalPatched > sections.length) {
+    console.warn(
+      `[enrichment] WARNING: ${totalPatched} patches for ${sections.length} sections — AI output quality may be degrading`,
+    );
+  }
+};
+
+const TRUNCATION_RETRY_SUFFIX = `
+
+重要：你上次的輸出因為過長被截斷，導致 JSON 不完整。請精簡內容：
+- argumentation.fact_application 控制在 100 字以內
+- argumentation.conclusion 控制在 80 字以內
+- legal_reasoning 控制在 150 字以內
+- facts_to_use 每個 section 最多 3 項
+- claim statement 控制在 80 字以內
+確保輸出完整的 JSON。`;
+
+type JsonOutputFn = (
+  msg: string,
+) => Promise<{ content: string; usage: { output_tokens: number }; truncated: boolean }>;
+
+/** Try parse + enrich in one step, returns null on failure */
+const tryParseAndEnrich = (
+  text: string,
+  perIssueAnalysis: PerIssueAnalysis[],
+): ReasoningStrategyOutput | null => {
+  const output = tryParse(text);
+  if (output) enrichStrategyOutput(output, perIssueAnalysis);
+  return output;
 };
 
 const callJsonAndParse = async (
   userMessage: string,
   legalIssues: ContextStore['legalIssues'],
   perIssueAnalysis: PerIssueAnalysis[],
-  callJsonOutput: (
-    msg: string,
-  ) => Promise<{ content: string; usage: { output_tokens: number }; truncated: boolean }>,
+  callJsonOutput: JsonOutputFn,
 ): Promise<ReasoningStrategyOutput> => {
   // First attempt
   const resp = await callJsonOutput(userMessage);
@@ -617,31 +699,34 @@ const callJsonAndParse = async (
     `[reasoningStrategy] JSON output: truncated=${resp.truncated}, output_tokens=${resp.usage.output_tokens}, text_length=${resp.content.length}`,
   );
 
-  if (resp.truncated) {
-    console.warn(
-      `[reasoningStrategy] JSON output truncated! output_tokens=${resp.usage.output_tokens}`,
-    );
-  }
-
-  let output = tryParse(resp.content);
-  if (output) enrichStrategyOutput(output, perIssueAnalysis);
+  let output = tryParseAndEnrich(resp.content, perIssueAnalysis);
 
   // Retry on parse failure
   if (!output) {
-    console.warn(
-      `[reasoningStrategy] JSON output parse failed (first 300 chars): ${resp.content.slice(0, 300)}`,
-    );
-    const retryMsg =
-      userMessage +
-      '\n\n重要：只輸出純 JSON，不要加 markdown code block、換行解釋或任何其他文字。確保 JSON string 值中沒有未轉義的換行字元。';
-    const retryResp = await callJsonOutput(retryMsg);
+    console.warn(`[reasoningStrategy] JSON parse failed, retrying (truncated=${resp.truncated})`);
 
-    output = tryParse(retryResp.content);
-    if (output) enrichStrategyOutput(output, perIssueAnalysis);
+    const retryMsg = resp.truncated
+      ? userMessage + TRUNCATION_RETRY_SUFFIX
+      : userMessage +
+        '\n\n重要：只輸出純 JSON，不要加 markdown code block、換行解釋或任何其他文字。確保 JSON string 值中沒有未轉義的換行字元。';
+
+    const retryResp = await callJsonOutput(retryMsg);
+    output = tryParseAndEnrich(retryResp.content, perIssueAnalysis);
+
+    // If retry also truncated and parse still failed, try once more with stronger constraint
+    if (!output && retryResp.truncated) {
+      console.warn('[reasoningStrategy] Retry also truncated, attempting compact retry');
+      const compactMsg =
+        userMessage +
+        TRUNCATION_RETRY_SUFFIX +
+        '\n- 每個 string 欄位盡量精簡，避免冗餘描述\n- 如果有超過 8 個 sections，合併相似段落';
+      const compactResp = await callJsonOutput(compactMsg);
+      output = tryParseAndEnrich(compactResp.content, perIssueAnalysis);
+    }
 
     if (!output) {
       console.error(
-        `[reasoningStrategy] Retry also failed (first 300 chars): ${retryResp.content.slice(0, 300)}`,
+        `[reasoningStrategy] All retries failed (first 300 chars): ${resp.content.slice(0, 300)}`,
       );
       throw new Error('論證策略 JSON 解析失敗（重試後仍無法解析）');
     }

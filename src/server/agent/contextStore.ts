@@ -21,7 +21,6 @@ import { parseJsonField } from './toolHelpers';
 export interface CaseMetadata {
   caseNumber: string;
   court: string;
-  caseType: string;
   clientRole: string; // 'plaintiff' | 'defendant' | ''
   caseInstructions: string;
 }
@@ -33,7 +32,6 @@ export class ContextStore {
   caseMetadata: CaseMetadata = {
     caseNumber: '',
     court: '',
-    caseType: '',
     clientRole: '',
     caseInstructions: '',
   };
@@ -84,7 +82,8 @@ export class ContextStore {
       throw new Error(`Section index ${sectionIndex} out of range`);
     }
 
-    const lawIdSet = new Set(section.relevant_law_ids);
+    const allLaws = this.getAllFoundLaws();
+    const laws = this.resolveLawsForSection(section, allLaws);
 
     return {
       // 背景層
@@ -100,7 +99,7 @@ export class ContextStore {
       // 焦點層 — only what this section needs
       claims: this.claims.filter((c) => c.assigned_section === section.id),
       argumentation: section.argumentation,
-      laws: this.getAllFoundLaws().filter((l) => lawIdSet.has(l.id)),
+      laws,
       fileIds: section.relevant_file_ids,
       factsToUse: section.facts_to_use,
       legal_reasoning: section.legal_reasoning,
@@ -108,6 +107,44 @@ export class ContextStore {
       // 回顧層 — full text of completed sections
       completedSections: this.draftSections.slice(0, sectionIndex),
     };
+  };
+
+  /**
+   * 3-tier law fallback for a section:
+   * 1. relevant_law_ids (from enrichment) → use those
+   * 2. perIssueAnalysis.key_law_ids for matching dispute → fallback
+   * 3. ALL found laws → ultimate fallback (intro/conclusion or when above are empty)
+   */
+  private resolveLawsForSection = (
+    section: { relevant_law_ids: string[]; dispute_id?: string | null },
+    allLaws: FoundLaw[],
+  ): FoundLaw[] => {
+    // Tier 1: enrichment filled relevant_law_ids
+    if (section.relevant_law_ids.length > 0) {
+      const idSet = new Set(section.relevant_law_ids);
+      return allLaws.filter((l) => idSet.has(l.id));
+    }
+
+    // Tier 2: derive from perIssueAnalysis for this dispute
+    if (section.dispute_id) {
+      const analysis = this.perIssueAnalysis.find((a) => a.issue_id === section.dispute_id);
+      if (analysis?.key_law_ids?.length) {
+        const idSet = new Set(analysis.key_law_ids);
+        const derived = allLaws.filter((l) => idSet.has(l.id));
+        if (derived.length > 0) {
+          console.warn(
+            `[contextStore] law fallback tier-2: dispute=${section.dispute_id} → ${derived.length} laws`,
+          );
+          return derived;
+        }
+      }
+    }
+
+    // Tier 3: give all found laws (for intro/conclusion or when no dispute mapping)
+    console.warn(
+      `[contextStore] law fallback tier-3: dispute=${section.dispute_id || 'null'} → ALL ${allLaws.length} laws`,
+    );
+    return allLaws;
   };
 
   // ── Mutation Methods (called by pipeline steps) ──

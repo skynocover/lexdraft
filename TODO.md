@@ -155,6 +155,34 @@
 
 ---
 
+## Pipeline 優化（書狀生成品質 & 速度）
+
+> 2026-03-03 分析整理。目前 pipeline 每次約 5-15 API 呼叫、2-10 分鐘。
+
+- [ ] **P0. Writer 部分並行化**
+  - 現況：Step 3 Writer 逐段順序執行（每段 5-15 秒，6 段 = 30-90 秒），是 pipeline 最慢的階段
+  - 原因：每段 prompt 包含「已完成段落全文」（review layer），讓後段承接前段脈絡
+  - 方案：前言和結論不需要 review layer，可與中間段同時起跑；不同爭點的中間段也可並行，只有同爭點子段需要順序
+  - 預估效果：6 段 → 2-3 波並行，Writer 總時間減少 40-60%
+  - 風險：段落銜接可能不如現在流暢，需實驗驗證
+- [ ] **P1. Step 0 抽為獨立函式**
+  - 現況：`briefPipeline.ts` 的 Step 0 有多條分支（有/無既有爭點），約 400 行佔 pipeline 40%
+  - 方案：抽成 `runStep0CaseAnalysis(ctx, store, progress): StepZeroOutput`，主函式只包含 4 step 順序呼叫
+  - 效果：可讀性大幅提升，方便單獨測試 Step 0
+- [ ] **P2. Enrichment validation logging**
+  - 現況：`enrichStrategyOutput()` 補齊 AI 偷懶填空的 `relevant_law_ids`、`dispute_id`、`legal_basis`
+  - 方案：加入 validation warning — 如果 enrichment 補了超過 50% 的欄位，log 警告以追蹤 AI 品質趨勢
+  - 中期可在 Structuring prompt 加 few-shot example 減少 AI 偷懶
+- [ ] **P3. ContextStore 簡化**
+  - `supplementedLaws` 和 `foundLaws` 可合併（`setFoundLaws()` 已合併兩者，`supplementedLaws` 只在中間過程存在）
+  - `getUnrebutted()` 只在 `briefPipeline.ts` 用一次（顯示統計），可內聯
+- [ ] **P4. Writer 文件精準截斷**
+  - 現況：每個檔案截斷到 20,000 字元（`writerStep.ts:157`），不論段落主題
+  - 方案：根據 section 的 `facts_to_use` 做更精準截斷（只傳相關段落）
+  - 前提：需要文件有結構化切分，短期不值得投入
+
+---
+
 ## 暫緩（ROI 不明確，視實際使用數據再決定）
 
 | 項目 | 暫緩理由 |

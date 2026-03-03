@@ -15,6 +15,8 @@ const getTabLabel = (tabData: TabData, briefType?: string): string => {
       return `${tabData.lawName} ${tabData.article}`;
     case 'law-search':
       return tabData.query ? `搜尋: ${tabData.query}` : '法條搜尋';
+    case 'template':
+      return tabData.title || '範本';
     case 'file':
       return tabData.filename;
   }

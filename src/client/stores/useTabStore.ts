@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import { useBriefStore } from './useBriefStore';
+import { useTemplateStore } from './useTemplateStore';
 import type { Paragraph } from './useBriefStore';
 import { useAuthStore } from './useAuthStore';
 import { api } from '../lib/api';
@@ -57,7 +58,13 @@ interface LawSearchTab {
   autoSearch: boolean;
 }
 
-export type TabData = BriefTab | FileTab | VersionPreviewTab | LawTab | LawSearchTab;
+interface TemplateTab {
+  type: 'template';
+  templateId: string;
+  title: string;
+}
+
+export type TabData = BriefTab | FileTab | VersionPreviewTab | LawTab | LawSearchTab | TemplateTab;
 
 export interface Panel {
   id: string;
@@ -100,6 +107,8 @@ interface TabState {
     fullText: string | null,
   ) => void;
   updateBriefTabTitle: (briefId: string, title: string) => void;
+  openTemplateTab: (templateId: string, title: string) => void;
+  updateTemplateTabTitle: (templateId: string, title: string) => void;
   openLawSearchTab: (initialQuery?: string, autoSearch?: boolean) => void;
   updateLawSearchTabQuery: (searchId: string, query: string) => void;
   updateLawSearchTabCache: (
@@ -683,6 +692,49 @@ export const useTabStore = create<TabState>((set, get) => ({
     const { tabRegistry } = get();
     const tabData = tabRegistry[tabId];
     if (tabData?.type === 'brief') {
+      set({
+        tabRegistry: { ...tabRegistry, [tabId]: { ...tabData, title } },
+      });
+    }
+  },
+
+  openTemplateTab: (templateId, title) => {
+    const { tabRegistry, panels, focusedPanelId } = get();
+    const tabId = `template:${templateId}`;
+
+    // If tab already exists in any panel, focus that panel and activate
+    const existingPanel = findPanelWithTab(panels, tabId);
+    if (existingPanel) {
+      set({
+        panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
+        focusedPanelId: existingPanel.id,
+      });
+      const ts = useTemplateStore.getState();
+      if (ts.currentTemplate?.id !== templateId) {
+        ts.loadTemplate(templateId);
+      }
+      return;
+    }
+
+    // Add to focused panel
+    const newRegistry = {
+      ...tabRegistry,
+      [tabId]: { type: 'template' as const, templateId, title },
+    };
+    set({
+      tabRegistry: newRegistry,
+      panels: panels.map((p) =>
+        p.id === focusedPanelId ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId } : p,
+      ),
+    });
+    useTemplateStore.getState().loadTemplate(templateId);
+  },
+
+  updateTemplateTabTitle: (templateId, title) => {
+    const tabId = `template:${templateId}`;
+    const { tabRegistry } = get();
+    const tabData = tabRegistry[tabId];
+    if (tabData?.type === 'template') {
       set({
         tabRegistry: { ...tabRegistry, [tabId]: { ...tabData, title } },
       });

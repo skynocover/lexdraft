@@ -6,11 +6,11 @@ export interface Case {
   title: string;
   case_number: string | null;
   court: string | null;
-  case_type: string | null;
   plaintiff: string | null;
   defendant: string | null;
   client_role: 'plaintiff' | 'defendant' | null;
   case_instructions: string | null;
+  template_id: string | null;
   created_at: string;
   updated_at: string;
 }

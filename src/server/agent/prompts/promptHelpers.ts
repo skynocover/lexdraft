@@ -5,7 +5,6 @@
 export interface CaseMetaInput {
   caseNumber?: string;
   court?: string;
-  caseType?: string;
   clientRole?: string;
   caseInstructions?: string;
 }
@@ -28,7 +27,6 @@ export const buildCaseMetaLines = (meta?: CaseMetaInput, prefix = ''): string[] 
     roleLabel ? `${prefix}我方立場：${roleLabel}` : '',
     meta.caseNumber ? `${prefix}案號：${meta.caseNumber}` : '',
     meta.court ? `${prefix}法院：${meta.court}` : '',
-    meta.caseType ? `${prefix}案件類型：${meta.caseType}` : '',
   ].filter(Boolean);
 };
 

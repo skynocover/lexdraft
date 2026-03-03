@@ -10,4 +10,9 @@ dist
 # A/B test reports
 reports/
 
+# Reference files (templates, notes)
+ref/
+
+
+.DS_Store
 

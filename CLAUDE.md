@@ -13,6 +13,8 @@ npm run db:generate      # Generate Drizzle migrations from schema
 npm run db:migrate:local # Apply migrations to local D1
 npx tsc --noEmit         # Type-check (no test framework configured)
 node scripts/law-search-test/search-test.mjs  # Law search regression test (needs MongoDB + MONGO_API_KEY for hybrid tests)
+node scripts/pipeline-test/test-law-fallback.mjs  # Law fallback unit test (no external deps)
+node scripts/pipeline-test/pipeline-benchmark.mjs  # Pipeline citation benchmark (needs dev server running)
 ```
 
 ## Architecture Overview

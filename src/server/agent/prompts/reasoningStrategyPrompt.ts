@@ -2,7 +2,8 @@
 
 import { buildCaseMetaLines, buildInstructionsBlock } from './promptHelpers';
 import {
-  BRIEF_STRUCTURE_CONVENTIONS,
+  WRITING_CONVENTIONS,
+  getStructureGuidance,
   CLAIMS_RULES,
   SECTION_RULES,
   STRATEGY_JSON_SCHEMA,
@@ -103,7 +104,7 @@ ${SECTION_RULES}
 - 如果有 nice_to_have 級別，正常設計但備註可強化
 - 不要腦補不存在的事實或證據
 
-${BRIEF_STRUCTURE_CONVENTIONS}
+${WRITING_CONVENTIONS}
 
 ${STRATEGY_JSON_SCHEMA}
 
@@ -124,7 +125,10 @@ ${STRATEGY_JSON_SCHEMA}
 
 // ── Build user message for reasoning strategy agent ──
 
-export const buildReasoningStrategyInput = (input: ReasoningStrategyInput): string => {
+export const buildReasoningStrategyInput = (
+  input: ReasoningStrategyInput,
+  hasTemplate = false,
+): string => {
   const issueText = input.legalIssues
     .map((issue) => {
       let text = `- [${issue.id}] ${issue.title}\n  我方：${issue.our_position}\n  對方：${issue.their_position}`;
@@ -187,6 +191,8 @@ export const buildReasoningStrategyInput = (input: ReasoningStrategyInput): stri
   const caseMetaBlock = metaLines.length > 0 ? `\n[案件基本資訊]\n${metaLines.join('\n')}\n` : '';
   const instructionsBlock = buildInstructionsBlock(meta?.caseInstructions);
 
+  const structureGuidance = getStructureGuidance(input.briefType, hasTemplate);
+
   return `[案件全貌]
 ${input.caseSummary || '（尚未整合）'}
 ${caseMetaBlock}${instructionsBlock}
@@ -212,6 +218,6 @@ ${damageText}${input.damages.length > 0 ? `\n合計：NT$ ${totalDamage.toLocale
 
 [時間軸]
 ${timelineText}
-
+${structureGuidance}
 請開始分析。先用文字推理（請求權基礎分析、構成要件檢視、攻防預判），如果需要額外法條就用 search_law 搜尋。推理完成後呼叫 finalize_strategy，然後輸出完整 JSON。`;
 };

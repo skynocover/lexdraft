@@ -12,6 +12,7 @@ import { briefVersionsRouter } from './server/routes/briefVersions';
 import { lawRouter } from './server/routes/law';
 import { timelineRouter } from './server/routes/timeline';
 import { inlineAIRouter } from './server/routes/inlineAI';
+import { templatesRouter } from './server/routes/templates';
 import { processFileMessage } from './server/queue/fileProcessor';
 
 const app = new Hono<AppEnv>();
@@ -62,6 +63,9 @@ api.route('/', timelineRouter);
 
 // Inline AI（段落級 AI 操作）
 api.route('/', inlineAIRouter);
+
+// 書狀範本
+api.route('/', templatesRouter);
 
 app.route('/api', api);
 
