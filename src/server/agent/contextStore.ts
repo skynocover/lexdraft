@@ -70,11 +70,6 @@ export class ContextStore {
     );
   };
 
-  /** Get all found laws */
-  getAllFoundLaws = (): FoundLaw[] => {
-    return this.foundLaws;
-  };
-
   /** Assemble complete Writer context for a specific section */
   getContextForSection = (sectionIndex: number): WriterContext => {
     const section = this.sections[sectionIndex];
@@ -82,8 +77,7 @@ export class ContextStore {
       throw new Error(`Section index ${sectionIndex} out of range`);
     }
 
-    const allLaws = this.getAllFoundLaws();
-    const laws = this.resolveLawsForSection(section, allLaws);
+    const laws = this.resolveLawsForSection(section, this.foundLaws);
 
     return {
       // 背景層
