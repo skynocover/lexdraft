@@ -1,6 +1,15 @@
-// ── Shared constants for reasoning strategy prompts ──
-// Used by both reasoningStrategyPrompt.ts (Reasoning 階段) and
-// reasoningStrategyStep.ts (Structuring 階段) to avoid duplication.
+// ── Shared constants for reasoning strategy prompts & pipeline ──
+// Used by reasoningStrategyPrompt.ts (Reasoning 階段),
+// reasoningStrategyStep.ts (Structuring 階段), and test scripts.
+
+// ── Pipeline Constants ──
+
+export const MAX_ROUNDS = 6;
+export const MAX_SEARCHES = 6;
+export const SOFT_TIMEOUT_MS = 25000;
+export const MAX_TOKENS = 8192;
+export const JSON_OUTPUT_MAX_TOKENS = 32768;
+export const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 
 // 通用撰寫原則（所有書狀都適用，不含具體結構）
 export const WRITING_CONVENTIONS = `═══ 書狀撰寫慣例 ═══

@@ -3,7 +3,7 @@
 // Catches structural issues before passing to Writer.
 
 import type { StrategyOutput, LegalIssue, Claim } from './types';
-import { parseLLMJsonResponse } from '../toolHelpers';
+import { parseLLMJsonResponse } from '../../lib/jsonUtils';
 
 /** Apply defaults for optional claim fields (backward compatible) */
 export const applyClaimDefaults = (claims: Claim[]): Claim[] =>

@@ -22,6 +22,12 @@ import {
   CLAIMS_RULES,
   SECTION_RULES,
   STRATEGY_JSON_SCHEMA,
+  MAX_ROUNDS,
+  MAX_SEARCHES,
+  SOFT_TIMEOUT_MS,
+  MAX_TOKENS,
+  JSON_OUTPUT_MAX_TOKENS,
+  CLAUDE_MODEL,
 } from '../prompts/strategyConstants';
 import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy';
 import { templateToPrompt } from './templateHelper';
@@ -34,15 +40,6 @@ import type {
 } from './types';
 import type { PipelineContext } from './types';
 import type { ContextStore } from '../contextStore';
-
-// ── Constants ──
-
-const MAX_ROUNDS = 6;
-const MAX_SEARCHES = 6;
-const SOFT_TIMEOUT_MS = 25000;
-const MAX_TOKENS = 8192;
-const JSON_OUTPUT_MAX_TOKENS = 32768;
-const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 
 // ── JSON Output System Prompt (separate call, clean context) ──
 

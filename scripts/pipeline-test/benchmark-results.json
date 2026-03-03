@@ -1,26 +1,243 @@
 {
   "caseId": "z4keVNfyuKvL68Xg1qPl2",
-  "timestamp": "2026-03-03T10:28:55.200Z",
+  "timestamp": "2026-03-03T15:59:04.272Z",
   "numRuns": 1,
   "baseline": {
-    "briefId": "QGsyRLIVTWxmjrD8yKS1d",
-    "numParagraphs": 0,
-    "totalLaw": 0,
-    "totalFile": 0,
-    "totalCites": 0,
-    "totalChars": 0,
-    "zeroLawContent": "0/0",
-    "zeroCiteAll": "0/0",
-    "sections": []
+    "briefId": "2bdbogTGxWt73fzKe8yR7",
+    "numParagraphs": 36,
+    "totalLaw": 15,
+    "totalFile": 23,
+    "totalCites": 38,
+    "totalChars": 6683,
+    "zeroLawContent": "19/34",
+    "zeroCiteAll": "10/36",
+    "sections": [
+      {
+        "label": "壹、前言",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 173
+      },
+      {
+        "label": "壹、前言",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 189
+      },
+      {
+        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
+        "lawCites": 0,
+        "fileCites": 1,
+        "charCount": 94
+      },
+      {
+        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
+        "lawCites": 0,
+        "fileCites": 1,
+        "charCount": 176
+      },
+      {
+        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
+        "lawCites": 1,
+        "fileCites": 1,
+        "charCount": 284
+      },
+      {
+        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
+        "lawCites": 1,
+        "fileCites": 0,
+        "charCount": 199
+      },
+      {
+        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
+        "lawCites": 1,
+        "fileCites": 0,
+        "charCount": 211
+      },
+      {
+        "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 1,
+        "charCount": 252
+      },
+      {
+        "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 1,
+        "charCount": 214
+      },
+      {
+        "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 2,
+        "charCount": 241
+      },
+      {
+        "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 0,
+        "charCount": 229
+      },
+      {
+        "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 0,
+        "charCount": 89
+      },
+      {
+        "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 2,
+        "charCount": 223
+      },
+      {
+        "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 1,
+        "charCount": 203
+      },
+      {
+        "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 0,
+        "charCount": 172
+      },
+      {
+        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 6
+      },
+      {
+        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 76
+      },
+      {
+        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 1,
+        "charCount": 192
+      },
+      {
+        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 1,
+        "charCount": 233
+      },
+      {
+        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 3,
+        "charCount": 299
+      },
+      {
+        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 2,
+        "charCount": 377
+      },
+      {
+        "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 11
+      },
+      {
+        "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 0,
+        "charCount": 126
+      },
+      {
+        "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 1,
+        "charCount": 200
+      },
+      {
+        "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 0,
+        "charCount": 239
+      },
+      {
+        "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 0,
+        "charCount": 155
+      },
+      {
+        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 5
+      },
+      {
+        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 67
+      },
+      {
+        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 0,
+        "charCount": 160
+      },
+      {
+        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 1,
+        "charCount": 194
+      },
+      {
+        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 1,
+        "charCount": 232
+      },
+      {
+        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
+        "lawCites": 0,
+        "fileCites": 2,
+        "charCount": 253
+      },
+      {
+        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
+        "lawCites": 1,
+        "fileCites": 1,
+        "charCount": 292
+      },
+      {
+        "label": "參、結論",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 166
+      },
+      {
+        "label": "參、結論",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 373
+      },
+      {
+        "label": "參、結論",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 78
+      }
+    ]
   },
   "runs": [
     {
-      "briefId": "91LW03_Kit7hnwiK2d36A",
+      "briefId": "eea-WXwt3PQCBWDUMTbzK",
       "numParagraphs": 8,
-      "totalLaw": 8,
-      "totalFile": 25,
-      "totalCites": 33,
-      "totalChars": 5377,
+      "totalLaw": 11,
+      "totalFile": 21,
+      "totalCites": 32,
+      "totalChars": 6544,
       "zeroLawContent": "0/6",
       "zeroCiteAll": "2/8",
       "sections": [
@@ -28,52 +245,52 @@
           "label": "壹、前言",
           "lawCites": 0,
           "fileCites": 0,
-          "charCount": 281
+          "charCount": 287
         },
         {
           "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
           "lawCites": 3,
-          "fileCites": 3,
-          "charCount": 765
+          "fileCites": 2,
+          "charCount": 913
         },
         {
           "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
-          "lawCites": 1,
-          "fileCites": 4,
-          "charCount": 758
+          "lawCites": 2,
+          "fileCites": 3,
+          "charCount": 823
         },
         {
           "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
-          "lawCites": 1,
-          "fileCites": 4,
-          "charCount": 645
+          "lawCites": 2,
+          "fileCites": 3,
+          "charCount": 717
         },
         {
           "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
           "lawCites": 1,
-          "fileCites": 7,
-          "charCount": 956
+          "fileCites": 8,
+          "charCount": 1136
         },
         {
           "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
           "lawCites": 1,
-          "fileCites": 2,
-          "charCount": 641
+          "fileCites": 1,
+          "charCount": 737
         },
         {
           "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
-          "lawCites": 1,
-          "fileCites": 5,
-          "charCount": 918
+          "lawCites": 2,
+          "fileCites": 4,
+          "charCount": 1241
         },
         {
           "label": "參、結論",
           "lawCites": 0,
           "fileCites": 0,
-          "charCount": 413
+          "charCount": 690
         }
       ],
-      "elapsed": 281.7
+      "elapsed": 353.5
     }
   ]
 }

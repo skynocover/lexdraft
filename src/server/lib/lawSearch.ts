@@ -4,8 +4,11 @@ import {
   normalizeArticleNo,
   buildArticleId,
   tryRewriteQuery,
+  tryExtractLawName,
   PCODE_MAP,
   ALIAS_MAP,
+  ARTICLE_REGEX,
+  LAW_CONCEPT_REGEX,
 } from './lawConstants';
 
 export interface LawArticle {
@@ -22,12 +25,6 @@ export interface LawArticle {
   url: string;
   score: number;
 }
-
-/** Matches "民法第213條", "民法 第213條之1", "消保法第7條" etc. */
-const ARTICLE_REGEX = /^(.+?)\s*(第\s*\S+?\s*條.*)$/;
-
-/** Matches "民法 損害賠償", "勞動基準法 工時" — law name + concept */
-const LAW_CONCEPT_REGEX = /^([\u4e00-\u9fff]+(?:法|規則|條例|辦法|細則))\s+(.+)$/;
 
 const buildUrl = (pcode: string): string =>
   `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${pcode}`;
@@ -48,33 +45,6 @@ const buildLawClause = (name: string): { filter?: unknown[]; must?: unknown[] } 
       },
     ],
   };
-};
-
-/**
- * Pre-sorted law names (PCODE_MAP keys + ALIAS_MAP keys), longest first.
- * Used by tryExtractLawName to greedily match the longest known law name prefix.
- */
-const SORTED_LAW_NAMES = [...new Set([...Object.keys(PCODE_MAP), ...Object.keys(ALIAS_MAP)])].sort(
-  (a, b) => b.length - a.length,
-);
-
-/**
- * Try to extract a known law name prefix from a query string (without spaces).
- * e.g. "民法過失相抵" → { lawName: "民法", concept: "過失相抵" }
- * e.g. "勞基法加班費" → { lawName: "勞基法", concept: "加班費" }
- * Returns null if no known law name prefix is found or no remaining concept text.
- */
-const tryExtractLawName = (query: string): { lawName: string; concept: string } | null => {
-  const trimmed = query.trim();
-  for (const name of SORTED_LAW_NAMES) {
-    if (trimmed.startsWith(name) && trimmed.length > name.length) {
-      const concept = trimmed.slice(name.length).trim();
-      if (concept) {
-        return { lawName: name, concept };
-      }
-    }
-  }
-  return null;
 };
 
 // ── DB Synonyms Loading ──

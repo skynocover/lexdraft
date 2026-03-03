@@ -317,7 +317,13 @@ export const CONCEPT_TO_LAW: Record<string, { law: string; concept?: string }> =
 };
 
 /** CONCEPT_TO_LAW keys sorted longest first for greedy matching */
-const SORTED_CONCEPTS = Object.keys(CONCEPT_TO_LAW).sort((a, b) => b.length - a.length);
+export const SORTED_CONCEPTS = Object.keys(CONCEPT_TO_LAW).sort((a, b) => b.length - a.length);
+
+/** Matches "民法第213條", "民法 第213條之1", "消保法第7條" etc. */
+export const ARTICLE_REGEX = /^(.+?)\s*(第\s*\S+?\s*條.*)$/;
+
+/** Matches "民法 損害賠償", "勞動基準法 工時" — law name + concept */
+export const LAW_CONCEPT_REGEX = /^([\u4e00-\u9fff]+(?:法|規則|條例|辦法|細則))\s+(.+)$/;
 
 /**
  * 嘗試將純概念查詢改寫為 lawName + concept
@@ -476,11 +482,38 @@ export const normalizeArticleNo = (raw: string): string => {
 };
 
 /**
+ * Pre-sorted law names (PCODE_MAP keys + ALIAS_MAP keys), longest first.
+ * Used by tryExtractLawName to greedily match the longest known law name prefix.
+ */
+export const SORTED_LAW_NAMES = [
+  ...new Set([...Object.keys(PCODE_MAP), ...Object.keys(ALIAS_MAP)]),
+].sort((a, b) => b.length - a.length);
+
+/**
+ * Try to extract a known law name prefix from a query string (without spaces).
+ * e.g. "民法過失相抵" → { lawName: "民法", concept: "過失相抵" }
+ * e.g. "勞基法加班費" → { lawName: "勞基法", concept: "加班費" }
+ * Returns null if no known law name prefix is found or no remaining concept text.
+ */
+export const tryExtractLawName = (query: string): { lawName: string; concept: string } | null => {
+  const trimmed = query.trim();
+  for (const name of SORTED_LAW_NAMES) {
+    if (trimmed.startsWith(name) && trimmed.length > name.length) {
+      const concept = trimmed.slice(name.length).trim();
+      if (concept) {
+        return { lawName: name, concept };
+      }
+    }
+  }
+  return null;
+};
+
+/**
  * 從標準化的 article_no 提取 _id 用的數字部分
  * - "第 184 條" → "184"
  * - "第 191-2 條" → "191-2"
  */
-const extractArticleNum = (articleNo: string): string | null => {
+export const extractArticleNum = (articleNo: string): string | null => {
   const m = articleNo.match(/第\s*(\d+(?:-\d+)?)\s*條/);
   return m ? m[1] : null;
 };

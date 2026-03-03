@@ -5,7 +5,7 @@
  * then queries D1 for citation statistics and outputs a comparison table.
  *
  * Usage:
- *   node scripts/pipeline-test/pipeline-benchmark.mjs [--runs 3] [--case-id XXX]
+ *   npx tsx scripts/pipeline-test/pipeline-benchmark.ts [--runs 3] [--case-id XXX]
  *
  * Prerequisites:
  *   - Dev server running on localhost:5173 (`npm run dev`)
@@ -23,7 +23,7 @@ import { resolve } from 'path';
 // ══════════════════════════════════════════════════════════
 
 const args = process.argv.slice(2);
-const getArg = (name, fallback) => {
+const getArg = (name: string, fallback: string): string => {
   const idx = args.indexOf(name);
   return idx >= 0 && args[idx + 1] ? args[idx + 1] : fallback;
 };
@@ -34,7 +34,7 @@ const BASE_URL = getArg('--url', 'http://localhost:5173');
 const CHAT_MESSAGE = getArg('--message', '請幫我撰寫準備書狀');
 
 // Load auth token
-const loadAuthToken = () => {
+const loadAuthToken = (): string => {
   try {
     const devVars = readFileSync(resolve('dist/lexdraft/.dev.vars'), 'utf-8');
     const m = devVars.match(/AUTH_TOKEN\s*=\s*"?([^\s"]+)"?/);
@@ -50,12 +50,16 @@ const AUTH_TOKEN = loadAuthToken();
 //  D1 Helpers
 // ══════════════════════════════════════════════════════════
 
-const d1Query = (sql) => {
+interface D1Row {
+  [key: string]: unknown;
+}
+
+const d1Query = (sql: string): D1Row[] => {
   const raw = execSync(
     `npx wrangler d1 execute lexdraft-db --local --command "${sql.replace(/"/g, '\\"')}" --json 2>/dev/null`,
     { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 10 },
   );
-  const parsed = JSON.parse(raw);
+  const parsed = JSON.parse(raw) as { results?: D1Row[] }[];
   return parsed[0]?.results || [];
 };
 
@@ -63,7 +67,13 @@ const d1Query = (sql) => {
 //  SSE Pipeline Runner
 // ══════════════════════════════════════════════════════════
 
-const runPipeline = async (runIndex) => {
+interface RunResult {
+  briefId: string;
+  elapsed: number;
+  sseEvents: unknown[];
+}
+
+const runPipeline = async (runIndex: number): Promise<RunResult | null> => {
   const url = `${BASE_URL}/api/cases/${CASE_ID}/chat`;
   console.log(`\n── Run ${runIndex + 1}/${NUM_RUNS} ──`);
   console.log(`POST ${url}`);
@@ -84,12 +94,11 @@ const runPipeline = async (runIndex) => {
     throw new Error(`HTTP ${response.status}: ${errText.slice(0, 300)}`);
   }
 
-  // Parse SSE stream
-  const reader = response.body.getReader();
+  const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let briefId = null;
-  let sseEvents = [];
+  let briefId: string | null = null;
+  const sseEvents: unknown[] = [];
   let lastProgressLine = '';
 
   while (true) {
@@ -106,40 +115,36 @@ const runPipeline = async (runIndex) => {
       if (!jsonStr) continue;
 
       try {
-        const event = JSON.parse(jsonStr);
+        const event = JSON.parse(jsonStr) as Record<string, unknown>;
         sseEvents.push(event);
 
-        // Track brief_id from add_paragraph events
         if (event.type === 'brief_update' && event.action === 'add_paragraph' && event.brief_id) {
-          briefId = event.brief_id;
+          briefId = event.brief_id as string;
         }
 
-        // Show progress
         if (event.type === 'pipeline_progress') {
-          const steps = event.steps || [];
+          const steps = (event.steps as { status: string; label: string }[]) || [];
           const currentStep = steps.find((s) => s.status === 'running');
-          const line = currentStep
+          const progressLine = currentStep
             ? `  [${steps.filter((s) => s.status === 'done').length}/${steps.length}] ${currentStep.label}...`
             : `  [${steps.filter((s) => s.status === 'done').length}/${steps.length}] waiting...`;
-          if (line !== lastProgressLine) {
-            process.stdout.write('\r' + line.padEnd(80));
-            lastProgressLine = line;
+          if (progressLine !== lastProgressLine) {
+            process.stdout.write('\r' + progressLine.padEnd(80));
+            lastProgressLine = progressLine;
           }
         }
 
-        // Track brief_update events
         if (event.type === 'brief_update' && event.action === 'add_paragraph') {
-          const sec = event.data?.section || '?';
-          const sub = event.data?.subsection ? ' > ' + event.data.subsection : '';
+          const data = event.data as { section?: string; subsection?: string } | undefined;
+          const sec = data?.section || '?';
+          const sub = data?.subsection ? ' > ' + data.subsection : '';
           process.stdout.write(`\r  ✓ 段落完成: ${sec}${sub}`.padEnd(80) + '\n');
         }
 
-        // Done
         if (event.type === 'done') {
           process.stdout.write('\r');
         }
 
-        // Error
         if (event.type === 'error') {
           console.error(`\n  ⚠ Pipeline error: ${event.message}`);
         }
@@ -149,15 +154,14 @@ const runPipeline = async (runIndex) => {
     }
   }
 
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  const elapsed = parseFloat(((Date.now() - startTime) / 1000).toFixed(1));
   console.log(`  完成 (${elapsed}s)`);
 
-  // Find the latest brief for this case
   if (!briefId) {
     const rows = d1Query(
       `SELECT id FROM briefs WHERE case_id = '${CASE_ID}' ORDER BY created_at DESC LIMIT 1`,
     );
-    briefId = rows[0]?.id;
+    briefId = (rows[0]?.id as string) || null;
   }
 
   if (!briefId) {
@@ -166,29 +170,55 @@ const runPipeline = async (runIndex) => {
   }
 
   console.log(`  Brief ID: ${briefId}`);
-  return { briefId, elapsed: parseFloat(elapsed), sseEvents };
+  return { briefId, elapsed, sseEvents };
 };
 
 // ══════════════════════════════════════════════════════════
 //  Citation Analysis
 // ══════════════════════════════════════════════════════════
 
-const analyzeBrief = (briefId) => {
+interface SectionAnalysis {
+  label: string;
+  lawCites: number;
+  fileCites: number;
+  charCount: number;
+}
+
+interface BriefAnalysis {
+  briefId: string;
+  numParagraphs: number;
+  totalLaw: number;
+  totalFile: number;
+  totalCites: number;
+  totalChars: number;
+  zeroLawContent: string;
+  zeroCiteAll: string;
+  sections: SectionAnalysis[];
+  elapsed?: number;
+}
+
+const analyzeBrief = (briefId: string): BriefAnalysis | null => {
   const rows = d1Query(`SELECT content_structured, case_id FROM briefs WHERE id = '${briefId}'`);
   if (!rows[0]?.content_structured) return null;
 
-  // Load dispute titles for better labels
-  const disputeMap = new Map();
+  const disputeMap = new Map<string, string>();
   if (rows[0].case_id) {
     const disputes = d1Query(`SELECT id, title FROM disputes WHERE case_id = '${rows[0].case_id}'`);
-    for (const d of disputes) disputeMap.set(d.id, d.title);
+    for (const d of disputes) disputeMap.set(d.id as string, d.title as string);
   }
 
-  const cs = JSON.parse(rows[0].content_structured);
+  const cs = JSON.parse(rows[0].content_structured as string) as {
+    paragraphs: Array<{
+      section: string;
+      subsection?: string;
+      dispute_id?: string;
+      content_md?: string;
+      citations?: Array<{ type: string }>;
+    }>;
+  };
   const paragraphs = cs.paragraphs || [];
 
-  const sections = paragraphs.map((p, i) => {
-    // Use subsection, or dispute title, or index as label
+  const sections: SectionAnalysis[] = paragraphs.map((p) => {
     let label = p.subsection ? `${p.section} > ${p.subsection}` : p.section;
     if (!p.subsection && p.dispute_id && disputeMap.has(p.dispute_id)) {
       label = `${p.section} [${disputeMap.get(p.dispute_id)}]`;
@@ -203,7 +233,6 @@ const analyzeBrief = (briefId) => {
   const totalFile = sections.reduce((s, sec) => s + sec.fileCites, 0);
   const totalChars = sections.reduce((s, sec) => s + sec.charCount, 0);
 
-  // "Content sections" = skip first (前言) and last (結論)
   const contentSections = sections.slice(1, -1);
   const zeroLawSections = contentSections.filter((s) => s.lawCites === 0).length;
   const zeroCiteSections = sections.filter((s) => s.lawCites + s.fileCites === 0).length;
@@ -232,28 +261,25 @@ const main = async () => {
   console.log(`Server: ${BASE_URL}`);
   console.log('');
 
-  // Check server is up
   try {
     const healthResp = await fetch(`${BASE_URL}/api/cases`, {
       headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
     });
     if (!healthResp.ok) throw new Error(`HTTP ${healthResp.status}`);
     console.log('✓ Dev server is running');
-  } catch (err) {
+  } catch {
     console.error(`✗ Cannot reach dev server at ${BASE_URL}`);
     console.error('  Please run "npm run dev" first');
     process.exit(1);
   }
 
-  // Get baseline (latest existing brief before runs)
   const baselineBriefs = d1Query(
     `SELECT id FROM briefs WHERE case_id = '${CASE_ID}' ORDER BY created_at DESC LIMIT 1`,
   );
-  const baselineId = baselineBriefs[0]?.id;
+  const baselineId = baselineBriefs[0]?.id as string | undefined;
   const baseline = baselineId ? analyzeBrief(baselineId) : null;
 
-  // Run pipeline N times
-  const results = [];
+  const results: BriefAnalysis[] = [];
   for (let i = 0; i < NUM_RUNS; i++) {
     try {
       const runResult = await runPipeline(i);
@@ -265,7 +291,7 @@ const main = async () => {
         }
       }
     } catch (err) {
-      console.error(`\n  ✗ Run ${i + 1} failed: ${err.message}`);
+      console.error(`\n  ✗ Run ${i + 1} failed: ${(err as Error).message}`);
     }
   }
 
@@ -279,19 +305,18 @@ const main = async () => {
   console.log(' Benchmark Results');
   console.log('═══════════════════════════════════════════════════════════\n');
 
-  // Header
   const cols = ['Metric'];
   if (baseline) cols.push('Baseline');
   for (let i = 0; i < results.length; i++) cols.push(`Run ${i + 1}`);
   cols.push('Avg');
 
-  const pad = (s, w) => String(s).padStart(w);
+  const pad = (s: unknown, w: number): string => String(s).padStart(w);
   const COL_W = 12;
 
   console.log(cols.map((c) => pad(c, COL_W)).join(' │ '));
   console.log(cols.map(() => '─'.repeat(COL_W)).join('─┼─'));
 
-  const metrics = [
+  const metrics: { name: string; key: keyof BriefAnalysis }[] = [
     { name: 'Law cites', key: 'totalLaw' },
     { name: 'File cites', key: 'totalFile' },
     { name: 'Total cites', key: 'totalCites' },
@@ -307,8 +332,9 @@ const main = async () => {
     if (baseline) row.push(pad(baseline[metric.key] ?? '-', COL_W));
     for (const r of results) row.push(pad(r[metric.key] ?? '-', COL_W));
 
-    // Average (numeric metrics only)
-    const numericVals = results.map((r) => r[metric.key]).filter((v) => typeof v === 'number');
+    const numericVals = results
+      .map((r) => r[metric.key])
+      .filter((v): v is number => typeof v === 'number');
     if (numericVals.length > 0) {
       const avg = (numericVals.reduce((s, v) => s + v, 0) / numericVals.length).toFixed(1);
       row.push(pad(avg, COL_W));

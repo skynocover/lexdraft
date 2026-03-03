@@ -1,23 +1,290 @@
 /**
  * Phase 2 JSON Structuring A/B Test
  *
- * Tests 3 models on Phase 2 (JSON structuring only):
- *   Claude Haiku 4.5 (baseline), Gemini 2.5 Flash, GPT-4.1 Mini
+ * Tests models on Phase 2 (JSON structuring only):
+ *   Phase 1 runs once with Claude Haiku, then Phase 2 feeds those results to each model N times.
  *
- * Phase 1 runs once with Claude Haiku to get fixed reasoning results,
- * then Phase 2 feeds those results to each model 3 times.
- *
- * Usage: node scripts/reasoning-ab-test/phase2-ab-test.mjs
+ * Usage: npx tsx scripts/reasoning-ab-test/phase2-ab-test.ts
  *
  * Requires: MONGO_URL, MONGO_API_KEY, CF_ACCOUNT_ID, CF_GATEWAY_ID, CF_AIG_TOKEN
  * (auto-loaded from dist/lexdraft/.dev.vars)
  */
-import { MongoClient } from 'mongodb';
-import fs from 'fs';
-const { readFileSync } = fs;
+import { MongoClient, Collection, Document } from 'mongodb';
+import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { execSync } from 'child_process';
 import { jsonrepair } from 'jsonrepair';
+
+// ── Imports from source (replace duplicated constants/functions) ──
+import { parseJsonField } from '../../src/server/lib/jsonUtils';
+import { extractBalancedJson, cleanLLMJson } from '../../src/server/lib/jsonUtils';
+import {
+  PCODE_MAP,
+  ALIAS_MAP,
+  CONCEPT_TO_LAW,
+  resolveAlias,
+  SORTED_LAW_NAMES,
+  tryExtractLawName,
+  tryRewriteQuery,
+  SORTED_CONCEPTS,
+  LAW_CONCEPT_REGEX,
+} from '../../src/server/lib/lawConstants';
+import {
+  MAX_ROUNDS,
+  MAX_SEARCHES,
+  MAX_TOKENS,
+  JSON_OUTPUT_MAX_TOKENS,
+  CLAIMS_RULES,
+  SECTION_RULES,
+  STRATEGY_JSON_SCHEMA,
+  WRITING_CONVENTIONS,
+  BRIEF_TYPE_FALLBACK_STRUCTURES,
+} from '../../src/server/agent/prompts/strategyConstants';
+
+// ══════════════════════════════════════════════════════════
+//  Types
+// ══════════════════════════════════════════════════════════
+
+interface EnvVars {
+  mongoUrl: string | undefined;
+  mongoApiKey: string | undefined;
+  cfAccountId: string | undefined;
+  cfGatewayId: string | undefined;
+  cfAigToken: string | undefined;
+}
+
+interface ModelConfig {
+  name: string;
+  id: string;
+  format: 'anthropic' | 'openai';
+  gateway: string;
+  costIn: number;
+  costOut: number;
+}
+
+interface CaseRow {
+  id: string;
+  title: string;
+  case_number: string;
+  court: string;
+  case_type: string;
+  client_role: string;
+  case_instructions: string;
+  law_refs: string | null;
+  timeline: string | null;
+  [key: string]: unknown;
+}
+
+interface FileRow {
+  id: string;
+  filename: string;
+  category: string;
+  summary: string | null;
+  [key: string]: unknown;
+}
+
+interface DisputeRow {
+  id: string;
+  title: string;
+  our_position: string | null;
+  their_position: string | null;
+  evidence: string | null;
+  law_refs: string | null;
+  [key: string]: unknown;
+}
+
+interface DamageRow {
+  category: string;
+  description: string;
+  amount: number | null;
+  [key: string]: unknown;
+}
+
+interface CaseData {
+  caseRow: CaseRow;
+  files: FileRow[];
+  disputes: DisputeRow[];
+  damages: DamageRow[];
+}
+
+interface LegalIssue {
+  id: string;
+  title: string;
+  our_position: string;
+  their_position: string;
+  key_evidence: string[];
+  mentioned_laws: string[];
+  facts: unknown[];
+}
+
+interface FetchedLaw {
+  id: string;
+  law_name: string;
+  article_no: string;
+  content: string;
+  source: string;
+}
+
+interface FileSummary {
+  id: string;
+  filename: string;
+  category: string;
+  summary: string;
+}
+
+interface DamageItem {
+  category: string;
+  description: string;
+  amount: number;
+}
+
+interface TimelineItem {
+  id: string;
+  date: string;
+  title: string;
+  description: string;
+  is_critical: boolean;
+}
+
+interface CaseMetadata {
+  caseNumber: string;
+  court: string;
+  caseType: string;
+  clientRole: string;
+  caseInstructions: string;
+}
+
+interface TestInput {
+  caseSummary: string;
+  briefType: string;
+  legalIssues: LegalIssue[];
+  informationGaps: unknown[];
+  fetchedLaws: FetchedLaw[];
+  fileSummaries: FileSummary[];
+  damages: DamageItem[];
+  timeline: TimelineItem[];
+  userAddedLaws: unknown[];
+  caseMetadata: CaseMetadata;
+}
+
+interface SupplementedLaw {
+  id: string;
+  law_name: string;
+  article_no: string;
+  content: string;
+}
+
+interface PerIssueAnalysis {
+  issue_id: string;
+  chosen_basis: string;
+  key_law_ids: string[];
+  element_mapping: string;
+  defense_response?: string;
+}
+
+interface ToolLoopResult {
+  reasoningSummary: string;
+  perIssueAnalysis: PerIssueAnalysis[];
+  supplementedLaws: SupplementedLaw[];
+  input: TestInput;
+}
+
+interface SectionOutput {
+  id: string;
+  section: string;
+  subsection?: string | null;
+  dispute_id?: string | null;
+  argumentation?: {
+    legal_basis?: string[];
+    fact_application?: string;
+    conclusion?: string;
+  };
+  claims?: string[];
+  relevant_file_ids?: string[];
+  relevant_law_ids?: string[];
+  legal_reasoning?: string;
+}
+
+interface ClaimOutput {
+  id: string;
+  side: string;
+  claim_type: string;
+  statement: string;
+  assigned_section: string | null;
+  dispute_id: string | null;
+  responds_to: string | null;
+}
+
+interface StrategyOutput {
+  claims: ClaimOutput[];
+  sections: SectionOutput[];
+}
+
+interface Phase1Metrics {
+  rounds: number;
+  search_count: number;
+  laws_found: string[];
+  finalize_called: boolean;
+  input_tokens: number;
+  output_tokens: number;
+  total_time_ms: number;
+  estimated_cost: number;
+}
+
+interface Phase2Metrics {
+  input_tokens: number;
+  output_tokens: number;
+  json_parse_ok: boolean;
+  validation_pass: boolean;
+  validation_errors: string[];
+  num_claims: number;
+  num_sections: number;
+  issue_coverage: number;
+  dispute_id_correct: number;
+  total_time_ms: number;
+  estimated_cost: number;
+  error: string | null;
+  raw_preview: string | null;
+  sections?: Array<{
+    id: string;
+    section: string;
+    subsection: string | null;
+    dispute_id: string | null;
+    legal_basis: string[];
+    relevant_law_ids: string[];
+    relevant_file_ids: string[];
+    legal_reasoning: string;
+  }>;
+}
+
+interface SearchResult {
+  _id: string;
+  law_name: string;
+  article_no: string;
+  content: string;
+  score?: number;
+  source?: string;
+}
+
+interface ClaudeContentBlock {
+  type: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+}
+
+interface ClaudeToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: string;
+}
+
+// ══════════════════════════════════════════════════════════
+//  Derived constants (from imports)
+// ══════════════════════════════════════════════════════════
+
+const BRIEF_STRUCTURE_CONVENTIONS = `${WRITING_CONVENTIONS}\n\n${BRIEF_TYPE_FALLBACK_STRUCTURES['complaint']}`;
 
 // ══════════════════════════════════════════════════════════
 //  Config
@@ -25,13 +292,9 @@ import { jsonrepair } from 'jsonrepair';
 
 const CASE_ID = 'z4keVNfyuKvL68Xg1qPl2';
 const RUNS_PER_MODEL = 3;
-const MAX_ROUNDS = 6;
-const MAX_SEARCHES = 6;
-const MAX_TOKENS = 8192;
-const JSON_OUTPUT_MAX_TOKENS = 16384;
 
 // Phase 1 model (fixed — always Claude Haiku)
-const PHASE1_MODEL = {
+const PHASE1_MODEL: ModelConfig = {
   name: 'Claude Haiku 4.5',
   id: 'claude-haiku-4-5-20251001',
   format: 'anthropic',
@@ -41,7 +304,7 @@ const PHASE1_MODEL = {
 };
 
 // Phase 2 candidate models
-const PHASE2_MODELS = [
+const PHASE2_MODELS: ModelConfig[] = [
   {
     name: 'Gemini 2.5 Flash',
     id: 'google/gemini-2.5-flash',
@@ -56,10 +319,10 @@ const PHASE2_MODELS = [
 //  Env Loading
 // ══════════════════════════════════════════════════════════
 
-const loadDevVars = () => {
+const loadDevVars = (): EnvVars => {
   try {
     const devVars = readFileSync(resolve('dist/lexdraft/.dev.vars'), 'utf-8');
-    const get = (key) => {
+    const get = (key: string): string | undefined => {
       const m = devVars.match(new RegExp(`${key}\\s*=\\s*"?([^\\s"]+)"?`));
       return m?.[1] || process.env[key];
     };
@@ -83,7 +346,13 @@ const loadDevVars = () => {
 
 const ENV = loadDevVars();
 
-const requiredKeys = ['mongoUrl', 'mongoApiKey', 'cfAccountId', 'cfGatewayId', 'cfAigToken'];
+const requiredKeys: (keyof EnvVars)[] = [
+  'mongoUrl',
+  'mongoApiKey',
+  'cfAccountId',
+  'cfGatewayId',
+  'cfAigToken',
+];
 for (const k of requiredKeys) {
   if (!ENV[k]) {
     console.error(`Missing env: ${k}`);
@@ -95,7 +364,7 @@ for (const k of requiredKeys) {
 //  D1 Local DB Helpers
 // ══════════════════════════════════════════════════════════
 
-const d1Query = (sql) => {
+const d1Query = <T = Record<string, unknown>>(sql: string): T[] => {
   const raw = execSync(
     `npx wrangler d1 execute lexdraft-db --local --command "${sql.replace(/"/g, '\\"')}" --json 2>/dev/null`,
     { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 10 },
@@ -104,18 +373,20 @@ const d1Query = (sql) => {
   return parsed[0]?.results || [];
 };
 
-const loadCaseFromD1 = () => {
-  const cases = d1Query(`SELECT * FROM cases WHERE id = '${CASE_ID}'`);
+const loadCaseFromD1 = (): CaseData => {
+  const cases = d1Query<CaseRow>(`SELECT * FROM cases WHERE id = '${CASE_ID}'`);
   if (!cases.length) throw new Error(`Case ${CASE_ID} not found`);
   const caseRow = cases[0];
 
-  const files = d1Query(
+  const files = d1Query<FileRow>(
     `SELECT id, filename, category, summary FROM files WHERE case_id = '${CASE_ID}' AND summary IS NOT NULL`,
   );
 
-  const disputes = d1Query(`SELECT * FROM disputes WHERE case_id = '${CASE_ID}' ORDER BY number`);
+  const disputes = d1Query<DisputeRow>(
+    `SELECT * FROM disputes WHERE case_id = '${CASE_ID}' ORDER BY number`,
+  );
 
-  const damages = d1Query(`SELECT * FROM damages WHERE case_id = '${CASE_ID}'`);
+  const damages = d1Query<DamageRow>(`SELECT * FROM damages WHERE case_id = '${CASE_ID}'`);
 
   return { caseRow, files, disputes, damages };
 };
@@ -124,32 +395,37 @@ const loadCaseFromD1 = () => {
 //  Build Test Input (ReasoningStrategyInput format)
 // ══════════════════════════════════════════════════════════
 
-const parseJsonField = (field, defaultValue) => {
-  if (!field) return defaultValue;
-  try {
-    return JSON.parse(field);
-  } catch {
-    return defaultValue;
-  }
-};
-
-const buildTestInput = (data) => {
+const buildTestInput = (data: CaseData): TestInput => {
   const { caseRow, files, disputes, damages } = data;
 
-  const lawRefs = parseJsonField(caseRow.law_refs, []);
-  const timeline = parseJsonField(caseRow.timeline, []);
+  const lawRefs = parseJsonField<
+    Array<{ id: string; law_name: string; article: string; full_text: string }>
+  >(caseRow.law_refs, []);
+  const timeline = parseJsonField<
+    Array<{
+      id?: string;
+      date?: string;
+      title?: string;
+      description?: string;
+      is_critical?: boolean;
+    }>
+  >(caseRow.timeline, []);
 
-  const legalIssues = disputes.map((d) => ({
+  const legalIssues: LegalIssue[] = disputes.map((d) => ({
     id: d.id,
     title: d.title,
     our_position: d.our_position || '',
     their_position: d.their_position || '',
-    key_evidence: parseJsonField(d.evidence, []).map((e) => e.description || e),
-    mentioned_laws: parseJsonField(d.law_refs, []).map((l) => l.id || l),
+    key_evidence: parseJsonField<Array<{ description?: string } | string>>(d.evidence, []).map(
+      (e) => (typeof e === 'string' ? e : e.description || ''),
+    ),
+    mentioned_laws: parseJsonField<Array<{ id?: string } | string>>(d.law_refs, []).map((l) =>
+      typeof l === 'string' ? l : l.id || '',
+    ),
     facts: [],
   }));
 
-  const fetchedLaws = lawRefs
+  const fetchedLaws: FetchedLaw[] = lawRefs
     .filter((l) => l.full_text)
     .map((l) => ({
       id: l.id,
@@ -159,8 +435,8 @@ const buildTestInput = (data) => {
       source: 'mentioned',
     }));
 
-  const fileSummaries = files.map((f) => {
-    const summary = parseJsonField(f.summary, {});
+  const fileSummaries: FileSummary[] = files.map((f) => {
+    const summary = parseJsonField<{ summary?: string }>(f.summary, {});
     return {
       id: f.id,
       filename: f.filename,
@@ -169,13 +445,13 @@ const buildTestInput = (data) => {
     };
   });
 
-  const damageItems = damages.map((d) => ({
+  const damageItems: DamageItem[] = damages.map((d) => ({
     category: d.category,
     description: d.description,
     amount: d.amount || 0,
   }));
 
-  const timelineItems = timeline.map((t) => ({
+  const timelineItems: TimelineItem[] = timeline.map((t) => ({
     id: t.id || '',
     date: t.date || '',
     title: t.title || '',
@@ -206,113 +482,6 @@ const buildTestInput = (data) => {
 // ══════════════════════════════════════════════════════════
 //  Prompts (from reasoningStrategyPrompt.ts + strategyConstants.ts)
 // ══════════════════════════════════════════════════════════
-
-const BRIEF_STRUCTURE_CONVENTIONS = `═══ 書狀結構慣例（依民事訴訟法及實務慣例）═══
-
-每份書狀必須包含「前言」和「結論」段落。段落編號使用中文數字：壹、貳、參…，子段落使用一、二、三…。
-
-### 民事起訴狀（complaint）
-壹、前言（案件背景、當事人關係）
-貳、事實及理由
-  依爭點逐一展開，每個爭點一個子段落（一、二、三…）
-  每段應包含：請求權基礎 → 構成要件涵攝 → 小結論
-參、損害賠償計算（如涉及金額請求）
-  逐項列明各項損害金額及計算依據
-肆、結論（綜上所述，請求鈞院判決如訴之聲明）`;
-
-const CLAIMS_RULES = `═══ Claims 規則 ═══
-
-### Claims 提取
-- ours：我方主張（從案件事實、爭點中提取），必須有 assigned_section
-- theirs：對方主張（從對方書狀、答辯中提取），assigned_section 為 null
-- 對方每個主要主張都需要有 ours claim 來回應
-
-### Claim 類型（claim_type）
-- primary：主要主張（雙方的核心法律主張）
-- rebuttal：反駁（直接回應對方某個 claim）
-- supporting：輔助（支持同段落的主要主張）
-
-### 攻防配對
-- dispute_id：連結到對應爭點的 ID
-- responds_to：攻防配對，填入所回應的 claim ID
-  - rebuttal claim 必須有 responds_to（指向被反駁的 claim）
-  - supporting claim 必須有 responds_to（指向它輔助的 primary claim）
-  - primary claim 的 responds_to 為 null
-- 每個 theirs 的 primary/rebuttal claim 應有對應的 ours rebuttal claim 來回應`;
-
-const SECTION_RULES = `═══ 段落規則 ═══
-
-- 每個段落需要有完整的論證框架（大前提—小前提—結論）
-- legal_basis：引用的法條 ID（必須是已查到全文的法條，且必須在 relevant_law_ids 中）
-- fact_application：事實如何涵攝到法律要件
-- conclusion：本段小結論
-- dispute_id：連結到對應爭點的 ID（前言和結論不需要）
-- relevant_file_ids：列出本段撰寫時需要引用的來源檔案 ID
-- relevant_law_ids：列出本段需要引用的法條 ID
-- legal_reasoning：本段的法律推理摘要（不超過 500 字）`;
-
-const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
-
-段落 ID 命名規則：
-- 前言 → section_1
-- 貳、事實及理由的子段落 → section_2_1, section_2_2, section_2_3...（每個子段落都有自己的 ID）
-- 損害賠償 → section_3
-- 結論 → section_4
-- claim 的 assigned_section 必須精確對應 sections 中的 id
-
-{
-  "claims": [
-    {
-      "id": "their_claim_1",
-      "side": "theirs",
-      "claim_type": "primary",
-      "statement": "對方主張的描述",
-      "assigned_section": null,
-      "dispute_id": "（填入[爭點清單]中的真實 ID）",
-      "responds_to": null
-    },
-    {
-      "id": "our_claim_1",
-      "side": "ours",
-      "claim_type": "rebuttal",
-      "statement": "反駁對方主張的一句話描述",
-      "assigned_section": "section_2_1",
-      "dispute_id": "（填入[爭點清單]中的真實 ID）",
-      "responds_to": "their_claim_1"
-    }
-  ],
-  "sections": [
-    {
-      "id": "section_1",
-      "section": "壹、前言",
-      "dispute_id": null,
-      "argumentation": {
-        "legal_basis": [],
-        "fact_application": "簡述案件背景",
-        "conclusion": "本狀針對被告答辯逐一反駁"
-      },
-      "claims": ["our_claim_overview"],
-      "relevant_file_ids": [],
-      "relevant_law_ids": [],
-      "legal_reasoning": ""
-    },
-    {
-      "id": "section_2_1",
-      "section": "貳、事實及理由",
-      "subsection": "一、侵權行為確已成立",
-      "dispute_id": "（填入[爭點清單]中的真實 ID，前言和結論為 null）",
-      "argumentation": {
-        "legal_basis": ["B0000001-184"],
-        "fact_application": "事實涵攝描述",
-        "conclusion": "本段結論"
-      },
-      "claims": ["our_claim_1"],
-      "relevant_file_ids": ["file_1"],
-      "relevant_law_ids": ["B0000001-184"],
-      "legal_reasoning": "以 184-1前段為主要請求權基礎..."
-    }
-  ]
-}`;
 
 const SYSTEM_PROMPT = `你是一位資深台灣訴訟律師，正在為案件制定論證策略。你可以使用文字自由推理，也可以搜尋法條資料庫來補充推理所需的法律依據。
 
@@ -414,13 +583,13 @@ ${STRATEGY_JSON_SCHEMA}`;
 //  User Message Builder
 // ══════════════════════════════════════════════════════════
 
-const getClientRoleLabel = (clientRole) => {
+const getClientRoleLabel = (clientRole: string): string => {
   if (clientRole === 'plaintiff') return '原告方';
   if (clientRole === 'defendant') return '被告方';
   return '';
 };
 
-const buildUserMessage = (input) => {
+const buildUserMessage = (input: TestInput): string => {
   const issueText = input.legalIssues
     .map((issue) => {
       let text = `- [${issue.id}] ${issue.title}\n  我方：${issue.our_position}\n  對方：${issue.their_position}`;
@@ -459,7 +628,7 @@ const buildUserMessage = (input) => {
       : '無';
 
   const meta = input.caseMetadata;
-  const metaLines = [];
+  const metaLines: string[] = [];
   if (meta) {
     const roleLabel = getClientRoleLabel(meta.clientRole);
     if (roleLabel) metaLines.push(`我方立場：${roleLabel}`);
@@ -569,96 +738,7 @@ const CLAUDE_TOOLS = [
 //  MongoDB Law Search
 // ══════════════════════════════════════════════════════════
 
-const PCODE_MAP = {
-  民法: 'B0000001',
-  民事訴訟法: 'B0010001',
-  強制執行法: 'B0010004',
-  家事事件法: 'B0010048',
-  消費者保護法: 'J0170001',
-  公寓大廈管理條例: 'D0070118',
-  刑法: 'C0000001',
-  刑事訴訟法: 'C0010001',
-  勞動基準法: 'N0030001',
-  勞動事件法: 'B0010064',
-  國家賠償法: 'I0020004',
-  醫療法: 'L0020021',
-  個人資料保護法: 'I0050021',
-  道路交通管理處罰條例: 'K0040012',
-  道路交通安全規則: 'K0040013',
-};
-
-const ALIAS_MAP = {
-  消保法: '消費者保護法',
-  勞基法: '勞動基準法',
-  民訴法: '民事訴訟法',
-  刑訴法: '刑事訴訟法',
-  國賠法: '國家賠償法',
-  個資法: '個人資料保護法',
-  中華民國刑法: '刑法',
-  強執法: '強制執行法',
-  道交條例: '道路交通管理處罰條例',
-  道安規則: '道路交通安全規則',
-};
-
-const CONCEPT_TO_LAW = {
-  損害賠償: { law: '民法' },
-  精神慰撫金: { law: '民法', concept: '慰撫金' },
-  慰撫金: { law: '民法' },
-  勞動能力減損: { law: '民法', concept: '勞動能力' },
-  過失傷害: { law: '刑法' },
-  過失致死: { law: '刑法' },
-  侵權行為: { law: '民法' },
-  假扣押: { law: '民事訴訟法' },
-  強制執行: { law: '強制執行法' },
-  定型化契約: { law: '消費者保護法' },
-  職業災害: { law: '勞動基準法' },
-  解僱: { law: '勞動基準法', concept: '終止契約' },
-  加班: { law: '勞動基準法', concept: '延長工時' },
-  車禍賠償: { law: '民法', concept: '損害賠償' },
-  公然侮辱: { law: '刑法' },
-  國家賠償: { law: '國家賠償法' },
-  過失相抵: { law: '民法' },
-  動力車輛: { law: '民法' },
-  交通事故: { law: '民法', concept: '損害賠償' },
-};
-
-const resolveAlias = (name) => ALIAS_MAP[name] || name;
-
-const SORTED_LAW_NAMES = [...new Set([...Object.keys(PCODE_MAP), ...Object.keys(ALIAS_MAP)])].sort(
-  (a, b) => b.length - a.length,
-);
-
-const SORTED_CONCEPTS = Object.keys(CONCEPT_TO_LAW).sort((a, b) => b.length - a.length);
-
-const LAW_CONCEPT_REGEX = /^([\u4e00-\u9fff]+(?:法|規則|條例|辦法|細則))\s+(.+)$/;
-
-const tryExtractLawName = (query) => {
-  const trimmed = query.trim();
-  for (const name of SORTED_LAW_NAMES) {
-    if (trimmed.startsWith(name) && trimmed.length > name.length) {
-      const concept = trimmed.slice(name.length).trim();
-      if (concept) return { lawName: name, concept };
-    }
-  }
-  return null;
-};
-
-const tryRewriteQuery = (query) => {
-  const trimmed = query.trim();
-  if (CONCEPT_TO_LAW[trimmed]) {
-    const e = CONCEPT_TO_LAW[trimmed];
-    return { lawName: e.law, concept: e.concept || trimmed };
-  }
-  for (const key of SORTED_CONCEPTS) {
-    if (trimmed.includes(key)) {
-      const e = CONCEPT_TO_LAW[key];
-      return { lawName: e.law, concept: e.concept || trimmed };
-    }
-  }
-  return null;
-};
-
-const embedQuery = async (text) => {
+const embedQuery = async (text: string): Promise<number[]> => {
   const res = await fetch('https://ai.mongodb.com/v1/embeddings', {
     method: 'POST',
     headers: {
@@ -673,17 +753,24 @@ const embedQuery = async (text) => {
     }),
   });
   if (!res.ok) throw new Error(`Embedding HTTP ${res.status}`);
-  const json = await res.json();
+  const json = (await res.json()) as { data: Array<{ embedding: number[] }> };
   return json.data[0].embedding;
 };
 
-const buildLawClause = (resolvedName) => {
+const buildLawClause = (
+  resolvedName: string,
+): { filter: Array<Record<string, unknown>> } | { must: Array<Record<string, unknown>> } => {
   const pcode = PCODE_MAP[resolvedName];
   if (pcode) return { filter: [{ text: { query: pcode, path: 'pcode' } }] };
   return { must: [{ text: { query: resolvedName, path: ['law_name', 'aliases'] } }] };
 };
 
-const keywordSearch = async (coll, concept, resolvedLawName, limit) => {
+const keywordSearch = async (
+  coll: Collection<Document>,
+  concept: string,
+  resolvedLawName: string | undefined,
+  limit: number,
+): Promise<SearchResult[]> => {
   const compound = resolvedLawName
     ? {
         ...buildLawClause(resolvedLawName),
@@ -724,10 +811,15 @@ const keywordSearch = async (coll, concept, resolvedLawName, limit) => {
         },
       },
     ])
-    .toArray();
+    .toArray() as Promise<SearchResult[]>;
 };
 
-const vectorSearch = async (coll, queryVector, limit, pcode) => {
+const vectorSearch = async (
+  coll: Collection<Document>,
+  queryVector: number[],
+  limit: number,
+  pcode: string | undefined,
+): Promise<SearchResult[]> => {
   const filter = pcode ? { pcode: { $eq: pcode } } : undefined;
   return coll
     .aggregate([
@@ -751,12 +843,16 @@ const vectorSearch = async (coll, queryVector, limit, pcode) => {
         },
       },
     ])
-    .toArray();
+    .toArray() as Promise<SearchResult[]>;
 };
 
-const vectorFirstMerge = (kwResults, vecResults, limit) => {
-  const seen = new Set();
-  const out = [];
+const vectorFirstMerge = (
+  kwResults: SearchResult[],
+  vecResults: SearchResult[],
+  limit: number,
+): SearchResult[] => {
+  const seen = new Set<string>();
+  const out: SearchResult[] = [];
   for (const r of vecResults) {
     if (!seen.has(r._id)) {
       seen.add(r._id);
@@ -772,12 +868,12 @@ const vectorFirstMerge = (kwResults, vecResults, limit) => {
   return out.slice(0, limit);
 };
 
-let _mongoClient = null;
-let _mongoColl = null;
+let _mongoClient: MongoClient | null = null;
+let _mongoColl: Collection<Document> | null = null;
 
-const ensureMongo = async () => {
-  if (_mongoClient) return _mongoColl;
-  _mongoClient = new MongoClient(ENV.mongoUrl, {
+const ensureMongo = async (): Promise<Collection<Document>> => {
+  if (_mongoClient) return _mongoColl!;
+  _mongoClient = new MongoClient(ENV.mongoUrl!, {
     maxPoolSize: 3,
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 15000,
@@ -787,7 +883,7 @@ const ensureMongo = async () => {
   return _mongoColl;
 };
 
-const closeMongo = async () => {
+const closeMongo = async (): Promise<void> => {
   if (_mongoClient) {
     await _mongoClient.close().catch(() => {});
     _mongoClient = null;
@@ -795,15 +891,19 @@ const closeMongo = async () => {
   }
 };
 
-const handleSearchLaw = async (input) => {
+const handleSearchLaw = async (input: {
+  query: string;
+  law_name?: string;
+  limit?: number;
+}): Promise<SearchResult[]> => {
   const query = input.query;
   const explicitLawName = input.law_name;
   const limit = input.limit || 3;
 
   const coll = await ensureMongo();
 
-  let resolvedLawName;
-  let keywordConcept;
+  let resolvedLawName: string | undefined;
+  let keywordConcept: string;
 
   if (explicitLawName) {
     resolvedLawName = resolveAlias(explicitLawName);
@@ -852,10 +952,15 @@ const handleSearchLaw = async (input) => {
 //  API Callers (Claude Anthropic + OpenAI-compatible)
 // ══════════════════════════════════════════════════════════
 
-const gatewayUrl = (path) =>
+const gatewayUrl = (path: string): string =>
   `https://gateway.ai.cloudflare.com/v1/${ENV.cfAccountId}/${ENV.cfGatewayId}/${path}`;
 
-const fetchWithRetry = async (url, body, headers, maxRetries = 2) => {
+const fetchWithRetry = async (
+  url: string,
+  body: Record<string, unknown>,
+  headers: Record<string, string>,
+  maxRetries = 2,
+): Promise<Response> => {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await fetch(url, {
       method: 'POST',
@@ -870,11 +975,24 @@ const fetchWithRetry = async (url, body, headers, maxRetries = 2) => {
     const errText = await response.text();
     throw new Error(`API error: ${response.status} - ${errText.slice(0, 500)}`);
   }
+  throw new Error('fetchWithRetry: exhausted retries');
 };
 
-const callClaudeApi = async (model, system, messages, tools, maxTokens) => {
+const callClaudeApi = async (
+  model: string,
+  system: string,
+  messages: Array<{
+    role: string;
+    content: string | ClaudeContentBlock[] | ClaudeToolResultBlock[];
+  }>,
+  tools: typeof CLAUDE_TOOLS | null,
+  maxTokens: number,
+): Promise<{
+  content: ClaudeContentBlock[];
+  usage?: { input_tokens?: number; output_tokens?: number };
+}> => {
   const url = gatewayUrl('anthropic/v1/messages');
-  const body = {
+  const body: Record<string, unknown> = {
     model,
     max_tokens: maxTokens,
     system,
@@ -886,12 +1004,24 @@ const callClaudeApi = async (model, system, messages, tools, maxTokens) => {
     'anthropic-version': '2023-06-01',
   };
   const resp = await fetchWithRetry(url, body, headers);
-  return resp.json();
+  return resp.json() as Promise<{
+    content: ClaudeContentBlock[];
+    usage?: { input_tokens?: number; output_tokens?: number };
+  }>;
 };
 
-const callOpenAIApi = async (model, system, messages, tools, maxTokens) => {
+const callOpenAIApi = async (
+  model: string,
+  system: string,
+  messages: Array<{ role: string; content: string }>,
+  tools: unknown[] | null,
+  maxTokens: number,
+): Promise<{
+  choices?: Array<{ message?: { content?: string } }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+}> => {
   const url = gatewayUrl('openrouter/v1/chat/completions');
-  const body = {
+  const body: Record<string, unknown> = {
     model,
     max_tokens: maxTokens,
     messages: [{ role: 'system', content: system }, ...messages],
@@ -902,22 +1032,32 @@ const callOpenAIApi = async (model, system, messages, tools, maxTokens) => {
     'cf-aig-byok-alias': 'lex-draft-openrouter',
   };
   const resp = await fetchWithRetry(url, body, headers);
-  return resp.json();
+  return resp.json() as Promise<{
+    choices?: Array<{ message?: { content?: string } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  }>;
 };
 
 // ══════════════════════════════════════════════════════════
 //  Phase 1: Claude Haiku Tool-Loop (run once)
 // ══════════════════════════════════════════════════════════
 
-const callClaudeToolLoop = async (modelConfig, input, metrics) => {
+const callClaudeToolLoop = async (
+  modelConfig: ModelConfig,
+  input: TestInput,
+  metrics: Phase1Metrics,
+): Promise<ToolLoopResult> => {
   const userMessage = buildUserMessage(input);
-  const messages = [{ role: 'user', content: userMessage }];
+  const messages: Array<{
+    role: string;
+    content: string | ClaudeContentBlock[] | ClaudeToolResultBlock[];
+  }> = [{ role: 'user', content: userMessage }];
   let finalized = false;
   let searchCount = 0;
   let reasoningSummary = '';
-  let perIssueAnalysis = [];
-  const supplementedLaws = [];
-  const lawsFound = [];
+  let perIssueAnalysis: PerIssueAnalysis[] = [];
+  const supplementedLaws: SupplementedLaw[] = [];
+  const lawsFound: string[] = [];
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     metrics.rounds = round + 1;
@@ -937,7 +1077,16 @@ const callClaudeToolLoop = async (modelConfig, input, metrics) => {
 
     messages.push({ role: 'assistant', content: data.content });
 
-    const toolCalls = (data.content || []).filter((b) => b.type === 'tool_use');
+    const toolCalls = (data.content || []).filter(
+      (
+        b,
+      ): b is ClaudeContentBlock & {
+        type: 'tool_use';
+        id: string;
+        name: string;
+        input: Record<string, unknown>;
+      } => b.type === 'tool_use',
+    );
 
     if (toolCalls.length === 0) {
       if (finalized) break;
@@ -948,7 +1097,7 @@ const callClaudeToolLoop = async (modelConfig, input, metrics) => {
       continue;
     }
 
-    const resultBlocks = [];
+    const resultBlocks: ClaudeToolResultBlock[] = [];
 
     for (const tc of toolCalls) {
       if (tc.name === 'search_law') {
@@ -964,12 +1113,14 @@ const callClaudeToolLoop = async (modelConfig, input, metrics) => {
         metrics.search_count = searchCount;
 
         try {
-          const results = await handleSearchLaw(tc.input);
+          const results = await handleSearchLaw(
+            tc.input as { query: string; law_name?: string; limit?: number },
+          );
           if (results.length === 0) {
             resultBlocks.push({
               type: 'tool_result',
               tool_use_id: tc.id,
-              content: `未找到「${tc.input.query}」的相關法條。`,
+              content: `未找到「${(tc.input as { query: string }).query}」的相關法條。`,
             });
           } else {
             for (const r of results) {
@@ -994,14 +1145,16 @@ const callClaudeToolLoop = async (modelConfig, input, metrics) => {
           resultBlocks.push({
             type: 'tool_result',
             tool_use_id: tc.id,
-            content: `搜尋失敗：${err.message}`,
+            content: `搜尋失敗：${(err as Error).message}`,
           });
         }
       } else if (tc.name === 'finalize_strategy') {
         finalized = true;
         metrics.finalize_called = true;
-        reasoningSummary = tc.input.reasoning_summary || '';
-        perIssueAnalysis = tc.input.per_issue_analysis || [];
+        reasoningSummary = (tc.input as { reasoning_summary?: string }).reasoning_summary || '';
+        perIssueAnalysis =
+          ((tc.input as { per_issue_analysis?: PerIssueAnalysis[] })
+            .per_issue_analysis as PerIssueAnalysis[]) || [];
         resultBlocks.push({
           type: 'tool_result',
           tool_use_id: tc.id,
@@ -1027,9 +1180,10 @@ const callClaudeToolLoop = async (modelConfig, input, metrics) => {
       if (typeof lastMsg.content === 'string') {
         lastMsg.content += '\n\n你已達到最大輪數。請立即呼叫 finalize_strategy。';
       } else {
-        lastMsg.content.push({
-          type: 'text',
-          text: '你已達到最大輪數。請立即呼叫 finalize_strategy。',
+        (lastMsg.content as ClaudeToolResultBlock[]).push({
+          type: 'tool_result',
+          tool_use_id: 'force',
+          content: '你已達到最大輪數。請立即呼叫 finalize_strategy。',
         });
       }
     }
@@ -1045,13 +1199,23 @@ const callClaudeToolLoop = async (modelConfig, input, metrics) => {
       metrics.input_tokens += forceData.usage.input_tokens || 0;
       metrics.output_tokens += forceData.usage.output_tokens || 0;
     }
-    const forceToolCalls = (forceData.content || []).filter((b) => b.type === 'tool_use');
+    const forceToolCalls = (forceData.content || []).filter(
+      (
+        b,
+      ): b is ClaudeContentBlock & {
+        type: 'tool_use';
+        name: string;
+        input: Record<string, unknown>;
+      } => b.type === 'tool_use',
+    );
     for (const tc of forceToolCalls) {
       if (tc.name === 'finalize_strategy') {
         finalized = true;
         metrics.finalize_called = true;
-        reasoningSummary = tc.input.reasoning_summary || '';
-        perIssueAnalysis = tc.input.per_issue_analysis || [];
+        reasoningSummary = (tc.input as { reasoning_summary?: string }).reasoning_summary || '';
+        perIssueAnalysis =
+          ((tc.input as { per_issue_analysis?: PerIssueAnalysis[] })
+            .per_issue_analysis as PerIssueAnalysis[]) || [];
       }
     }
   }
@@ -1065,17 +1229,22 @@ const callClaudeToolLoop = async (modelConfig, input, metrics) => {
 //  Phase 2: JSON Output Message Builder
 // ══════════════════════════════════════════════════════════
 
-const buildJsonOutputMessage = (reasoningSummary, perIssueAnalysis, supplementedLaws, input) => {
+const buildJsonOutputMessage = (
+  reasoningSummary: string,
+  perIssueAnalysis: PerIssueAnalysis[],
+  supplementedLaws: SupplementedLaw[],
+  input: TestInput,
+): string => {
   const issueText = input.legalIssues
     .map((issue) => {
-      let text = `- [${issue.id}] ${issue.title}\n  我方：${issue.our_position}\n  對方：${issue.their_position}`;
+      const text = `- [${issue.id}] ${issue.title}\n  我方：${issue.our_position}\n  對方：${issue.their_position}`;
       return text;
     })
     .join('\n');
 
   // Combine initial fetched laws + supplemented
-  const allLawIds = new Set();
-  const allLaws = [];
+  const allLawIds = new Set<string>();
+  const allLaws: Array<{ id: string; name: string }> = [];
   for (const law of [...input.fetchedLaws, ...supplementedLaws]) {
     if (!allLawIds.has(law.id)) {
       allLawIds.add(law.id);
@@ -1133,7 +1302,11 @@ ${disputeIdTable}
 //  Phase 2: API Callers (JSON output, no tools)
 // ══════════════════════════════════════════════════════════
 
-const callClaudeJson = async (modelConfig, message, metrics) => {
+const callClaudeJson = async (
+  modelConfig: ModelConfig,
+  message: string,
+  metrics: Phase2Metrics,
+): Promise<string> => {
   const data = await callClaudeApi(
     modelConfig.id,
     JSON_OUTPUT_SYSTEM_PROMPT,
@@ -1148,7 +1321,11 @@ const callClaudeJson = async (modelConfig, message, metrics) => {
   return (data.content || []).map((b) => b.text || '').join('');
 };
 
-const callOpenAIJson = async (modelConfig, message, metrics) => {
+const callOpenAIJson = async (
+  modelConfig: ModelConfig,
+  message: string,
+  metrics: Phase2Metrics,
+): Promise<string> => {
   const data = await callOpenAIApi(
     modelConfig.id,
     JSON_OUTPUT_SYSTEM_PROMPT,
@@ -1167,61 +1344,21 @@ const callOpenAIJson = async (modelConfig, message, metrics) => {
 //  JSON Parse + Validate
 // ══════════════════════════════════════════════════════════
 
-const extractBalancedJson = (text) => {
-  const start = text.indexOf('{');
-  if (start === -1) return null;
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (ch === '\\' && inString) {
-      escape = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-    if (ch === '{') depth++;
-    else if (ch === '}') {
-      depth--;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  const lastBrace = text.lastIndexOf('}');
-  if (lastBrace > start) return text.slice(start, lastBrace + 1);
-  return null;
-};
-
-const cleanLLMJson = (raw) => {
-  let s = raw;
-  s = s.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
-  s = s.replace(/^(\s*)\/\/[^\n]*/gm, '$1');
-  s = s.replace(/,\s*([\]}])/g, '$1');
-  return s;
-};
-
-const tryParseJson = (content) => {
+const tryParseJson = (content: string): StrategyOutput | null => {
   const jsonStr = extractBalancedJson(content);
   if (jsonStr) {
     try {
-      return JSON.parse(jsonStr);
+      return JSON.parse(jsonStr) as StrategyOutput;
     } catch {
       /* noop */
     }
     try {
-      return JSON.parse(cleanLLMJson(jsonStr));
+      return JSON.parse(cleanLLMJson(jsonStr)) as StrategyOutput;
     } catch {
       /* noop */
     }
     try {
-      return JSON.parse(jsonrepair(jsonStr));
+      return JSON.parse(jsonrepair(jsonStr)) as StrategyOutput;
     } catch {
       /* noop */
     }
@@ -1229,7 +1366,7 @@ const tryParseJson = (content) => {
   const greedyMatch = content.match(/\{[\s\S]*\}/);
   if (greedyMatch) {
     try {
-      return JSON.parse(jsonrepair(greedyMatch[0]));
+      return JSON.parse(jsonrepair(greedyMatch[0])) as StrategyOutput;
     } catch {
       /* noop */
     }
@@ -1237,7 +1374,7 @@ const tryParseJson = (content) => {
   return null;
 };
 
-const applyClaimDefaults = (claims) =>
+const applyClaimDefaults = (claims: ClaimOutput[]): ClaimOutput[] =>
   claims.map((c) => ({
     ...c,
     claim_type: c.claim_type || 'primary',
@@ -1245,8 +1382,11 @@ const applyClaimDefaults = (claims) =>
     responds_to: c.responds_to || null,
   }));
 
-const validateStrategyOutput = (output, legalIssues) => {
-  const errors = [];
+const validateStrategyOutput = (
+  output: StrategyOutput,
+  legalIssues: LegalIssue[],
+): { valid: boolean; errors: string[] } => {
+  const errors: string[] = [];
 
   if (!output.claims || !Array.isArray(output.claims)) {
     return { valid: false, errors: ['缺少 claims 陣列'] };
@@ -1257,7 +1397,7 @@ const validateStrategyOutput = (output, legalIssues) => {
 
   output.claims = applyClaimDefaults(output.claims);
 
-  const sectionIds = new Set();
+  const sectionIds = new Set<string>();
   for (const section of output.sections) {
     if (sectionIds.has(section.id)) errors.push(`重複的段落 ID: ${section.id}`);
     sectionIds.add(section.id);
@@ -1321,19 +1461,22 @@ const validateStrategyOutput = (output, legalIssues) => {
   return { valid: errors.length === 0, errors };
 };
 
-const countIssueCoverage = (output, legalIssues) => {
+const countIssueCoverage = (output: StrategyOutput | null, legalIssues: LegalIssue[]): number => {
   if (!output?.sections) return 0;
   const sectionDispIds = new Set(output.sections.map((s) => s.dispute_id).filter(Boolean));
   let exactMatch = 0;
   const issueIdSet = new Set(legalIssues.map((i) => i.id));
   for (const did of sectionDispIds) {
-    if (issueIdSet.has(did)) exactMatch++;
+    if (issueIdSet.has(did as string)) exactMatch++;
   }
   const count = exactMatch > 0 ? exactMatch : sectionDispIds.size;
   return count;
 };
 
-const countDisputeIdCorrect = (output, legalIssues) => {
+const countDisputeIdCorrect = (
+  output: StrategyOutput | null,
+  legalIssues: LegalIssue[],
+): number => {
   if (!output) return 0;
   const issueIdSet = new Set(legalIssues.map((i) => i.id));
   let correct = 0;
@@ -1350,7 +1493,20 @@ const countDisputeIdCorrect = (output, legalIssues) => {
   return correct;
 };
 
-const parseAndValidate = (rawText, legalIssues) => {
+const parseAndValidate = (
+  rawText: string,
+  legalIssues: LegalIssue[],
+): {
+  json_parse_ok: boolean;
+  validation_pass: boolean;
+  validation_errors: string[];
+  output: StrategyOutput | null;
+  num_claims?: number;
+  num_sections?: number;
+  issue_coverage?: number;
+  dispute_id_correct?: number;
+  raw_preview?: string;
+} => {
   const output = tryParseJson(rawText);
   if (!output) {
     return {
@@ -1379,8 +1535,10 @@ const parseAndValidate = (rawText, legalIssues) => {
 //  capturePhase1 — Run Claude Haiku Phase 1 once
 // ══════════════════════════════════════════════════════════
 
-const capturePhase1 = async (input) => {
-  const metrics = {
+const capturePhase1 = async (
+  input: TestInput,
+): Promise<{ result: ToolLoopResult; metrics: Phase1Metrics }> => {
+  const metrics: Phase1Metrics = {
     rounds: 0,
     search_count: 0,
     laws_found: [],
@@ -1402,16 +1560,16 @@ const capturePhase1 = async (input) => {
 
   // Print Phase 1 details
   const timeStr = (metrics.total_time_ms / 1000).toFixed(1) + 's';
-  const finalizedStr = metrics.finalize_called ? '✅' : '❌';
+  const finalizedStr = metrics.finalize_called ? 'YES' : 'NO';
   console.log(
-    `  ✅ ${timeStr} | ${metrics.rounds} rounds, ${metrics.search_count} searches | finalized ${finalizedStr} | $${metrics.estimated_cost.toFixed(3)}`,
+    `  Phase1 done: ${timeStr} | ${metrics.rounds} rounds, ${metrics.search_count} searches | finalized ${finalizedStr} | $${metrics.estimated_cost.toFixed(3)}`,
   );
   console.log(`  推理摘要：${(result.reasoningSummary || '(無)').slice(0, 80)}...`);
   console.log(`  逐爭點分析：${result.perIssueAnalysis.length} issues analyzed`);
   console.log(`  補充法條：${result.supplementedLaws.length} laws found`);
 
   if (result.perIssueAnalysis.length > 0) {
-    console.log('\n  ── 逐爭點分析詳情 ──');
+    console.log('\n  -- 逐爭點分析詳情 --');
     for (const a of result.perIssueAnalysis) {
       console.log(`  [${a.issue_id}] 請求權基礎：${a.chosen_basis || '(無)'}`);
       console.log(`    法條：${(a.key_law_ids || []).join(', ') || '(無)'}`);
@@ -1425,8 +1583,12 @@ const capturePhase1 = async (input) => {
 //  runPhase2Test — Single Phase 2 test run
 // ══════════════════════════════════════════════════════════
 
-const runPhase2Test = async (modelConfig, jsonMsg, legalIssues) => {
-  const metrics = {
+const runPhase2Test = async (
+  modelConfig: ModelConfig,
+  jsonMsg: string,
+  legalIssues: LegalIssue[],
+): Promise<Phase2Metrics> => {
+  const metrics: Phase2Metrics = {
     input_tokens: 0,
     output_tokens: 0,
     json_parse_ok: false,
@@ -1446,7 +1608,7 @@ const runPhase2Test = async (modelConfig, jsonMsg, legalIssues) => {
 
   try {
     // Call model API
-    let rawJson;
+    let rawJson: string;
     if (modelConfig.format === 'anthropic') {
       rawJson = await callClaudeJson(modelConfig, jsonMsg, metrics);
     } else {
@@ -1467,7 +1629,7 @@ const runPhase2Test = async (modelConfig, jsonMsg, legalIssues) => {
     // Retry on parse failure
     if (!result.json_parse_ok) {
       const retryMsg = jsonMsg + '\n\n重要：只輸出純 JSON，不要加 markdown code block 或其他文字。';
-      let retryRaw;
+      let retryRaw: string;
       if (modelConfig.format === 'anthropic') {
         retryRaw = await callClaudeJson(modelConfig, retryMsg, metrics);
       } else {
@@ -1498,7 +1660,7 @@ const runPhase2Test = async (modelConfig, jsonMsg, legalIssues) => {
       legal_reasoning: s.legal_reasoning || '',
     }));
   } catch (err) {
-    metrics.error = err.message;
+    metrics.error = (err as Error).message;
   }
 
   metrics.total_time_ms = Date.now() - startTime;
@@ -1513,10 +1675,10 @@ const runPhase2Test = async (modelConfig, jsonMsg, legalIssues) => {
 //  Main
 // ══════════════════════════════════════════════════════════
 
-const main = async () => {
+const main = async (): Promise<void> => {
   console.log('══════════════════════════════════════════════════════════');
   console.log(
-    `  Phase 2 JSON Structuring A/B Test — ${PHASE2_MODELS.length} models × ${RUNS_PER_MODEL} runs`,
+    `  Phase 2 JSON Structuring A/B Test — ${PHASE2_MODELS.length} models x ${RUNS_PER_MODEL} runs`,
   );
   console.log('══════════════════════════════════════════════════════════\n');
 
@@ -1542,23 +1704,22 @@ const main = async () => {
   const { result: phase1Result, metrics: phase1Metrics } = await capturePhase1(input);
 
   if (!phase1Metrics.finalize_called) {
-    console.error('  ❌ Phase 1 did not finalize. Aborting.');
+    console.error('  Phase 1 did not finalize. Aborting.');
     await closeMongo();
     process.exit(1);
   }
 
   // Build the fixed JSON output message from Phase 1 results
-  // (without nonce — nonce will be added per-run in the loop)
   const { reasoningSummary, perIssueAnalysis, supplementedLaws } = phase1Result;
 
   console.log('\n[Phase 2] Testing JSON structuring models...\n');
 
-  // 4. Phase 2: Test each model × N runs
-  const allResults = {};
+  // 4. Phase 2: Test each model x N runs
+  const allResults: Record<string, Phase2Metrics[]> = {};
 
   for (const model of PHASE2_MODELS) {
-    const modelResults = [];
-    console.log(`▶ ${model.name}`);
+    const modelResults: Phase2Metrics[] = [];
+    console.log(`> ${model.name}`);
 
     for (let run = 1; run <= RUNS_PER_MODEL; run++) {
       // Build message with unique nonce per run
@@ -1573,10 +1734,10 @@ const main = async () => {
       modelResults.push(m);
 
       const timeStr = (m.total_time_ms / 1000).toFixed(1) + 's';
-      const parseStr = m.json_parse_ok ? '✅' : '❌';
-      const validStr = m.validation_pass ? '✅' : '❌';
+      const parseStr = m.json_parse_ok ? 'OK' : 'FAIL';
+      const validStr = m.validation_pass ? 'OK' : 'FAIL';
       const costStr = '$' + m.estimated_cost.toFixed(3);
-      const statusStr = m.error ? `❌ ${m.error.slice(0, 60)}` : '✅';
+      const statusStr = m.error ? `ERROR ${m.error.slice(0, 60)}` : 'OK';
 
       console.log(
         `  Run ${run}: ${statusStr} ${timeStr} | parse ${parseStr} valid ${validStr} | ${m.num_claims} claims ${m.num_sections} sections | coverage ${m.issue_coverage}/${totalIssues} | dispute_id_correct ${m.dispute_id_correct} | ${costStr}`,
@@ -1641,7 +1802,7 @@ const main = async () => {
   }
 
   // Token details
-  console.log('\n── Token Details ──');
+  console.log('\n-- Token Details --');
   console.log(
     `Phase 1 (Claude Haiku): in=${phase1Metrics.input_tokens} out=${phase1Metrics.output_tokens} cost=$${phase1Metrics.estimated_cost.toFixed(3)}`,
   );
@@ -1655,8 +1816,8 @@ const main = async () => {
   }
 
   // 6. Save results JSON
-  const outputPath = new URL('./phase2-comparison.json', import.meta.url).pathname;
-  const outputData = {
+  const outputPath = resolve('scripts/reasoning-ab-test/phase2-comparison.json');
+  const outputData: Record<string, unknown> = {
     phase1: {
       model: PHASE1_MODEL.name,
       time_ms: phase1Metrics.total_time_ms,
@@ -1670,13 +1831,13 @@ const main = async () => {
       per_issue_analysis: perIssueAnalysis,
       supplemented_laws: supplementedLaws.map((l) => `${l.law_name} ${l.article_no}`),
     },
-    phase2: {},
+    phase2: {} as Record<string, unknown>,
   };
 
   for (const model of PHASE2_MODELS) {
     const results = allResults[model.name];
     if (!results || results.length === 0) continue;
-    outputData.phase2[model.name] = results.map((r) => ({
+    (outputData.phase2 as Record<string, unknown>)[model.name] = results.map((r) => ({
       total_time_ms: r.total_time_ms,
       estimated_cost: r.estimated_cost,
       input_tokens: r.input_tokens,
@@ -1692,8 +1853,8 @@ const main = async () => {
     }));
   }
 
-  fs.writeFileSync(outputPath, JSON.stringify(outputData, null, 2));
-  console.log(`\n📄 Full results saved to: ${outputPath}`);
+  writeFileSync(outputPath, JSON.stringify(outputData, null, 2));
+  console.log(`\nFull results saved to: ${outputPath}`);
 
   await closeMongo();
 };
