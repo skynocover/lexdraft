@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import Markdown from 'react-markdown';
-import { Save, Check, Copy, Eye, Pencil } from 'lucide-react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import { Markdown, type MarkdownStorage } from 'tiptap-markdown';
+import { Undo2, Redo2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTemplateStore } from '../../stores/useTemplateStore';
 import { useTabStore } from '../../stores/useTabStore';
+import { useCaseStore } from '../../stores/useCaseStore';
+import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
 
 export const TemplateEditor = () => {
   const currentTemplate = useTemplateStore((s) => s.currentTemplate);
@@ -11,38 +16,57 @@ export const TemplateEditor = () => {
   const setContentMd = useTemplateStore((s) => s.setContentMd);
   const setTitle = useTemplateStore((s) => s.setTitle);
   const saveTemplate = useTemplateStore((s) => s.saveTemplate);
-  const duplicateTemplate = useTemplateStore((s) => s.duplicateTemplate);
+  const deleteTemplate = useTemplateStore((s) => s.deleteTemplate);
 
   const [editingTitle, setEditingTitle] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
-  const [mode, setMode] = useState<'edit' | 'preview'>('preview');
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const isInternalUpdate = useRef(false);
 
   const isDefault = currentTemplate?.is_default === 1;
-  const contentMd = currentTemplate?.content_md ?? '';
 
-  // Auto-save effect (only for custom templates)
+  const editor = useEditor({
+    extensions: [StarterKit, Markdown],
+    content: currentTemplate?.content_md ?? '',
+    editable: !isDefault,
+    editorProps: {
+      attributes: {
+        class: 'a4-editor-prose',
+      },
+    },
+    onUpdate: ({ editor: ed }) => {
+      if (isInternalUpdate.current) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const md = (ed.storage as unknown as Record<string, MarkdownStorage>).markdown.getMarkdown();
+      setContentMd(md);
+    },
+  });
+
+  // Sync editable when template changes
+  useEffect(() => {
+    if (!editor) return;
+    editor.setEditable(!isDefault);
+  }, [editor, isDefault]);
+
+  // Sync content when template switches or editor becomes ready
+  useEffect(() => {
+    if (!editor || isInternalUpdate.current) return;
+    isInternalUpdate.current = true;
+    editor.commands.setContent(currentTemplate?.content_md ?? '');
+    requestAnimationFrame(() => {
+      isInternalUpdate.current = false;
+    });
+  }, [editor, currentTemplate?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-save (custom templates only)
   useEffect(() => {
     if (!dirty || saving || isDefault) return;
-
-    autoSaveTimer.current = setTimeout(() => {
-      saveTemplate();
-    }, 2000);
-
-    return () => {
-      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    };
+    const timer = setTimeout(() => saveTemplate(), 2000);
+    return () => clearTimeout(timer);
   }, [dirty, saving, saveTemplate, isDefault]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    };
-  }, []);
-
-  // Title editing
+  // Title editing focus
   useEffect(() => {
     if (editingTitle && titleInputRef.current) {
       titleInputRef.current.focus();
@@ -80,93 +104,102 @@ export const TemplateEditor = () => {
     if (dirty && !saving && !isDefault) saveTemplate();
   }, [dirty, saving, saveTemplate, isDefault]);
 
-  const handleDuplicate = useCallback(async () => {
-    if (!currentTemplate) return;
-    const newTpl = await duplicateTemplate(currentTemplate.id);
-    useTabStore.getState().openTemplateTab(newTpl.id, newTpl.title);
-  }, [currentTemplate, duplicateTemplate]);
+  const handleDelete = useCallback(async () => {
+    if (!currentTemplate || isDefault) return;
+    const templateId = currentTemplate.id;
+    setConfirmDelete(false);
 
-  const handleContentChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setContentMd(e.target.value);
-    },
-    [setContentMd],
-  );
+    // 關閉此範本的 tab
+    const tabId = `template:${templateId}`;
+    const { panels } = useTabStore.getState();
+    const ownerPanel = panels.find((p) => p.tabIds.includes(tabId));
+    if (ownerPanel) {
+      useTabStore.getState().closeTab(tabId, ownerPanel.id);
+    }
+
+    // 如果當前案件選了這個範本，重設為 auto
+    const { currentCase, updateCase } = useCaseStore.getState();
+    if (currentCase?.template_id === templateId) {
+      updateCase(currentCase.id, { template_id: 'auto' });
+    }
+
+    try {
+      await deleteTemplate(templateId);
+      toast.success('範本已刪除');
+    } catch {
+      toast.error('刪除範本失敗');
+    }
+  }, [currentTemplate, isDefault, deleteTemplate]);
 
   const templateTitle = currentTemplate?.title || '範本';
 
   return (
     <div className="absolute inset-0 flex flex-col">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 border-b border-bd px-4 py-2">
-        <span className="text-xs font-medium text-t2">
-          {isDefault ? '系統範本（唯讀）' : '範本編輯'}
-        </span>
-        <div className="flex-1" />
-
+      {/* Toolbar — matches EditorToolbar layout */}
+      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-bd bg-bg-1 px-4 py-2">
         {isDefault ? (
-          <button
-            onClick={handleDuplicate}
-            className="flex items-center gap-1 rounded bg-ac/15 px-2 py-1 text-xs text-ac transition hover:bg-ac/25"
-          >
-            <Copy size={12} />
-            <span>複製為我的範本</span>
-          </button>
+          <span className="text-xs text-t3">系統範本（唯讀）</span>
         ) : (
           <>
-            {/* Edit/Preview toggle */}
-            <div className="flex rounded border border-bd">
-              <button
-                onClick={() => setMode('edit')}
-                className={`flex items-center gap-1 px-2 py-1 text-xs transition ${
-                  mode === 'edit' ? 'bg-bg-3 text-t1' : 'text-t3 hover:text-t1'
-                }`}
-              >
-                <Pencil size={10} />
-                <span>編輯</span>
-              </button>
-              <button
-                onClick={() => setMode('preview')}
-                className={`flex items-center gap-1 px-2 py-1 text-xs transition ${
-                  mode === 'preview' ? 'bg-bg-3 text-t1' : 'text-t3 hover:text-t1'
-                }`}
-              >
-                <Eye size={10} />
-                <span>預覽</span>
-              </button>
-            </div>
-
-            {/* Save status */}
-            {dirty ? (
-              <button
-                onClick={handleManualSave}
-                disabled={saving}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-t3 transition hover:bg-bg-h hover:text-t1 disabled:opacity-50"
-                title="儲存範本"
-              >
-                <Save size={12} />
-                <span>{saving ? '儲存中...' : '儲存'}</span>
-              </button>
-            ) : (
-              <span className="flex items-center gap-1 text-xs text-t3">
-                <Check size={12} />
-                <span>已儲存</span>
-              </span>
-            )}
+            {/* Undo / Redo */}
+            <button
+              onClick={() => editor?.chain().focus().undo().run()}
+              disabled={!editor?.can().undo()}
+              className="rounded p-1 text-t3 hover:bg-bg-3 hover:text-t1 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-t3"
+              title="復原 (Ctrl+Z)"
+            >
+              <Undo2 size={14} />
+            </button>
+            <button
+              onClick={() => editor?.chain().focus().redo().run()}
+              disabled={!editor?.can().redo()}
+              className="rounded p-1 text-t3 hover:bg-bg-3 hover:text-t1 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-t3"
+              title="重做 (Ctrl+Shift+Z)"
+            >
+              <Redo2 size={14} />
+            </button>
+            <span className="mx-2 h-4 w-px bg-bd" />
+            <span className="text-xs text-t3">範本編輯</span>
           </>
         )}
+
+        {/* Right side */}
+        <div className="ml-auto flex items-center gap-1">
+          {!isDefault && (
+            <>
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="rounded px-3 py-1 text-xs text-t3 hover:bg-bg-3 hover:text-rd"
+              >
+                刪除範本
+              </button>
+              <span className="mx-1 h-4 w-px bg-bd" />
+            </>
+          )}
+          <div className="text-xs">
+            {isDefault ? null : saving ? (
+              <span className="text-t3">儲存中...</span>
+            ) : !dirty ? (
+              <span className="text-gr">&#10003; 已儲存</span>
+            ) : (
+              <button onClick={handleManualSave} className="text-t3 hover:text-t1">
+                未儲存
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Content area */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {!contentMd ? (
+      {/* A4 Editor Area */}
+      <div className="a4-editor-container min-h-0 flex-1 overflow-y-auto">
+        {!currentTemplate ? (
           <div className="flex items-center justify-center py-20">
-            <p className="text-sm text-t3">尚無範本內容</p>
+            <p className="text-sm text-t3">載入中...</p>
           </div>
         ) : (
-          <div className="mx-auto max-w-3xl px-8 py-6">
+          <div className="a4-editor-content">
             {/* Title */}
-            <div className="mb-4" onDoubleClick={handleTitleDoubleClick}>
+            <div className="a4-title" onDoubleClick={handleTitleDoubleClick}>
               {editingTitle ? (
                 <input
                   ref={titleInputRef}
@@ -174,34 +207,26 @@ export const TemplateEditor = () => {
                   onChange={(e) => setTitleDraft(e.target.value)}
                   onBlur={handleTitleBlur}
                   onKeyDown={handleTitleKeyDown}
-                  className="w-full border-b border-ac bg-transparent text-lg font-bold text-t1 outline-none"
+                  className="a4-title-input"
                 />
               ) : (
-                <h1
-                  className="text-lg font-bold text-t1"
-                  title={isDefault ? undefined : '雙擊編輯標題'}
-                >
-                  {templateTitle}
-                </h1>
+                <span title={isDefault ? undefined : '雙擊編輯標題'}>{templateTitle}</span>
               )}
             </div>
 
-            {/* Markdown content */}
-            {isDefault || mode === 'preview' ? (
-              <div className="prose-legal text-t1">
-                <Markdown>{contentMd}</Markdown>
-              </div>
-            ) : (
-              <textarea
-                value={contentMd}
-                onChange={handleContentChange}
-                className="min-h-120 w-full resize-y rounded border border-bd bg-bg-3 p-4 font-mono text-xs text-t1 outline-none placeholder:text-t3 focus:border-ac"
-                placeholder="在此編輯 Markdown 格式的範本內容..."
-              />
-            )}
+            {/* Tiptap Editor Content */}
+            <EditorContent editor={editor} />
           </div>
         )}
       </div>
+      {/* Confirm delete dialog */}
+      {confirmDelete && (
+        <ConfirmDialog
+          message={`確定要刪除範本「${templateTitle}」嗎？此操作無法復原。`}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 };

@@ -46,33 +46,13 @@ templatesRouter.post('/templates', async (c) => {
     title?: string;
     content_md?: string;
     category?: string;
-    source_id?: string;
   }>();
 
   const db = getDB(c.env.DB);
 
-  let title = body.title?.trim() || '新範本';
-  let contentMd = body.content_md ?? '';
-  let category = body.category ?? null;
-
-  // 如果有 source_id，複製來源範本內容
-  if (body.source_id) {
-    if (body.source_id.startsWith('default-')) {
-      const source = DEFAULT_TEMPLATES.find((t) => t.id === body.source_id);
-      if (source) {
-        title = body.title?.trim() || `${source.title}（複製）`;
-        contentMd = source.content_md;
-        category = source.category;
-      }
-    } else {
-      const sourceRows = await db.select().from(templates).where(eq(templates.id, body.source_id));
-      if (sourceRows[0]) {
-        title = body.title?.trim() || `${sourceRows[0].title}（複製）`;
-        contentMd = sourceRows[0].content_md ?? '';
-        category = sourceRows[0].category;
-      }
-    }
-  }
+  const title = body.title?.trim() || '新範本';
+  const contentMd = body.content_md ?? '';
+  const category = body.category ?? null;
 
   const now = new Date().toISOString();
   const newTemplate = {

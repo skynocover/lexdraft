@@ -26,7 +26,6 @@ interface TemplateState {
   setTitle: (title: string) => void;
   saveTemplate: () => Promise<void>;
   createTemplate: (title?: string) => Promise<Template>;
-  duplicateTemplate: (sourceId: string) => Promise<Template>;
   deleteTemplate: (id: string) => Promise<void>;
   clearCurrentTemplate: () => void;
 }
@@ -56,6 +55,7 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
   },
 
   loadTemplate: async (id: string) => {
+    if (get().currentTemplate?.id === id) return;
     try {
       const result = await api.get<Template>(`/templates/${id}`);
       set({ currentTemplate: result, dirty: false });
@@ -109,12 +109,6 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
 
   createTemplate: async (title?: string) => {
     const result = await api.post<Template>('/templates', { title: title || '新範本' });
-    set((state) => ({ templates: [...state.templates, toSummary(result)] }));
-    return result;
-  },
-
-  duplicateTemplate: async (sourceId: string) => {
-    const result = await api.post<Template>('/templates', { source_id: sourceId });
     set((state) => ({ templates: [...state.templates, toSummary(result)] }));
     return result;
   },

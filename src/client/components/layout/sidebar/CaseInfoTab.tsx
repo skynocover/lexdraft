@@ -28,6 +28,16 @@ interface FormData {
 
 /** 預設值：新案件預設 AI 自動選擇 */
 const DEFAULT_TEMPLATE_ID = 'auto';
+/** 表單值：不使用範本（DB 中為 null） */
+const NONE_TEMPLATE_ID = 'none';
+
+/** DB template_id → form value */
+const toFormTemplateId = (dbValue: string | null | undefined): string =>
+  dbValue === null ? NONE_TEMPLATE_ID : dbValue || DEFAULT_TEMPLATE_ID;
+
+/** form value → DB template_id */
+const fromFormTemplateId = (formValue: string): string | null =>
+  formValue === NONE_TEMPLATE_ID ? null : formValue || null;
 
 export const CaseInfoTab = () => {
   const currentCase = useCaseStore((s) => s.currentCase);
@@ -63,8 +73,7 @@ export const CaseInfoTab = () => {
         title: currentCase.title || '',
         case_number: currentCase.case_number || '',
         court: currentCase.court || '',
-        // 沒有設定 template_id 時預設為 auto
-        template_id: currentCase.template_id || DEFAULT_TEMPLATE_ID,
+        template_id: toFormTemplateId(currentCase.template_id),
         client_role: currentCase.client_role || '',
         plaintiff: currentCase.plaintiff || '',
         defendant: currentCase.defendant || '',
@@ -75,7 +84,7 @@ export const CaseInfoTab = () => {
 
   const dirty = useMemo(() => {
     if (!currentCase) return false;
-    const currentTemplateId = currentCase.template_id || DEFAULT_TEMPLATE_ID;
+    const currentTemplateId = toFormTemplateId(currentCase.template_id);
     return (
       form.title !== (currentCase.title || '') ||
       form.case_number !== (currentCase.case_number || '') ||
@@ -88,25 +97,20 @@ export const CaseInfoTab = () => {
     );
   }, [form, currentCase]);
 
-  // 範本分組
-  const { customTemplates, defaultCategories } = useMemo(() => {
+  // 範本分組：自訂 vs 系統預設（不再按 category 分組）
+  const { customTemplates, defaultTemplates } = useMemo(() => {
     const custom: TemplateSummary[] = [];
-    const defaultsByCategory = new Map<string, TemplateSummary[]>();
+    const defaults: TemplateSummary[] = [];
 
     for (const t of templates) {
       if (t.is_default === 1) {
-        const cat = t.category || '其他';
-        if (!defaultsByCategory.has(cat)) defaultsByCategory.set(cat, []);
-        defaultsByCategory.get(cat)!.push(t);
+        defaults.push(t);
       } else {
         custom.push(t);
       }
     }
 
-    return {
-      customTemplates: custom,
-      defaultCategories: [...defaultsByCategory.entries()],
-    };
+    return { customTemplates: custom, defaultTemplates: defaults };
   }, [templates]);
 
   const set =
@@ -120,13 +124,18 @@ export const CaseInfoTab = () => {
     // 立即儲存 template_id
     if (currentCase) {
       updateCase(currentCase.id, {
-        template_id: value === 'none' ? null : value,
+        template_id: fromFormTemplateId(value),
       });
     }
   };
 
   const handlePreviewTemplate = () => {
-    if (!form.template_id || form.template_id === 'auto' || form.template_id === 'none') return;
+    if (
+      !form.template_id ||
+      form.template_id === DEFAULT_TEMPLATE_ID ||
+      form.template_id === NONE_TEMPLATE_ID
+    )
+      return;
     const tpl = templates.find((t) => t.id === form.template_id);
     if (tpl) {
       openTemplateTab(tpl.id, tpl.title);
@@ -151,7 +160,7 @@ export const CaseInfoTab = () => {
         title: form.title.trim(),
         case_number: form.case_number.trim() || null,
         court: form.court.trim() || null,
-        template_id: form.template_id === 'none' ? null : form.template_id || null,
+        template_id: fromFormTemplateId(form.template_id),
         client_role: (form.client_role as 'plaintiff' | 'defendant') || null,
         plaintiff: form.plaintiff.trim() || null,
         defendant: form.defendant.trim() || null,
@@ -176,7 +185,9 @@ export const CaseInfoTab = () => {
     'w-full rounded border border-bd bg-bg-3 px-2.5 py-1.5 text-xs text-t1 outline-none placeholder:text-t3 focus:border-ac';
 
   const showPreview =
-    form.template_id && form.template_id !== 'auto' && form.template_id !== 'none';
+    form.template_id &&
+    form.template_id !== DEFAULT_TEMPLATE_ID &&
+    form.template_id !== NONE_TEMPLATE_ID;
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto p-3">
@@ -221,7 +232,10 @@ export const CaseInfoTab = () => {
         {/* 書狀範本 */}
         <div>
           <label className="mb-1 block text-xs text-t2">書狀範本</label>
-          <Select value={form.template_id || 'auto'} onValueChange={handleTemplateChange}>
+          <Select
+            value={form.template_id || DEFAULT_TEMPLATE_ID}
+            onValueChange={handleTemplateChange}
+          >
             <SelectTrigger className={inputClass}>
               <SelectValue placeholder="AI 自動選擇" />
             </SelectTrigger>
@@ -247,21 +261,21 @@ export const CaseInfoTab = () => {
                 </SelectGroup>
               )}
 
-              {/* 系統範本按 category 分組 */}
-              {defaultCategories.map(([cat, items]) => (
-                <SelectGroup key={cat}>
-                  <SelectLabel>{cat}</SelectLabel>
-                  {items.map((t) => (
+              {/* 系統範本 */}
+              {defaultTemplates.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>系統範本</SelectLabel>
+                  {defaultTemplates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.title}
                     </SelectItem>
                   ))}
                 </SelectGroup>
-              ))}
+              )}
             </SelectContent>
           </Select>
           <div className="mt-1 flex items-center gap-2">
-            {form.template_id === 'auto' && (
+            {form.template_id === DEFAULT_TEMPLATE_ID && (
               <p className="text-[10px] text-t3">AI 會根據書狀類型自動選擇最合適的範本</p>
             )}
             {showPreview && (

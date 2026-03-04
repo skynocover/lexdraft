@@ -132,6 +132,19 @@ const createMainPanel = (): Panel => ({
 const findPanelWithTab = (panels: Panel[], tabId: string): Panel | undefined =>
   panels.find((p) => p.tabIds.includes(tabId));
 
+// Sync external singleton stores when a tab becomes active.
+// Brief and template use singleton stores (currentBrief / currentTemplate),
+// so switching tabs must reload the correct data. Other tab types (file, law,
+// version, law-search) are self-contained in tabRegistry and need no sync.
+const syncActiveTabStore = (tabData: TabData | undefined): void => {
+  if (!tabData) return;
+  if (tabData.type === 'brief') {
+    useBriefStore.getState().loadBrief(tabData.briefId);
+  } else if (tabData.type === 'template') {
+    useTemplateStore.getState().loadTemplate(tabData.templateId);
+  }
+};
+
 /**
  * Generic helper: open a tab in a non-focused panel.
  * Handles 3 cases: tab exists elsewhere, tab in focused panel (split), tab doesn't exist yet.
@@ -189,7 +202,7 @@ export const useTabStore = create<TabState>((set, get) => ({
         panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
         focusedPanelId: existingPanel.id,
       });
-      useBriefStore.getState().loadBrief(briefId);
+      syncActiveTabStore(get().tabRegistry[tabId]);
       return;
     }
 
@@ -204,7 +217,7 @@ export const useTabStore = create<TabState>((set, get) => ({
         p.id === focusedPanelId ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId } : p,
       ),
     });
-    useBriefStore.getState().loadBrief(briefId);
+    syncActiveTabStore(get().tabRegistry[tabId]);
   },
 
   openFileTab: (fileId, filename) => {
@@ -347,19 +360,19 @@ export const useTabStore = create<TabState>((set, get) => ({
     // If panel is now empty and it's not the last panel, remove it
     if (newTabIds.length === 0 && panels.length > 1) {
       const newPanels = panels.filter((p) => p.id !== panelId);
-      const newFocused = get().focusedPanelId === panelId ? newPanels[0].id : get().focusedPanelId;
+      const oldFocused = get().focusedPanelId;
+      const newFocused = oldFocused === panelId ? newPanels[0].id : oldFocused;
       set({
         tabRegistry: newRegistry,
         panels: newPanels,
         focusedPanelId: newFocused,
       });
-      // If focus switched, sync brief
-      if (newFocused !== get().focusedPanelId) {
+      // If focus switched, sync singleton store for the new focused panel's active tab
+      if (newFocused !== oldFocused) {
         const focusedPanel = newPanels.find((p) => p.id === newFocused);
-        const activeData = focusedPanel?.activeTabId ? newRegistry[focusedPanel.activeTabId] : null;
-        if (activeData?.type === 'brief') {
-          useBriefStore.getState().loadBrief(activeData.briefId);
-        }
+        syncActiveTabStore(
+          focusedPanel?.activeTabId ? newRegistry[focusedPanel.activeTabId] : undefined,
+        );
       }
       return;
     }
@@ -371,12 +384,9 @@ export const useTabStore = create<TabState>((set, get) => ({
       ),
     });
 
-    // If the closed tab was active and new active is a brief, sync
+    // If the closed tab was active, sync singleton store for the new active tab
     if (panel.activeTabId === tabId && newActiveTabId && panelId === get().focusedPanelId) {
-      const newActiveData = newRegistry[newActiveTabId];
-      if (newActiveData?.type === 'brief') {
-        useBriefStore.getState().loadBrief(newActiveData.briefId);
-      }
+      syncActiveTabStore(newRegistry[newActiveTabId]);
     }
   },
 
@@ -390,10 +400,7 @@ export const useTabStore = create<TabState>((set, get) => ({
       focusedPanelId: panelId,
     });
 
-    const tabData = tabRegistry[tabId];
-    if (tabData?.type === 'brief') {
-      useBriefStore.getState().loadBrief(tabData.briefId);
-    }
+    syncActiveTabStore(tabRegistry[tabId]);
   },
 
   focusPanel: (panelId) => {
@@ -405,12 +412,9 @@ export const useTabStore = create<TabState>((set, get) => ({
 
     set({ focusedPanelId: panelId });
 
-    // Sync brief for newly focused panel
+    // Sync singleton store for newly focused panel's active tab
     if (panel.activeTabId) {
-      const tabData = tabRegistry[panel.activeTabId];
-      if (tabData?.type === 'brief') {
-        useBriefStore.getState().loadBrief(tabData.briefId);
-      }
+      syncActiveTabStore(tabRegistry[panel.activeTabId]);
     }
   },
 
@@ -461,11 +465,7 @@ export const useTabStore = create<TabState>((set, get) => ({
       focusedPanelId: newPanelId,
     });
 
-    // Sync brief if the split tab is a brief
-    const tabData = tabRegistry[tabId];
-    if (tabData?.type === 'brief') {
-      useBriefStore.getState().loadBrief(tabData.briefId);
-    }
+    syncActiveTabStore(tabRegistry[tabId]);
   },
 
   closePanel: (panelId) => {
@@ -493,13 +493,22 @@ export const useTabStore = create<TabState>((set, get) => ({
     }
 
     const newPanels = panels.filter((p) => p.id !== panelId);
-    const newFocused = get().focusedPanelId === panelId ? newPanels[0].id : get().focusedPanelId;
+    const oldFocused = get().focusedPanelId;
+    const newFocused = oldFocused === panelId ? newPanels[0].id : oldFocused;
 
     set({
       tabRegistry: newRegistry,
       panels: newPanels,
       focusedPanelId: newFocused,
     });
+
+    // If focus switched, sync singleton store for the new focused panel's active tab
+    if (newFocused !== oldFocused) {
+      const focusedPanel = newPanels.find((p) => p.id === newFocused);
+      syncActiveTabStore(
+        focusedPanel?.activeTabId ? newRegistry[focusedPanel.activeTabId] : undefined,
+      );
+    }
   },
 
   moveTab: (tabId, fromPanelId, toPanelId, index) => {
@@ -548,11 +557,7 @@ export const useTabStore = create<TabState>((set, get) => ({
       focusedPanelId: toPanelId,
     });
 
-    // Sync brief if moved tab is a brief
-    const tabData = get().tabRegistry[tabId];
-    if (tabData?.type === 'brief') {
-      useBriefStore.getState().loadBrief(tabData.briefId);
-    }
+    syncActiveTabStore(get().tabRegistry[tabId]);
   },
 
   reorderTab: (panelId, fromIndex, toIndex) => {
@@ -712,10 +717,7 @@ export const useTabStore = create<TabState>((set, get) => ({
         panels: panels.map((p) => (p.id === existingPanel.id ? { ...p, activeTabId: tabId } : p)),
         focusedPanelId: existingPanel.id,
       });
-      const ts = useTemplateStore.getState();
-      if (ts.currentTemplate?.id !== templateId) {
-        ts.loadTemplate(templateId);
-      }
+      syncActiveTabStore(get().tabRegistry[tabId]);
       return;
     }
 
@@ -730,7 +732,7 @@ export const useTabStore = create<TabState>((set, get) => ({
         p.id === focusedPanelId ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId } : p,
       ),
     });
-    useTemplateStore.getState().loadTemplate(templateId);
+    syncActiveTabStore(get().tabRegistry[tabId]);
   },
 
   updateTemplateTabTitle: (templateId, title) => {
