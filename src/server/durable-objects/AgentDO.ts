@@ -148,7 +148,7 @@ export class AgentDO extends DurableObject<Env> {
   }
 
   private async handleChat(request: Request): Promise<Response> {
-    const { message, caseId, briefContext } = (await request.json()) as {
+    const { message, caseId, briefContext, enableSnapshots } = (await request.json()) as {
       message: string;
       caseId: string;
       briefContext?: {
@@ -161,6 +161,7 @@ export class AgentDO extends DurableObject<Env> {
           content_preview?: string;
         }[];
       };
+      enableSnapshots?: boolean;
     };
 
     this.abortController = new AbortController();
@@ -179,7 +180,15 @@ export class AgentDO extends DurableObject<Env> {
     };
 
     // Run agent loop asynchronously
-    this.runAgentLoop(caseId, message, signal, sendSSE, writer, briefContext).catch(async (err) => {
+    this.runAgentLoop(
+      caseId,
+      message,
+      signal,
+      sendSSE,
+      writer,
+      briefContext,
+      enableSnapshots,
+    ).catch(async (err) => {
       console.error('Agent loop error:', err);
       await sendSSE({
         type: 'error',
@@ -218,6 +227,7 @@ export class AgentDO extends DurableObject<Env> {
         content_preview?: string;
       }[];
     },
+    enableSnapshots?: boolean,
   ) {
     const db = getDB(this.env.DB);
     const aiEnv: AIEnv = {
@@ -474,6 +484,7 @@ ${paragraphList}
               mongoUrl: this.env.MONGO_URL,
               mongoApiKey: this.env.MONGO_API_KEY,
               signal,
+              enableSnapshots,
             },
           );
 

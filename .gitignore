@@ -10,6 +10,9 @@ dist
 # A/B test reports
 reports/
 
+# Pipeline snapshots
+snapshots/
+
 # Reference files (templates, notes)
 ref/
 

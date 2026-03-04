@@ -5,7 +5,7 @@
  * then queries D1 for citation statistics and outputs a comparison table.
  *
  * Usage:
- *   npx tsx scripts/pipeline-test/pipeline-benchmark.ts [--runs 3] [--case-id XXX]
+ *   npx tsx scripts/pipeline-test/pipeline-benchmark.ts [--runs 3] [--case-id XXX] [--save-snapshots]
  *
  * Prerequisites:
  *   - Dev server running on localhost:5173 (`npm run dev`)
@@ -15,38 +15,26 @@
  */
 
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync } from 'fs';
+import { writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { buildQualityReport } from '../../src/server/agent/pipeline/qualityReport';
 import type { Paragraph } from '../../src/client/stores/useBriefStore';
+import { createSnapshotWriter } from './snapshot-writer';
+import { parseArgs, loadDevVars } from './_helpers';
 
 // ══════════════════════════════════════════════════════════
 //  Config
 // ══════════════════════════════════════════════════════════
 
-const args = process.argv.slice(2);
-const getArg = (name: string, fallback: string): string => {
-  const idx = args.indexOf(name);
-  return idx >= 0 && args[idx + 1] ? args[idx + 1] : fallback;
-};
+const { getArg, hasFlag } = parseArgs();
 
 const NUM_RUNS = parseInt(getArg('--runs', '3'), 10);
 const CASE_ID = getArg('--case-id', 'z4keVNfyuKvL68Xg1qPl2');
 const BASE_URL = getArg('--url', 'http://localhost:5173');
 const CHAT_MESSAGE = getArg('--message', '請幫我撰寫準備書狀');
+const SAVE_SNAPSHOTS = hasFlag('--save-snapshots');
 
-// Load auth token
-const loadAuthToken = (): string => {
-  try {
-    const devVars = readFileSync(resolve('dist/lexdraft/.dev.vars'), 'utf-8');
-    const m = devVars.match(/AUTH_TOKEN\s*=\s*"?([^\s"]+)"?/);
-    return m?.[1] || 'dev-token-change-me';
-  } catch {
-    return 'dev-token-change-me';
-  }
-};
-
-const AUTH_TOKEN = loadAuthToken();
+const AUTH_TOKEN = loadDevVars().AUTH_TOKEN || 'dev-token-change-me';
 
 // ══════════════════════════════════════════════════════════
 //  D1 Helpers
@@ -73,9 +61,19 @@ interface RunResult {
   briefId: string;
   elapsed: number;
   sseEvents: unknown[];
+  snapshotDir?: string;
 }
 
 const runPipeline = async (runIndex: number): Promise<RunResult | null> => {
+  // Set up snapshot writer if enabled
+  let snapshotWriter: ((stepName: string, data: unknown) => void) | null = null;
+  let snapshotDir: string | undefined;
+  if (SAVE_SNAPSHOTS) {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    snapshotDir = resolve(`snapshots/${CASE_ID}-${ts}-run${runIndex + 1}`);
+    snapshotWriter = createSnapshotWriter(snapshotDir);
+    console.log(`  Snapshots → ${snapshotDir}`);
+  }
   const url = `${BASE_URL}/api/cases/${CASE_ID}/chat`;
   console.log(`\n── Run ${runIndex + 1}/${NUM_RUNS} ──`);
   console.log(`POST ${url}`);
@@ -88,7 +86,10 @@ const runPipeline = async (runIndex: number): Promise<RunResult | null> => {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${AUTH_TOKEN}`,
     },
-    body: JSON.stringify({ message: CHAT_MESSAGE }),
+    body: JSON.stringify({
+      message: CHAT_MESSAGE,
+      ...(SAVE_SNAPSHOTS && { enableSnapshots: true }),
+    }),
   });
 
   if (!response.ok) {
@@ -118,7 +119,8 @@ const runPipeline = async (runIndex: number): Promise<RunResult | null> => {
 
       try {
         const event = JSON.parse(jsonStr) as Record<string, unknown>;
-        sseEvents.push(event);
+        // Skip storing large snapshot_data events to avoid memory bloat
+        if (event.type !== 'snapshot_data') sseEvents.push(event);
 
         if (event.type === 'brief_update' && event.action === 'add_paragraph' && event.brief_id) {
           briefId = event.brief_id as string;
@@ -150,6 +152,10 @@ const runPipeline = async (runIndex: number): Promise<RunResult | null> => {
         if (event.type === 'error') {
           console.error(`\n  ⚠ Pipeline error: ${event.message}`);
         }
+
+        if (event.type === 'snapshot_data' && snapshotWriter) {
+          snapshotWriter(event.stepName as string, event.data);
+        }
       } catch {
         // Ignore malformed SSE
       }
@@ -172,7 +178,7 @@ const runPipeline = async (runIndex: number): Promise<RunResult | null> => {
   }
 
   console.log(`  Brief ID: ${briefId}`);
-  return { briefId, elapsed, sseEvents };
+  return { briefId, elapsed, sseEvents, snapshotDir };
 };
 
 // ══════════════════════════════════════════════════════════
@@ -249,6 +255,7 @@ const main = async () => {
   console.log(`Case ID: ${CASE_ID}`);
   console.log(`Runs: ${NUM_RUNS}`);
   console.log(`Server: ${BASE_URL}`);
+  if (SAVE_SNAPSHOTS) console.log('Snapshots: enabled');
   console.log('');
 
   try {

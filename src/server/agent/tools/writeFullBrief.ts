@@ -17,16 +17,27 @@ export const handleWriteFullBrief: ToolHandler = async (args, caseId, db, drizzl
 
   const signal = ctx.signal || new AbortController().signal;
 
-  return runBriefPipeline({
-    caseId,
-    briefType,
-    title,
-    signal,
-    sendSSE: ctx.sendSSE,
-    db,
-    drizzle,
-    aiEnv: ctx.aiEnv,
-    mongoUrl: ctx.mongoUrl,
-    mongoApiKey: ctx.mongoApiKey,
-  });
+  const pipelineOpts = ctx.enableSnapshots
+    ? {
+        onStepComplete: async (stepName: string, data: unknown) => {
+          await ctx.sendSSE({ type: 'snapshot_data', stepName, data });
+        },
+      }
+    : undefined;
+
+  return runBriefPipeline(
+    {
+      caseId,
+      briefType,
+      title,
+      signal,
+      sendSSE: ctx.sendSSE,
+      db,
+      drizzle,
+      aiEnv: ctx.aiEnv,
+      mongoUrl: ctx.mongoUrl,
+      mongoApiKey: ctx.mongoApiKey,
+    },
+    pipelineOpts,
+  );
 };

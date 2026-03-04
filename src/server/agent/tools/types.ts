@@ -7,6 +7,7 @@ export interface ToolContext {
   mongoUrl: string;
   mongoApiKey?: string;
   signal?: AbortSignal;
+  enableSnapshots?: boolean;
 }
 
 export type ToolResult = { result: string; success: boolean };
