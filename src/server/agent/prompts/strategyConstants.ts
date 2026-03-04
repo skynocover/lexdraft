@@ -10,6 +10,7 @@ export const SOFT_TIMEOUT_MS = 25000;
 export const MAX_TOKENS = 8192;
 export const JSON_OUTPUT_MAX_TOKENS = 32768;
 export const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
+export const TOOL_RESULT_MAX_CHARS = 200;
 
 // 通用撰寫原則（所有書狀都適用，不含具體結構）
 export const WRITING_CONVENTIONS = `═══ 書狀撰寫慣例 ═══

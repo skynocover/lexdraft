@@ -14,7 +14,6 @@
  *   --save-snapshots  Save step snapshots to disk
  */
 
-import { execSync } from 'child_process';
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { getPlatformProxy } from 'wrangler';
@@ -24,7 +23,7 @@ import { getDB } from '../../src/server/db';
 import type { PipelineContext } from '../../src/server/agent/pipeline/types';
 import type { Paragraph } from '../../src/client/stores/useBriefStore';
 import { createSnapshotWriter } from './snapshot-writer';
-import { parseArgs, loadDevVars } from './_helpers';
+import { parseArgs, loadDevVars, getMainWorktreePath } from './_helpers';
 
 // ══════════════════════════════════════════════════════════
 //  Config
@@ -36,22 +35,6 @@ const NUM_RUNS = parseInt(getArg('--runs', '3'), 10);
 const PARALLEL = parseInt(getArg('--parallel', String(NUM_RUNS)), 10);
 const CASE_ID = getArg('--case-id', 'z4keVNfyuKvL68Xg1qPl2');
 const SAVE_SNAPSHOTS = hasFlag('--save-snapshots');
-
-// ══════════════════════════════════════════════════════════
-//  Worktree-aware persist path
-// ══════════════════════════════════════════════════════════
-
-const getMainWorktreePath = (): string => {
-  try {
-    const output = execSync('git worktree list --porcelain', { encoding: 'utf-8' });
-    // First "worktree" line is the main worktree
-    const match = output.match(/^worktree (.+)$/m);
-    if (match) return match[1];
-  } catch {
-    /* not in a worktree */
-  }
-  return process.cwd();
-};
 
 // ══════════════════════════════════════════════════════════
 //  D1 + Context Setup

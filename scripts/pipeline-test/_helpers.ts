@@ -1,5 +1,6 @@
 // ── Shared helpers for pipeline test scripts ──
 
+import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import type { Claim, LegalIssue, ReasoningSection } from '../../src/server/agent/pipeline/types';
@@ -16,18 +17,35 @@ export const parseArgs = () => {
   return { args, getArg, hasFlag };
 };
 
+// ── Worktree path ──
+
+export const getMainWorktreePath = (): string => {
+  try {
+    const output = execSync('git worktree list --porcelain', { encoding: 'utf-8' });
+    const match = output.match(/^worktree (.+)$/m);
+    if (match) return match[1];
+  } catch {
+    /* not in a worktree */
+  }
+  return process.cwd();
+};
+
 // ── Dev vars ──
 
 export const loadDevVars = (): Record<string, string> => {
   const vars: Record<string, string> = {};
-  try {
-    const content = readFileSync(resolve('dist/lexdraft/.dev.vars'), 'utf-8');
-    for (const line of content.split('\n')) {
-      const m = line.match(/^([A-Z_]+)\s*=\s*"?([^\s"]+)"?/);
-      if (m) vars[m[1]] = m[2];
+  const candidates = [resolve('.dev.vars'), resolve('dist/lexdraft/.dev.vars')];
+  for (const path of candidates) {
+    try {
+      const content = readFileSync(path, 'utf-8');
+      for (const line of content.split('\n')) {
+        const m = line.match(/^([A-Z_]+)\s*=\s*"?([^\s"]+)"?/);
+        if (m) vars[m[1]] = m[2];
+      }
+      break;
+    } catch {
+      /* try next */
     }
-  } catch {
-    /* .dev.vars not found */
   }
   return vars;
 };

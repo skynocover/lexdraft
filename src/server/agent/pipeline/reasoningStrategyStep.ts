@@ -28,6 +28,7 @@ import {
   MAX_TOKENS,
   JSON_OUTPUT_MAX_TOKENS,
   CLAUDE_MODEL,
+  TOOL_RESULT_MAX_CHARS,
 } from '../prompts/strategyConstants';
 import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy';
 import { enrichStrategyOutput } from './enrichStrategy';
@@ -366,8 +367,15 @@ const handleSearchLaw = async (
     console.error('[reasoningStrategy] Failed to persist law refs:', err),
   );
 
+  // Tool result 只回傳截斷版（完整內容已存入 ContextStore，Writer Step 3 獨立取用）
   const resultText = fetchedLaws
-    .map((l) => `[${l.id}] ${l.law_name} ${l.article_no}\n${l.content}`)
+    .map((l) => {
+      const truncated =
+        l.content.length > TOOL_RESULT_MAX_CHARS
+          ? l.content.slice(0, TOOL_RESULT_MAX_CHARS) + '…'
+          : l.content;
+      return `[${l.id}] ${l.law_name} ${l.article_no}\n${truncated}`;
+    })
     .join('\n\n');
 
   const lawNames = fetchedLaws.map((l) => `${l.law_name} ${l.article_no}`);
