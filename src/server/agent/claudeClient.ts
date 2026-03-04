@@ -2,6 +2,7 @@ import type { Citation } from '../../client/stores/useBriefStore';
 import { getGatewayBaseUrl, type AIEnv } from './aiClient';
 import { nanoid } from 'nanoid';
 import { stripFFFD } from '../lib/sanitize';
+import { fetchWithRetry } from '../lib/fetchRetry';
 
 // ── Document block types ──
 
@@ -145,6 +146,20 @@ interface DocumentChunkMap {
 const CITATIONS_MODEL = 'claude-sonnet-4-6';
 const PLANNER_MODEL = 'claude-haiku-4-5-20251001';
 
+// ── Retry wrapper for Claude (Anthropic) calls ──
+
+const callClaudeWithRetry = (url: string, env: AIEnv, body: Record<string, unknown>) =>
+  fetchWithRetry(
+    url,
+    {
+      'Content-Type': 'application/json',
+      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+      'anthropic-version': '2023-06-01',
+    },
+    body,
+    { label: 'Claude API' },
+  );
+
 /**
  * Call Claude with Citations API enabled (custom content format),
  * routed through Cloudflare AI Gateway for unified billing.
@@ -189,23 +204,9 @@ export const callClaudeWithCitations = async (
     ],
   };
 
-  // Route through Cloudflare AI Gateway → Anthropic
+  // Route through Cloudflare AI Gateway → Anthropic (with retry for 429/5xx)
   const gatewayUrl = `${getGatewayBaseUrl(env)}/anthropic/v1/messages`;
-
-  const response = await fetch(gatewayUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Claude API error: ${response.status} - ${errText}`);
-  }
+  const response = await callClaudeWithRetry(gatewayUrl, env, body);
 
   const data = (await response.json()) as ClaudeResponse;
 
@@ -279,40 +280,12 @@ export const callClaude = async (
 ): Promise<{ content: string; usage: ClaudeUsage; truncated: boolean }> => {
   const gatewayUrl = `${getGatewayBaseUrl(env)}/anthropic/v1/messages`;
 
-  const body = JSON.stringify({
+  const response = await callClaudeWithRetry(gatewayUrl, env, {
     model: PLANNER_MODEL,
     max_tokens: maxTokens,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
   });
-
-  let response: Response | undefined;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    response = await fetch(gatewayUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-        'anthropic-version': '2023-06-01',
-      },
-      body,
-    });
-
-    if (response.ok) break;
-
-    if (attempt < 2 && (response.status === 429 || response.status >= 500)) {
-      console.warn(`[callClaude] ${response.status} on attempt ${attempt + 1}, retrying...`);
-      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
-      continue;
-    }
-
-    const errText = await response.text();
-    throw new Error(`Claude API error: ${response.status} - ${errText}`);
-  }
-
-  if (!response || !response.ok) {
-    throw new Error('callClaude: exhausted retries');
-  }
 
   const data = (await response.json()) as ClaudeResponse;
   const content = stripFFFD(data.content.map((b) => b.text).join(''));
@@ -360,38 +333,6 @@ export interface ClaudeToolLoopResponse {
   usage: ClaudeUsage;
 }
 
-// ── Retry wrapper (429 / 5xx) ──
-
-const callWithRetry = async (
-  url: string,
-  env: AIEnv,
-  body: Record<string, unknown>,
-  maxRetries = 3,
-): Promise<Response> => {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (response.ok) return response;
-
-    if (attempt < maxRetries - 1 && (response.status === 429 || response.status >= 500)) {
-      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
-      continue;
-    }
-
-    const errText = await response.text();
-    throw new Error(`Claude API error: ${response.status} - ${errText}`);
-  }
-  throw new Error('callWithRetry: unreachable');
-};
-
 // ── Claude Tool-Loop Call ──
 
 /**
@@ -417,7 +358,7 @@ export const callClaudeToolLoop = async (
     })),
   };
 
-  const response = await callWithRetry(gatewayUrl, env, body);
+  const response = await callClaudeWithRetry(gatewayUrl, env, body);
 
   const data = (await response.json()) as {
     content: Array<Record<string, unknown>>;

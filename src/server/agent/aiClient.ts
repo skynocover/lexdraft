@@ -1,4 +1,5 @@
 import { stripFFFD } from '../lib/sanitize';
+import { fetchWithRetry } from '../lib/fetchRetry';
 
 interface AIEnv {
   CF_ACCOUNT_ID: string;
@@ -235,6 +236,19 @@ export const callGeminiNative = async (
   return { content, usage, truncated };
 };
 
+// ── Retry wrapper for Gemini (AI Gateway) calls ──
+
+const fetchWithRetryGemini = (env: AIEnv, body: Record<string, unknown>) =>
+  fetchWithRetry(
+    getGatewayUrl(env),
+    {
+      'Content-Type': 'application/json',
+      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+    },
+    body,
+    { label: 'AI Gateway' },
+  );
+
 // ── Gemini Tool-Loop (non-streaming, for pipeline Reasoning phase) ──
 
 export interface GeminiToolLoopResponse {
@@ -267,61 +281,41 @@ export const callGeminiToolLoop = async (
     body.tools = opts.tools;
   }
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const response = await fetch(getGatewayUrl(env), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-      },
-      body: JSON.stringify(body),
-    });
+  const response = await fetchWithRetryGemini(env, body);
 
-    if (!response.ok) {
-      if (attempt < 2 && (response.status === 429 || response.status >= 500)) {
-        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
-        continue;
-      }
-      const errText = await response.text();
-      throw new Error(`AI Gateway error: ${response.status} - ${errText}`);
-    }
+  const data = (await response.json()) as {
+    choices: Array<{
+      message: {
+        content?: string | null;
+        tool_calls?: Array<{
+          id: string;
+          type: string;
+          function: { name: string; arguments: string };
+        }>;
+      };
+      finish_reason?: string;
+    }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
 
-    const data = (await response.json()) as {
-      choices: Array<{
-        message: {
-          content?: string | null;
-          tool_calls?: Array<{
-            id: string;
-            type: string;
-            function: { name: string; arguments: string };
-          }>;
-        };
-        finish_reason?: string;
-      }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
+  const msg = data.choices[0]?.message;
+  const content = msg?.content || '';
 
-    const msg = data.choices[0]?.message;
-    const content = msg?.content || '';
+  const toolCalls: ToolCall[] = (msg?.tool_calls || []).map((tc, i) => ({
+    id: tc.id || `call_${roundIndex}_${i}`,
+    type: 'function' as const,
+    function: {
+      name: tc.function.name,
+      arguments: tc.function.arguments,
+    },
+  }));
 
-    const toolCalls: ToolCall[] = (msg?.tool_calls || []).map((tc, i) => ({
-      id: tc.id || `call_${roundIndex}_${i}`,
-      type: 'function' as const,
-      function: {
-        name: tc.function.name,
-        arguments: tc.function.arguments,
-      },
-    }));
+  const usage = {
+    input_tokens: data.usage?.prompt_tokens || 0,
+    output_tokens: data.usage?.completion_tokens || 0,
+  };
 
-    const usage = {
-      input_tokens: data.usage?.prompt_tokens || 0,
-      output_tokens: data.usage?.completion_tokens || 0,
-    };
-
-    return { content, toolCalls, usage };
-  }
-
-  throw new Error('callGeminiToolLoop: exhausted retries');
+  return { content, toolCalls, usage };
 };
 
 export type { ChatMessage, ToolCall, ToolDef, AIEnv };

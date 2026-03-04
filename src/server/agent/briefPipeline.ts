@@ -9,6 +9,7 @@ import type { ToolResult } from './tools/types';
 import type { Paragraph } from '../../client/stores/useBriefStore';
 import type { PipelineStep, PipelineStepChild } from '../../shared/types';
 import { writeSection, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
+import { fetchAndCacheUncitedMentions } from '../lib/lawRefService';
 import { runLawFetch, truncateLawContent } from './pipeline/lawFetchStep';
 import {
   runReasoningStrategy,
@@ -406,6 +407,27 @@ export const runBriefPipeline = async (
     }
 
     await progress.completeWriting(paragraphs.length);
+
+    // ═══ Batch: detect uncited law mentions across all paragraphs at once ═══
+    // Fetches and caches law refs mentioned in text but not cited.
+    // SSE is sent by cleanupUncitedLaws below, so we skip sending here.
+    if (paragraphs.length > 0) {
+      const fullText = paragraphs.map((p) => p.content_md).join('\n');
+      const citedLawLabels = new Set<string>();
+      for (const p of paragraphs) {
+        for (const c of p.citations) {
+          if (c.type === 'law') citedLawLabels.add(c.label);
+        }
+      }
+
+      await fetchAndCacheUncitedMentions(
+        ctx.drizzle,
+        ctx.caseId,
+        ctx.mongoUrl,
+        fullText,
+        citedLawLabels,
+      );
+    }
 
     await emitSnapshot('step3', {
       store: store.serialize(),

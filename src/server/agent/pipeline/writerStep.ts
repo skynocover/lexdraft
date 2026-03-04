@@ -1,7 +1,6 @@
 import { nanoid } from 'nanoid';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
-import { fetchAndCacheUncitedMentions } from '../../lib/lawRefService';
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
 import type { StrategyOutput, PipelineContext } from './types';
 import type { ContextStore } from '../contextStore';
@@ -352,23 +351,6 @@ ${completedText}`;
     strippedText,
   );
 
-  // Post-processing: detect uncited law mentions, fetch, cache, repair citations
-  const citedLawLabels = new Set(citations.filter((c) => c.type === 'law').map((c) => c.label));
-  const allRefs = await fetchAndCacheUncitedMentions(
-    ctx.drizzle,
-    ctx.caseId,
-    ctx.mongoUrl,
-    text,
-    citedLawLabels,
-  );
-
-  await ctx.sendSSE({
-    type: 'brief_update',
-    brief_id: '',
-    action: 'set_law_refs',
-    data: allRefs,
-  });
-
   // Build paragraph
   const paragraph: Paragraph = {
     id: nanoid(),
@@ -446,14 +428,15 @@ export const cleanupUncitedLaws = async (ctx: PipelineContext, paragraphs: Parag
   const beforeRefs = await readLawRefs(ctx.drizzle, ctx.caseId);
   const hasUncited = beforeRefs.some(shouldRemove);
 
-  if (hasUncited) {
-    const remaining = await removeLawRefsWhere(ctx.drizzle, ctx.caseId, shouldRemove);
+  const finalRefs = hasUncited
+    ? await removeLawRefsWhere(ctx.drizzle, ctx.caseId, shouldRemove)
+    : beforeRefs;
 
-    await ctx.sendSSE({
-      type: 'brief_update',
-      brief_id: '',
-      action: 'set_law_refs',
-      data: remaining,
-    });
-  }
+  // Always send final law refs to frontend (batch fetchAndCacheUncitedMentions may have added new refs)
+  await ctx.sendSSE({
+    type: 'brief_update',
+    brief_id: '',
+    action: 'set_law_refs',
+    data: finalRefs,
+  });
 };
