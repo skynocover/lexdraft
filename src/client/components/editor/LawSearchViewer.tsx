@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Search, Plus, Scale } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTabStore, type LawSearchResult } from '../../stores/useTabStore';
 import { useBriefStore, type LawRef } from '../../stores/useBriefStore';
 import { useCaseStore } from '../../stores/useCaseStore';
@@ -118,8 +119,10 @@ export const LawSearchViewer = ({
       });
       setLawRefs(updatedRefs);
       setSelected(new Set());
+      toast.success(`已加入 ${toAdd.length} 條法條`);
     } catch (err) {
       console.error('Add law refs failed:', err);
+      toast.error('加入法條失敗');
     } finally {
       setAdding(false);
     }

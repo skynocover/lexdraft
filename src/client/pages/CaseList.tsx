@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useCaseStore, type Case } from '../stores/useCaseStore';
 import { api } from '../lib/api';
@@ -21,15 +22,20 @@ export function CaseList() {
     api
       .get<Case[]>('/cases')
       .then(setCases)
-      .catch(console.error)
+      .catch((err) => {
+        console.error(err);
+        toast.error('載入案件列表失敗');
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const handleDelete = async (c: Case) => {
     try {
       await deleteCase(c.id);
+      toast.success('案件已刪除');
     } catch (err) {
       console.error('deleteCase error:', err);
+      toast.error('刪除案件失敗');
     }
     setConfirmDelete(null);
   };

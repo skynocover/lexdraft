@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 
 export interface StructuredFact {
@@ -106,6 +107,14 @@ const makeLoader =
       set({ [key]: data } as Partial<AnalysisState>);
     } catch (err) {
       console.error(`load ${key} error:`, err);
+      const label: Record<string, string> = {
+        disputes: '爭點',
+        damages: '金額',
+        timeline: '時間軸',
+        parties: '當事人',
+        claims: '主張',
+      };
+      toast.error(`載入${label[key as string] ?? key}失敗`, { id: 'case-load' });
     }
   };
 

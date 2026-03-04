@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CircleDollarSign, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { useAnalysisStore, type Damage } from '../../stores/useAnalysisStore';
 import { useChatStore } from '../../stores/useChatStore';
@@ -59,6 +60,7 @@ export function DamagesTab() {
       setFormOpen(false);
     } catch (err) {
       console.error('Damage save error:', err);
+      toast.error(editingDamage ? '更新金額失敗' : '新增金額失敗');
     } finally {
       setLoading(false);
     }
@@ -68,8 +70,10 @@ export function DamagesTab() {
     if (!deletingDamage) return;
     try {
       await removeDamage(deletingDamage.id);
+      toast.success('金額項目已刪除');
     } catch (err) {
       console.error('Damage delete error:', err);
+      toast.error('刪除金額失敗');
     } finally {
       setDeletingDamage(null);
     }

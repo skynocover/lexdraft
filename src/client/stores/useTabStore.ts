@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
+import { toast } from 'sonner';
 import { useBriefStore } from './useBriefStore';
 import { useTemplateStore } from './useTemplateStore';
 import type { Paragraph } from './useBriefStore';
@@ -264,6 +265,7 @@ export const useTabStore = create<TabState>((set, get) => ({
       })
       .catch((err) => {
         console.error('Failed to load PDF:', err);
+        toast.error('載入 PDF 失敗');
         const reg = get().tabRegistry;
         if (reg[tabId]) {
           set({
@@ -639,6 +641,7 @@ export const useTabStore = create<TabState>((set, get) => ({
       })
       .catch((err) => {
         console.error('Failed to load version:', err);
+        toast.error('載入版本失敗');
         const reg = get().tabRegistry;
         if (reg[tabId]) {
           set({

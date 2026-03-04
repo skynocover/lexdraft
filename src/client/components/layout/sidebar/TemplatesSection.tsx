@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTemplateStore, type TemplateSummary } from '../../../stores/useTemplateStore';
 import { useCaseStore } from '../../../stores/useCaseStore';
 import { useTabStore } from '../../../stores/useTabStore';
@@ -34,6 +35,7 @@ export const TemplatesSection = ({ activeTabId }: { activeTabId: string | null }
       useCaseStore.setState((s) => ({
         currentCase: s.currentCase ? { ...s.currentCase, template_id: selectedTemplateId } : null,
       }));
+      toast.error('更新範本設定失敗');
     });
   };
 

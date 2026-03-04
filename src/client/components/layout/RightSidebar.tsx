@@ -8,6 +8,7 @@ import {
   Plus,
   Search,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTabStore } from '../../stores/useTabStore';
 import { useUIStore, type SidebarTab, type AnalysisSubTab } from '../../stores/useUIStore';
 import { BriefsSection } from './sidebar/BriefsSection';
@@ -20,7 +21,7 @@ import { TimelineTab } from '../analysis/TimelineTab';
 import { useAnalysisStore } from '../../stores/useAnalysisStore';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useCaseStore, type CaseFile } from '../../stores/useCaseStore';
-import { useAuthStore } from '../../stores/useAuthStore';
+import { api } from '../../lib/api';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { useCitedLawRefs } from '../../hooks/useCitedLawRefs';
 
@@ -158,7 +159,6 @@ const FileUploadButton = () => {
     if (!fileList || !currentCase) return;
 
     setUploading(true);
-    const token = useAuthStore.getState().token;
     for (const file of Array.from(fileList)) {
       if (file.type !== 'application/pdf') continue;
       if (file.size > 20 * 1024 * 1024) continue;
@@ -166,17 +166,11 @@ const FileUploadButton = () => {
       const formData = new FormData();
       formData.append('file', file);
       try {
-        const res = await fetch(`/api/cases/${currentCase.id}/files`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
-        if (res.ok) {
-          const newFile = (await res.json()) as CaseFile;
-          setFiles([...useCaseStore.getState().files, newFile]);
-        }
+        const newFile = await api.upload<CaseFile>(`/cases/${currentCase.id}/files`, formData);
+        setFiles([...useCaseStore.getState().files, newFile]);
       } catch (err) {
         console.error('Upload failed:', err);
+        toast.error(`上傳「${file.name}」失敗`);
       }
     }
     setUploading(false);

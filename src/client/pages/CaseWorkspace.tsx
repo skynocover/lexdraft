@@ -91,7 +91,13 @@ export function CaseWorkspace() {
     const tabParam = initialTabRef.current;
 
     // 載入案件資料
-    api.get<Case>(`/cases/${caseId}`).then(setCurrentCase).catch(console.error);
+    api
+      .get<Case>(`/cases/${caseId}`)
+      .then(setCurrentCase)
+      .catch((err) => {
+        console.error(err);
+        toast.error('載入案件資料失敗', { id: 'case-load' });
+      });
 
     // 載入檔案列表
     const filesPromise = api
@@ -102,6 +108,7 @@ export function CaseWorkspace() {
       })
       .catch((err) => {
         console.error(err);
+        toast.error('載入檔案列表失敗', { id: 'case-load' });
         return [] as CaseFile[];
       });
 

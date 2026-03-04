@@ -163,6 +163,22 @@ npx wrangler d1 execute lexdraft-db --local --command "PRAGMA table_info(cases)"
 - 不要使用Alchemy來做部署
 - 不要擅自對正式區進行部署或執行任何命令
 
+### Toast 通知規範（sonner）
+
+使用 `import { toast } from 'sonner'` 統一處理用戶通知。規則：
+
+| 場景 | 處理方式 | 範例 |
+|------|---------|------|
+| **用戶操作成功**（儲存、刪除、新增） | `toast.success('描述')` | `toast.success('書狀已儲存')` |
+| **用戶操作失敗**（儲存、刪除、上傳） | `toast.error('描述')` | `toast.error('儲存失敗')` |
+| **背景載入失敗**（loadBriefs 等） | `toast.error('描述')` | `toast.error('載入書狀失敗')` |
+| **背景載入成功** | 不提示 | — |
+| **驗證警告**（格式不符等） | `toast.warning('描述')` | `toast.warning('檔案格式不符')` |
+
+- 保留 `console.error` 用於開發除錯，但**必須同時加上 toast** 讓用戶知道操作結果
+- 背景輪詢（如檔案處理狀態 polling）失敗不 toast，避免刷屏
+- Toast 文字用中文，簡短明確（如「儲存失敗」而非「保存書狀時發生錯誤」）
+
 ### ⚠️ IMPORTANT
 
 如果 Claude 建議違反上述規則，請要求我（用戶）確認。

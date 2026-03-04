@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useCaseStore } from './useCaseStore';
 import { forEachCitation, mapParagraphCitations } from '../lib/citationUtils';
@@ -184,6 +185,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       set({ briefs });
     } catch (err) {
       console.error('loadBriefs error:', err);
+      toast.error('載入書狀列表失敗', { id: 'case-load' });
     }
   },
 
@@ -195,6 +197,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       set({ currentBrief: brief, _history: [], _future: [] });
     } catch (err) {
       console.error('loadBrief error:', err);
+      toast.error('載入書狀失敗');
     }
   },
 
@@ -204,6 +207,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       set({ lawRefs });
     } catch (err) {
       console.error('loadLawRefs error:', err);
+      toast.error('載入法條引用失敗', { id: 'case-load' });
     }
   },
 
@@ -337,6 +341,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       set({ versions });
     } catch (err) {
       console.error('loadVersions error:', err);
+      toast.error('載入版本列表失敗');
     }
   },
 
@@ -345,9 +350,11 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     if (!currentBrief) return;
     try {
       await api.post(`/briefs/${currentBrief.id}/versions`, { label });
-      await get().loadVersions(currentBrief.id);
+      toast.success('版本已建立');
+      get().loadVersions(currentBrief.id);
     } catch (err) {
       console.error('createVersion error:', err);
+      toast.error('建立版本失敗');
     }
   },
 
@@ -355,8 +362,10 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     try {
       await api.delete(`/brief-versions/${versionId}`);
       set({ versions: get().versions.filter((v) => v.id !== versionId) });
+      toast.success('版本已刪除');
     } catch (err) {
       console.error('deleteVersion error:', err);
+      toast.error('刪除版本失敗');
     }
   },
 
@@ -376,9 +385,11 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       });
 
       await get().saveBrief();
-      await get().loadVersions(currentBrief.id);
+      toast.success('版本已還原');
+      get().loadVersions(currentBrief.id);
     } catch (err) {
       console.error('restoreVersion error:', err);
+      toast.error('還原版本失敗');
     }
   },
 
@@ -390,6 +401,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       await api.delete(`/cases/${caseId}/law-refs/${lawRefId}`);
     } catch (err) {
       console.error('removeLawRef error:', err);
+      toast.error('移除法條失敗');
     }
   },
 
@@ -405,6 +417,7 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       }));
     } catch (err) {
       console.error('updateBriefType error:', err);
+      toast.error('更新書狀類型失敗');
     }
   },
 
@@ -416,8 +429,10 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       if (currentBrief?.id === briefId) {
         set({ currentBrief: null });
       }
+      toast.success('書狀已刪除');
     } catch (err) {
       console.error('deleteBrief error:', err);
+      toast.error('刪除書狀失敗');
     }
   },
 
@@ -434,6 +449,8 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       set({ dirty: false });
     } catch (err) {
       console.error('saveBrief error:', err);
+      toast.error('儲存書狀失敗');
+      throw err;
     } finally {
       set({ saving: false });
     }

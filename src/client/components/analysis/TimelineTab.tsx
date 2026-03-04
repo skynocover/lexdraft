@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CalendarDays, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { useAnalysisStore, type TimelineEvent } from '../../stores/useAnalysisStore';
 import { useChatStore } from '../../stores/useChatStore';
@@ -53,6 +54,7 @@ export function TimelineTab() {
       setFormOpen(false);
     } catch (err) {
       console.error('Timeline save error:', err);
+      toast.error(editingEvent ? '更新事件失敗' : '新增事件失敗');
     } finally {
       setLoading(false);
     }
@@ -62,8 +64,10 @@ export function TimelineTab() {
     if (!currentCase || !deletingEvent) return;
     try {
       await removeTimelineEvent(currentCase.id, deletingEvent.id);
+      toast.success('事件已刪除');
     } catch (err) {
       console.error('Timeline delete error:', err);
+      toast.error('刪除事件失敗');
     } finally {
       setDeletingEvent(null);
     }

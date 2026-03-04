@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Editor } from '@tiptap/react';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useChatStore } from '../stores/useChatStore';
 import { useUIStore } from '../stores/useUIStore';
@@ -80,6 +81,7 @@ export const useSelectionToolbar = (editor: Editor | null) => {
         dismiss();
       } catch (err) {
         console.error('Inline AI transform error:', err);
+        toast.error('AI 改寫失敗');
       } finally {
         setIsLoading(false);
       }

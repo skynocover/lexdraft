@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { useCaseStore, type CaseFile } from '../../../stores/useCaseStore';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { api } from '../../../lib/api';
@@ -34,6 +35,7 @@ export const FilesSection = () => {
       setFiles(caseFiles.map((f) => (f.id === fileId ? { ...f, ...updated } : f)));
     } catch (err) {
       console.error('Category update failed:', err);
+      toast.error('更新分類失敗');
     }
   };
 
@@ -41,8 +43,10 @@ export const FilesSection = () => {
     try {
       await api.delete(`/files/${fileId}`);
       setFiles(caseFiles.filter((f) => f.id !== fileId));
+      toast.success('檔案已刪除');
     } catch (err) {
       console.error('Delete failed:', err);
+      toast.error('刪除檔案失敗');
     }
   };
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useAuthStore } from './useAuthStore';
 import { useBriefStore } from './useBriefStore';
@@ -78,6 +79,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     } catch (err) {
       console.error('loadHistory error:', err);
+      toast.error('載入對話記錄失敗', { id: 'case-load' });
     }
   },
 
@@ -181,6 +183,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         setError((err as Error).message);
+        toast.error('對話發送失敗', { description: (err as Error).message });
       }
     } finally {
       setIsStreaming(false);
@@ -208,6 +211,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await api.delete(`/cases/${caseId}/messages`);
     } catch (err) {
       console.error('clearConversation error:', err);
+      toast.error('清除對話失敗');
     }
     useRewindStore.getState().clear();
     set({ messages: [], pipelineTiming: null, error: null });
