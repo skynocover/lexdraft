@@ -11,6 +11,7 @@
 
 import { resolveLawsForSection } from '../../src/server/agent/contextStore';
 import type { FoundLaw, PerIssueAnalysis } from '../../src/server/agent/pipeline/types';
+import { createTestRunner } from './_helpers';
 
 // ── Test Data ──
 
@@ -88,18 +89,7 @@ const PER_ISSUE_ANALYSIS: PerIssueAnalysis[] = [
 
 // ── Tests ──
 
-let passed = 0;
-let failed = 0;
-
-const assert = (condition: boolean, name: string) => {
-  if (condition) {
-    console.log(`  ✓ ${name}`);
-    passed++;
-  } else {
-    console.log(`  ✗ ${name}`);
-    failed++;
-  }
-};
+const { assert, summary } = createTestRunner();
 
 console.log('═══ Layer 1: Law Fallback Unit Tests ═══\n');
 
@@ -203,12 +193,4 @@ console.log('Test 7: Tier 1 — partial match (some IDs not in foundLaws)');
 }
 console.log('');
 
-// ── Summary ──
-console.log('═══════════════════════════════════');
-console.log(`Results: ${passed} passed, ${failed} failed, ${passed + failed} total`);
-if (failed > 0) {
-  console.log('\n⚠ Some tests FAILED!');
-  process.exit(1);
-} else {
-  console.log('\n✓ All tests passed!');
-}
+summary('✓ All law fallback tests passed');

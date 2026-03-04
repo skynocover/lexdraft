@@ -2,6 +2,7 @@
 
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import type { Claim, LegalIssue, ReasoningSection } from '../../src/server/agent/pipeline/types';
 
 // ── CLI args ──
 
@@ -70,3 +71,41 @@ export const createTestRunner = () => {
 
   return { assert, summary };
 };
+
+// ── Test fixture factories ──
+
+export const mkClaim = (overrides: Partial<Claim> = {}): Claim => ({
+  id: overrides.id || 'c1',
+  side: overrides.side || 'ours',
+  claim_type: overrides.claim_type || 'primary',
+  statement: overrides.statement || '測試主張',
+  assigned_section: 'assigned_section' in overrides ? (overrides.assigned_section ?? null) : null,
+  dispute_id: 'dispute_id' in overrides ? (overrides.dispute_id ?? null) : null,
+  responds_to: overrides.responds_to ?? null,
+});
+
+export const mkSection = (overrides: Partial<ReasoningSection> = {}): ReasoningSection => ({
+  id: overrides.id || 'sec-1',
+  section: overrides.section || '貳、事實及理由',
+  subsection: overrides.subsection,
+  dispute_id: overrides.dispute_id,
+  argumentation: overrides.argumentation || {
+    legal_basis: [],
+    fact_application: '',
+    conclusion: '',
+  },
+  claims: overrides.claims || [],
+  relevant_file_ids: overrides.relevant_file_ids || [],
+  relevant_law_ids: overrides.relevant_law_ids || [],
+  legal_reasoning: overrides.legal_reasoning || '',
+});
+
+export const mkIssue = (overrides: Partial<LegalIssue> = {}): LegalIssue => ({
+  id: overrides.id || 'dispute-1',
+  title: overrides.title || '侵權行為',
+  our_position: overrides.our_position || '',
+  their_position: overrides.their_position || '',
+  key_evidence: overrides.key_evidence || [],
+  mentioned_laws: overrides.mentioned_laws || [],
+  facts: overrides.facts || [],
+});

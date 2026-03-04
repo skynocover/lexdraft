@@ -14,18 +14,9 @@ import type {
   FoundLaw,
   DraftSection,
 } from '../../src/server/agent/pipeline/types';
+import { createTestRunner } from './_helpers';
 
-let passed = 0;
-let failed = 0;
-
-const assert = (condition: boolean, label: string) => {
-  if (condition) {
-    passed++;
-  } else {
-    failed++;
-    console.error(`  ✗ ${label}`);
-  }
-};
+const { assert, summary } = createTestRunner();
 
 const deepEqual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
@@ -210,8 +201,4 @@ assert(fromPartial.caseSummary === '', 'partial → caseSummary defaults to empt
 assert(deepEqual(fromPartial.legalIssues, []), 'partial → legalIssues defaults to []');
 assert(deepEqual(fromPartial.foundLaws, []), 'partial → foundLaws defaults to []');
 
-// ── Summary ──
-
-console.log(`\n${passed} passed, ${failed} failed (${passed + failed} total)`);
-if (failed > 0) process.exit(1);
-console.log('✓ All snapshot round-trip tests passed');
+summary('✓ All snapshot round-trip tests passed');
