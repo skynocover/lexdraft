@@ -5,6 +5,9 @@
 import type { StrategyOutput, LegalIssue, Claim } from './types';
 import { parseLLMJsonResponse } from '../../lib/jsonUtils';
 
+/** Section keywords that indicate intro/conclusion sections (exempt from some validation checks). */
+export const SKIP_SECTION_KEYWORDS = ['前言', '結論', '結語', '損害賠償'];
+
 /** Apply defaults for optional claim fields (backward compatible) */
 export const applyClaimDefaults = (claims: Claim[]): Claim[] =>
   claims.map((c) => ({
@@ -45,13 +48,21 @@ export const validateStrategyOutput = (
   }
 
   // 1. Every non-intro/conclusion section has at least one claim
-  const skipKeywords = ['前言', '結論', '結語', '損害賠償'];
+  const skipKeywords = SKIP_SECTION_KEYWORDS;
   for (const section of output.sections) {
     const isSkippable = skipKeywords.some((k) => section.section.includes(k));
     if (!isSkippable && section.claims.length === 0) {
       errors.push(
         `段落「${section.section}${section.subsection ? ' > ' + section.subsection : ''}」沒有分配任何 claim`,
       );
+    }
+  }
+
+  // 1b. Every non-intro/conclusion section must have a subsection
+  for (const section of output.sections) {
+    const isSkippable = skipKeywords.some((k) => section.section.includes(k));
+    if (!isSkippable && !section.subsection) {
+      errors.push(`段落「${section.section}」缺少 subsection，必須填寫（格式：一、描述性標題）`);
     }
   }
 
@@ -140,7 +151,17 @@ export const validateStrategyOutput = (
     }
   }
 
-  // 10. dispute_id must be a valid issue ID (if provided)
+  // 10. Non-intro/conclusion sections must have relevant_law_ids (non-empty)
+  for (const section of output.sections) {
+    const isSkippable = skipKeywords.some((k) => section.section.includes(k));
+    if (!isSkippable && (!section.relevant_law_ids || section.relevant_law_ids.length === 0)) {
+      errors.push(
+        `段落「${section.section}${section.subsection ? ' > ' + section.subsection : ''}」的 relevant_law_ids 為空，必須從[爭點→法條分配表]分配法條 ID`,
+      );
+    }
+  }
+
+  // 11. dispute_id must be a valid issue ID (if provided)
   const issueIds = new Set(legalIssues.map((i) => i.id));
   for (const claim of output.claims) {
     if (claim.dispute_id && !issueIds.has(claim.dispute_id)) {

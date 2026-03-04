@@ -18,6 +18,7 @@ import { jsonrepair } from 'jsonrepair';
 // ── Imports from source (replace duplicated constants/functions) ──
 import { parseJsonField } from '../../src/server/lib/jsonUtils';
 import { extractBalancedJson, cleanLLMJson } from '../../src/server/lib/jsonUtils';
+import { SKIP_SECTION_KEYWORDS } from '../../src/server/agent/pipeline/validateStrategy';
 import {
   PCODE_MAP,
   ALIAS_MAP,
@@ -1590,7 +1591,7 @@ const validateStrategyOutput = (
   }
 
   // Non-intro/conclusion sections have claims
-  const skipKeywords = ['前言', '結論', '結語'];
+  const skipKeywords = SKIP_SECTION_KEYWORDS;
   for (const section of output.sections) {
     const isSkippable = skipKeywords.some((k) => (section.section || '').includes(k));
     if (!isSkippable && (!section.claims || section.claims.length === 0)) {

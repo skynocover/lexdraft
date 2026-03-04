@@ -150,9 +150,9 @@ console.log('── enrichStrategyOutput: legal_basis from perIssueAnalysis ─�
 }
 console.log('');
 
-// ── 8. enrichStrategyOutput — relevant_law_ids merge ──
+// ── 8. enrichStrategyOutput — relevant_law_ids validation-only (no mutation) ──
 
-console.log('── enrichStrategyOutput: relevant_law_ids merge ──');
+console.log('── enrichStrategyOutput: relevant_law_ids validation-only ──');
 {
   const analysis: PerIssueAnalysis[] = [
     {
@@ -168,22 +168,22 @@ console.log('── enrichStrategyOutput: relevant_law_ids merge ──');
       mkSection({
         id: 'sec-1',
         dispute_id: 'dispute-1',
-        relevant_law_ids: ['B0000001-195'], // pre-existing
+        relevant_law_ids: ['B0000001-195'], // pre-existing, missing §184
         argumentation: { legal_basis: ['B0000001-184'], fact_application: '', conclusion: '' },
       }),
     ],
   };
-  enrichStrategyOutput(output, analysis);
+  const stats = enrichStrategyOutput(output, analysis);
   const lawIds = output.sections[0].relevant_law_ids;
-  assert(lawIds.length === 2, `merged to 2 unique IDs (got ${lawIds.length})`);
-  assert(lawIds.includes('B0000001-195'), 'kept pre-existing §195');
-  assert(lawIds.includes('B0000001-184'), 'added §184 from analysis');
+  assert(lawIds.length === 1, `no mutation — still 1 ID (got ${lawIds.length})`);
+  assert(lawIds.includes('B0000001-195'), 'kept pre-existing §195 unchanged');
+  assert(stats.lawIds === 1, `stats.lawIds reports 1 missing (got ${stats.lawIds})`);
 }
 console.log('');
 
-// ── 9. enrichStrategyOutput — subsection from legalIssues ──
+// ── 9. enrichStrategyOutput — subsection validation-only (no mutation) ──
 
-console.log('── enrichStrategyOutput: subsection from legalIssues ──');
+console.log('── enrichStrategyOutput: subsection validation-only ──');
 {
   const issues: LegalIssue[] = [
     {
@@ -212,26 +212,20 @@ console.log('── enrichStrategyOutput: subsection from legalIssues ──');
       mkSection({ id: 'sec-2', section: '貳、事實及理由', dispute_id: 'dispute-2' }),
     ],
   };
-  enrichStrategyOutput(output, [], issues);
-  assert(
-    output.sections[0].subsection === '一、侵權行為責任',
-    `first subsection: ${output.sections[0].subsection}`,
-  );
-  assert(
-    output.sections[1].subsection === '二、損害賠償計算',
-    `second subsection: ${output.sections[1].subsection}`,
-  );
+  const stats = enrichStrategyOutput(output, [], issues);
+  assert(!output.sections[0].subsection, `no mutation — subsection still empty`);
+  assert(stats.subsection === 2, `stats.subsection reports 2 missing (got ${stats.subsection})`);
 }
 console.log('');
 
-// ── 10. enrichStrategyOutput — subsection title truncation ──
+// ── 10. enrichStrategyOutput — subsection already filled → no warning ──
 
-console.log('── enrichStrategyOutput: subsection title truncation ──');
+console.log('── enrichStrategyOutput: subsection already filled ──');
 {
   const issues: LegalIssue[] = [
     {
       id: 'dispute-1',
-      title: '這是一個超過十五個字的非常長的爭點標題名稱',
+      title: '侵權行為責任',
       our_position: '',
       their_position: '',
       key_evidence: [],
@@ -241,12 +235,18 @@ console.log('── enrichStrategyOutput: subsection title truncation ──');
   ];
   const output: ReasoningStrategyOutput = {
     claims: [],
-    sections: [mkSection({ id: 'sec-1', section: '貳、事實及理由', dispute_id: 'dispute-1' })],
+    sections: [
+      mkSection({
+        id: 'sec-1',
+        section: '貳、事實及理由',
+        dispute_id: 'dispute-1',
+        subsection: '一、侵權行為責任',
+      }),
+    ],
   };
-  enrichStrategyOutput(output, [], issues);
-  const sub = output.sections[0].subsection!;
-  // "一、" prefix (2 chars) + truncated title (15 chars) = 17 chars max
-  assert(sub.length <= 17, `subsection truncated to ≤17 chars (got ${sub.length})`);
+  const stats = enrichStrategyOutput(output, [], issues);
+  assert(output.sections[0].subsection === '一、侵權行為責任', 'subsection preserved');
+  assert(stats.subsection === 0, `stats.subsection is 0 (got ${stats.subsection})`);
 }
 console.log('');
 

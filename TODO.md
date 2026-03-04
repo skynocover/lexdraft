@@ -168,10 +168,9 @@
 - [x] **P1. Step 0 抽為獨立函式**
   - 完成：`caseAnalysisStep.ts`（572 行）抽出 Step 0 邏輯，`briefPipeline.ts` 從 961→431 行
   - `PipelineContext` 移到 `pipeline/types.ts` 避免循環依賴
-- [ ] **P2. Enrichment validation logging**
-  - 現況：`enrichStrategyOutput()` 補齊 AI 偷懶填空的 `relevant_law_ids`、`dispute_id`、`legal_basis`
-  - 方案：加入 validation warning — 如果 enrichment 補了超過 50% 的欄位，log 警告以追蹤 AI 品質趨勢
-  - 中期可在 Structuring prompt 加 few-shot example 減少 AI 偷懶
+- [x] **P2. Enrichment → Validation（已完成）**
+  - `enrichStrategyOutput()` 已退化為純 validation，所有 7 項 enrichment step 穩定 0/5
+  - 詳見下方「Enrichment 消除計劃」
 - [ ] **P3. ContextStore 簡化**
   - `supplementedLaws` 和 `foundLaws` 可合併（`setFoundLaws()` 已合併兩者，`supplementedLaws` 只在中間過程存在）
   - `getUnrebutted()` 只在 `briefPipeline.ts` 用一次（顯示統計），可內聯
@@ -184,12 +183,89 @@
 
 ## 暫緩（ROI 不明確，視實際使用數據再決定）
 
-| 項目 | 暫緩理由 |
-|------|----------|
-| Smart Chips（自動識別人名/時間/金額） | 酷但非必要，律師不一定需要 |
-| 書狀格式強化（行距/段距/段落編號） | 待觀察律師對格式的實際需求 |
-| 全文搜尋（跨 PDF/書狀/法條） | 案件檔案不多時用不到 |
-| 混合模型策略（Flash + Sonnet 切換） | 優化成本用，早期流量低不急 |
-| `legal_reasoning` 結構化 | 需要更多實際使用數據再決定 schema |
-| 用戶自定義指令集 | 需先觀察律師常用 prompt 模式 |
-| 時間軸獨立 tab | 形式待定 |
+| 項目                                  | 暫緩理由                          |
+| ------------------------------------- | --------------------------------- |
+| Smart Chips（自動識別人名/時間/金額） | 酷但非必要，律師不一定需要        |
+| 書狀格式強化（行距/段距/段落編號）    | 待觀察律師對格式的實際需求        |
+| 全文搜尋（跨 PDF/書狀/法條）          | 案件檔案不多時用不到              |
+| 混合模型策略（Flash + Sonnet 切換）   | 優化成本用，早期流量低不急        |
+| `legal_reasoning` 結構化              | 需要更多實際使用數據再決定 schema |
+| 用戶自定義指令集                      | 需先觀察律師常用 prompt 模式      |
+| 時間軸獨立 tab                        | 形式待定                          |
+
+---
+
+## Enrichment 消除計劃
+
+> 目標：讓 Structuring 階段 AI 輸出直接可用，enrichment 退化為純 validation（只檢查、不修改）。
+
+### 現況分析
+
+`enrichStrategyOutput()` 是 Step 2 Structuring 後的後處理補丁，原本修復 Gemini 2.5 Flash 輸出的 7 類缺陷：
+
+| Step                           | 做什麼                         | 根本原因                            | 當前狀態         | 解決方式                                    |
+| ------------------------------ | ------------------------------ | ----------------------------------- | ---------------- | ------------------------------------------- |
+| 0. dispute_id 修正             | fuzzy match 修正抄錯的 nanoid  | Gemini 複製 21 字元 nanoid 時改字元 | ✅ 已穩定（0/5） | prompt 對照表 + `逐字元比對` 指令           |
+| 1. section.dispute_id ← claims | section 沒填 dispute_id        | Gemini 偷懶不填                     | ✅ 已穩定（0/5） | constrained decoding required 欄位          |
+| 2. claim.dispute_id ← section  | claim 沒填 dispute_id          | 同上                                | ✅ 已穩定（0/5） | 同上                                        |
+| 3. claims 一致性               | 雙向引用不一致                 | Gemini 雙向引用漏填                 | ✅ 已穩定（0/5） | constrained decoding required 欄位          |
+| 4. legal_basis 補齊            | argumentation.legal_basis 為空 | Gemini 偷懶填空                     | ✅ 已穩定（0/5） | constrained decoding + prompt 指令          |
+| 5. relevant_law_ids 合併       | 從 perIssueAnalysis 程式化合併 | 刻意從 schema 移除                  | ✅ 已穩定（0/5） | Phase 3：加回 schema + 法條分配表 prompt    |
+| 6. subsection 補齊             | 從爭點標題推導 subsection      | Gemini 偶爾不給                     | ✅ 已穩定（0/5） | Phase 4：schema required + validation check |
+
+**Phase 1/2/4 已被 Gemini constrained decoding（`responseSchema`）+ prompt 強化解決。**
+`responseSchema` 在 token 生成時限制可選 token，物理上無法輸出不符 schema 的 JSON，加上 `buildJsonOutputMessage` 中明確的複製指令和格式要求，使這些 enrichment step 不再觸發。
+
+**全部 7 項 enrichment step 已穩定在 0。** Enrichment 已完全退化為純 validation（只檢查、不修改）。
+
+### Baseline（2026-03-04，5 次 replay-step2）
+
+```
+          Metric │  Run 1-5（全部相同）
+─────────────────┼────────────────────
+  dispute_id_fix │  0
+       sec←claim │  0
+       claim←sec │  0
+       claim↔sec │  0
+     legal_basis │  0
+         law_ids │  6  ← 唯一需要 enrichment 的
+      subsection │  0
+           TOTAL │  6
+```
+
+### Phase 3：relevant_law_ids 回歸 AI（消除 Step 5）— ✅ 完成
+
+- [x] 測試基礎設施完成（`EnrichmentStats` return、`replay-step2 --runs N`）
+- [x] 把 `relevant_law_ids` 加回 `STRATEGY_RESPONSE_SCHEMA`
+- [x] `buildJsonOutputMessage` 加 `[爭點→法條分配表]` + 明確分配指令
+- [x] `validateStrategyOutput` 加非空檢查（retry 時指出問題）
+- [x] enrichment Step 5 降級為 validation-only（只記錄不修改）
+- [x] 跑 5 次 benchmark 驗證 `lawIds` 降到 0 ✅
+
+### Phase 4：subsection 回歸 AI（消除 Step 6）— ✅ 完成
+
+- [x] `subsection` 加入 `STRATEGY_RESPONSE_SCHEMA` required 列表
+- [x] `validateStrategyOutput` 加 subsection 非空檢查
+- [x] enrichment Step 6 降級為 validation-only（只記錄不修改）
+- [x] 跑 5 次 benchmark 驗證 `subsection` 降到 0 ✅
+
+### Benchmark 進展
+
+```
+          Metric │  Baseline  →  Phase 3  →  Phase 3+4
+─────────────────┼──────────────────────────────────────
+  dispute_id_fix │     0           0            0
+       sec←claim │     0           0            0
+       claim←sec │     0           0            0
+       claim↔sec │     0           0            0
+     legal_basis │     0           0            0
+         law_ids │     6           0 ✅         0 ✅
+      subsection │     0           6 ↑          0 ✅
+           TOTAL │     6           6            0 ✅
+```
+
+### 現況
+
+- `enrichStrategyOutput()` 已完全退化為純 validation（只檢查、不修改）
+- 所有 7 項 enrichment step 在 5 次 benchmark 中穩定為 0
+- 未來可考慮將 `enrichStrategyOutput()` 合併到 `validateStrategyOutput()`，移除多餘 code

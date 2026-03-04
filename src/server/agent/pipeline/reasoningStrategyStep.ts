@@ -38,6 +38,7 @@ import type {
   FetchedLaw,
   PerIssueAnalysis,
   LegalIssue,
+  EnrichmentStats,
 } from './types';
 import type { PipelineContext } from './types';
 import type { ContextStore } from '../contextStore';
@@ -109,6 +110,7 @@ const STRATEGY_RESPONSE_SCHEMA: Record<string, unknown> = {
           },
           claims: { type: 'ARRAY', items: { type: 'STRING' } },
           relevant_file_ids: { type: 'ARRAY', items: { type: 'STRING' } },
+          relevant_law_ids: { type: 'ARRAY', items: { type: 'STRING' } },
           facts_to_use: {
             type: 'ARRAY',
             nullable: true,
@@ -124,7 +126,15 @@ const STRATEGY_RESPONSE_SCHEMA: Record<string, unknown> = {
           },
           legal_reasoning: { type: 'STRING', nullable: true },
         },
-        required: ['id', 'section', 'argumentation', 'claims', 'relevant_file_ids'],
+        required: [
+          'id',
+          'section',
+          'subsection',
+          'argumentation',
+          'claims',
+          'relevant_file_ids',
+          'relevant_law_ids',
+        ],
       },
     },
   },
@@ -172,6 +182,15 @@ const buildJsonOutputMessage = (store: ContextStore, input: ReasoningStrategyInp
           .join('\n')
       : '';
 
+  // Build law_id → dispute mapping for prompt
+  const lawDisputeMapping = store.perIssueAnalysis
+    .map((a) => {
+      const issue = store.legalIssues.find((i) => i.id === a.issue_id);
+      const label = issue ? issue.title : a.issue_id;
+      return `  ${label}: [${a.key_law_ids.map((id) => `"${id}"`).join(', ')}]`;
+    })
+    .join('\n');
+
   return `[書狀類型] ${input.briefType}
 
 [推理摘要]
@@ -180,8 +199,11 @@ ${store.reasoningSummary || '（無摘要）'}
 ${analysisText ? `[逐爭點分析]\n${analysisText}\n\n` : ''}[爭點清單]
 ${issueText}
 
-[可用法條]
+[可用法條 — 法條 ID 對照表，請從此處精確複製 ID]
 ${lawText || '（無）'}
+
+[爭點→法條分配表 — 每個爭點對應的 relevant_law_ids]
+${lawDisputeMapping || '（無）'}
 
 [案件檔案]
 ${fileText}
@@ -191,7 +213,7 @@ ${store.legalIssues.map((issue, i) => `  爭點${i + 1}（${issue.title}）: "${
 
 請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。
 - 每個非前言/結論的 section 必須填寫 subsection（格式：一、描述性標題），依序編號（一、二、三…）。前言和結論的 subsection 為 null
-- 每個 section 的 relevant_law_ids 應依照[逐爭點分析]中各爭點的 key_law_ids 分配
+- 每個內容段落（非前言/結論）的 relevant_law_ids 必須從[爭點→法條分配表]中複製該爭點對應的法條 ID。前言和結論的 relevant_law_ids 為空陣列 []
 - 每個內容段落（非前言/結論）的 relevant_file_ids 必須列出該段撰寫時需要引用的檔案 ID，確保 Writer 能產生引用標記。根據段落主題從[案件檔案]中選擇對應的檔案
 - 每個內容段落的 dispute_id 必須從上方對照表原封不動複製，前言和結論為 null
 - 每個 claim 的 dispute_id 也必須從上方對照表原封不動複製`;
@@ -568,10 +590,12 @@ const tryParseAndEnrich = (
   text: string,
   perIssueAnalysis: PerIssueAnalysis[],
   legalIssues: LegalIssue[] = [],
-): ReasoningStrategyOutput | null => {
+): { output: ReasoningStrategyOutput; stats: EnrichmentStats } | null => {
   const output = tryParse(text);
-  if (output) enrichStrategyOutput(output, perIssueAnalysis, legalIssues);
-  return output;
+  if (!output) return null;
+  const stats = enrichStrategyOutput(output, perIssueAnalysis, legalIssues);
+  output.enrichmentStats = stats;
+  return { output, stats };
 };
 
 const callJsonAndParse = async (
@@ -587,10 +611,10 @@ const callJsonAndParse = async (
     `[reasoningStrategy] JSON output: truncated=${resp.truncated}, output_tokens=${resp.usage.output_tokens}, text_length=${resp.content.length}`,
   );
 
-  let output = tryParseAndEnrich(resp.content, perIssueAnalysis, legalIssues);
+  let result = tryParseAndEnrich(resp.content, perIssueAnalysis, legalIssues);
 
   // Retry on parse failure
-  if (!output) {
+  if (!result) {
     console.warn(`[reasoningStrategy] JSON parse failed, retrying (truncated=${resp.truncated})`);
 
     const retryMsg = resp.truncated
@@ -599,20 +623,20 @@ const callJsonAndParse = async (
         '\n\n重要：只輸出純 JSON，不要加 markdown code block、換行解釋或任何其他文字。確保 JSON string 值中沒有未轉義的換行字元。';
 
     const retryResp = await callJsonOutput(retryMsg);
-    output = tryParseAndEnrich(retryResp.content, perIssueAnalysis, legalIssues);
+    result = tryParseAndEnrich(retryResp.content, perIssueAnalysis, legalIssues);
 
     // If retry also truncated and parse still failed, try once more with stronger constraint
-    if (!output && retryResp.truncated) {
+    if (!result && retryResp.truncated) {
       console.warn('[reasoningStrategy] Retry also truncated, attempting compact retry');
       const compactMsg =
         userMessage +
         TRUNCATION_RETRY_SUFFIX +
         '\n- 每個 string 欄位盡量精簡，避免冗餘描述\n- 如果有超過 8 個 sections，合併相似段落';
       const compactResp = await callJsonOutput(compactMsg);
-      output = tryParseAndEnrich(compactResp.content, perIssueAnalysis, legalIssues);
+      result = tryParseAndEnrich(compactResp.content, perIssueAnalysis, legalIssues);
     }
 
-    if (!output) {
+    if (!result) {
       console.error(
         `[reasoningStrategy] All retries failed (first 300 chars): ${resp.content.slice(0, 300)}`,
       );
@@ -621,8 +645,8 @@ const callJsonAndParse = async (
   }
 
   // Validate structure
-  const validation = validateStrategyOutput(output, legalIssues);
-  if (validation.valid) return output;
+  const validation = validateStrategyOutput(result.output, legalIssues);
+  if (validation.valid) return result.output;
 
   // Retry with validation errors
   console.warn('[reasoningStrategy] Validation failed, retrying:', validation.errors);
@@ -636,7 +660,8 @@ const callJsonAndParse = async (
 
   const fixOutput = tryParse(fixResp.content);
   if (fixOutput) {
-    enrichStrategyOutput(fixOutput, perIssueAnalysis, legalIssues);
+    const fixStats = enrichStrategyOutput(fixOutput, perIssueAnalysis, legalIssues);
+    fixOutput.enrichmentStats = fixStats;
 
     // Re-validate the fix attempt
     const fixValidation = validateStrategyOutput(fixOutput, legalIssues);
@@ -651,5 +676,5 @@ const callJsonAndParse = async (
   }
 
   // Fall back to the original enriched output (enrichment's fuzzy match may have fixed it)
-  return output;
+  return result.output;
 };

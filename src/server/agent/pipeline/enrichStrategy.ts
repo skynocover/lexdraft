@@ -1,9 +1,12 @@
 // ── Programmatic Enrichment (補齊 AI 偷懶填空的欄位) ──
 // Pure functions extracted from reasoningStrategyStep.ts for testability.
 
-import type { ReasoningStrategyOutput, PerIssueAnalysis, LegalIssue } from './types';
-
-const CHINESE_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+import type {
+  ReasoningStrategyOutput,
+  PerIssueAnalysis,
+  LegalIssue,
+  EnrichmentStats,
+} from './types';
 
 /**
  * Levenshtein distance between two strings.
@@ -73,7 +76,7 @@ export const enrichStrategyOutput = (
   output: ReasoningStrategyOutput,
   perIssueAnalysis: PerIssueAnalysis[],
   legalIssues: LegalIssue[] = [],
-): void => {
+): EnrichmentStats => {
   const { claims, sections } = output;
   const stats = {
     disputeIdFixed: 0,
@@ -141,8 +144,9 @@ export const enrichStrategyOutput = (
     }
   }
 
-  // 5. 填 relevant_law_ids（最後做，依賴 dispute_id 和 legal_basis）
+  // 5. relevant_law_ids — validation only（AI 應自行填寫，此處只記錄缺漏不修改）
   for (const sec of sections) {
+    // Defensive normalization: ensure array exists even if upstream skipped it
     sec.relevant_law_ids = sec.relevant_law_ids || [];
     if (!sec.dispute_id) continue;
 
@@ -150,43 +154,41 @@ export const enrichStrategyOutput = (
     const fromAnalysis = analysis?.key_law_ids || [];
     const fromBasis = sec.argumentation.legal_basis || [];
 
-    const before = sec.relevant_law_ids.length;
-    const merged = new Set([...sec.relevant_law_ids, ...fromAnalysis, ...fromBasis]);
-    sec.relevant_law_ids = [...merged];
-    if (sec.relevant_law_ids.length > before) stats.lawIds++;
+    const expected = new Set([...fromAnalysis, ...fromBasis]);
+    const missing = [...expected].filter((id) => !sec.relevant_law_ids.includes(id));
+    if (missing.length > 0) {
+      stats.lawIds++;
+      console.warn(
+        `[enrichment] section "${sec.subsection || sec.section}" missing law_ids: [${missing.join(', ')}]`,
+      );
+    }
   }
 
-  // 6. 填 subsection（有 dispute_id 但沒 subsection 的段落，從爭點標題推導）
+  // 6. subsection — validation only（AI 應自行填寫，此處只記錄缺漏不修改）
   if (legalIssues.length > 0) {
-    const issueMap = new Map(legalIssues.map((i) => [i.id, i]));
-    // Group sections by parent section name to assign numbering
-    const parentCounters: Record<string, number> = {};
-
     for (const sec of sections) {
       if (sec.subsection || !sec.dispute_id) continue;
-
-      const issue = issueMap.get(sec.dispute_id);
-      if (!issue) continue;
-
-      const parent = sec.section;
-      const idx = parentCounters[parent] || 0;
-      const num = CHINESE_NUMS[idx] || `${idx + 1}`;
-
-      // Truncate dispute title to keep subsection concise (max 15 chars)
-      const title = issue.title.length > 15 ? issue.title.slice(0, 15) : issue.title;
-      sec.subsection = `${num}、${title}`;
-      parentCounters[parent] = idx + 1;
       stats.subsection++;
+      console.warn(
+        `[enrichment] section "${sec.section}" missing subsection (dispute=${sec.dispute_id})`,
+      );
     }
   }
 
   // Summary log
   const enrichedCount = sections.filter((s) => s.relevant_law_ids.length > 0).length;
   const totalLawIds = sections.reduce((sum, s) => sum + s.relevant_law_ids.length, 0);
-  const totalPatched = Object.values(stats).reduce((a, b) => a + b, 0);
+  const actualPatches =
+    stats.disputeIdFixed +
+    stats.sectionDisputeFromClaim +
+    stats.claimDisputeFromSection +
+    stats.claimConsistency +
+    stats.legalBasis;
+  const validationWarnings = stats.lawIds + stats.subsection;
+  const totalPatched = actualPatches + validationWarnings;
 
   console.log(
-    `[enrichment] ${totalPatched} patches applied — ` +
+    `[enrichment] ${actualPatches} patches, ${validationWarnings} warnings — ` +
       `dispute_id_fixed: ${stats.disputeIdFixed}, ` +
       `sec.dispute_id←claim: ${stats.sectionDisputeFromClaim}, ` +
       `claim.dispute_id←sec: ${stats.claimDisputeFromSection}, ` +
@@ -209,9 +211,11 @@ export const enrichStrategyOutput = (
     );
   }
 
-  if (totalPatched > sections.length) {
+  if (actualPatches > sections.length) {
     console.warn(
-      `[enrichment] WARNING: ${totalPatched} patches for ${sections.length} sections — AI output quality may be degrading`,
+      `[enrichment] WARNING: ${actualPatches} patches for ${sections.length} sections — AI output quality may be degrading`,
     );
   }
+
+  return { ...stats, totalPatched };
 };
