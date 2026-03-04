@@ -321,7 +321,7 @@ const handleSearchLaw = async (
   lawSession: LawSearchSession,
   searchCount: number,
   progress?: ReasoningStrategyProgressCallback,
-): Promise<{ content: string; newCount: number }> => {
+): Promise<{ content: string; summary: string; newCount: number }> => {
   const query = input.query as string;
   const lawName = input.law_name as string | undefined;
   const purpose = input.purpose as string;
@@ -330,6 +330,7 @@ const handleSearchLaw = async (
   if (searchCount >= MAX_SEARCHES) {
     return {
       content: '已達到搜尋上限。請根據現有法條完成推理並呼叫 finalize_strategy。',
+      summary: '已達搜尋上限',
       newCount: searchCount,
     };
   }
@@ -341,6 +342,7 @@ const handleSearchLaw = async (
     await progress?.onSearchLaw(query, purpose, 0, []);
     return {
       content: `未找到「${query}」的相關法條。請嘗試用更短的關鍵字，或繼續推理。`,
+      summary: `搜尋「${query}」未找到結果`,
       newCount,
     };
   }
@@ -381,7 +383,10 @@ const handleSearchLaw = async (
   const lawNames = fetchedLaws.map((l) => `${l.law_name} ${l.article_no}`);
   await progress?.onSearchLaw(query, purpose, fetchedLaws.length, lawNames);
 
+  const summary = `已搜尋「${query}」，找到 ${fetchedLaws.length} 條：${lawNames.join('、')}`;
+
   return {
+    summary,
     content: `找到 ${fetchedLaws.length} 筆結果：\n\n${resultText}`,
     newCount,
   };
@@ -413,6 +418,10 @@ export const runReasoningStrategy = async (
   let searchCount = 0;
   const startTime = Date.now();
   const lawSession = createLawSearchSession(ctx.mongoUrl, ctx.mongoApiKey);
+
+  // tool_use_id → 摘要。用於壓縮舊 tool_result，減少每輪重傳的 input tokens。
+  const toolResultSummaries = new Map<string, string>();
+  const processedMsgIndices = new Set<number>();
 
   // Helper: call Claude with current messages (reasoning phase)
   const callReasoning = () =>
@@ -479,6 +488,7 @@ export const runReasoningStrategy = async (
         if (tc.name === 'search_law') {
           const r = await handleSearchLaw(tc.input, ctx, store, lawSession, searchCount, progress);
           resultBlocks.push({ type: 'tool_result', tool_use_id: tc.id, content: r.content });
+          toolResultSummaries.set(tc.id, r.summary);
           searchCount = r.newCount;
         }
 
@@ -510,6 +520,23 @@ export const runReasoningStrategy = async (
       }
 
       messages.push({ role: 'user', content: resultBlocks });
+
+      // 壓縮舊的 search_law tool_result：最新一則保留完整（Claude 尚未讀過），
+      // 更早的替換為摘要，減少下一輪重傳的 input tokens。
+      const lastUserIdx = messages.length - 1;
+      for (let i = 0; i < lastUserIdx; i++) {
+        if (processedMsgIndices.has(i)) continue;
+        const msg = messages[i];
+        if (msg.role !== 'user' || typeof msg.content === 'string') continue;
+        for (const block of msg.content as ClaudeContentBlock[]) {
+          if (block.type !== 'tool_result') continue;
+          const summary = toolResultSummaries.get(block.tool_use_id);
+          if (summary) {
+            block.content = summary;
+          }
+        }
+        processedMsgIndices.add(i);
+      }
 
       // If finalize just happened, break out of loop — don't wait for next round
       if (finalized) break;
