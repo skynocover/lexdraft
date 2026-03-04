@@ -6,10 +6,12 @@
 
 ```bash
 # 從專案根目錄執行
-node scripts/law-search-test/search-test.mjs
+npx tsx scripts/law-search-test/search-test.ts
 ```
 
 需要 MongoDB Atlas 連線。腳本從 `dist/lexdraft/.dev.vars` 讀取 `MONGO_URL`。
+
+腳本直接 import `src/server/lib/lawConstants.ts` 的常數（`PCODE_MAP`、`ALIAS_MAP`、`CONCEPT_TO_LAW`），確保與正式程式碼同步。
 
 ## 測試內容
 
@@ -17,25 +19,26 @@ node scripts/law-search-test/search-test.mjs
 
 lawSearch.ts 有 3 層 fallback：
 
-| 策略 | 觸發條件 | 預期耗時 | 方式 |
-|---|---|---|---|
-| S0 _id lookup | 查詢含具體條號 + 法規在 PCODE_MAP | ~25ms | `findOne({ _id: '{pcode}-{num}' })` |
-| S1 regex | 查詢含具體條號但 S0 miss | ~1000ms+ | `find({ law_name, article_no: regex })` |
-| S2 Atlas Search | 概念搜尋或 S0+S1 都 miss | ~30-80ms | `$search` compound query |
+| 策略            | 觸發條件                          | 預期耗時 | 方式                                    |
+| --------------- | --------------------------------- | -------- | --------------------------------------- |
+| S0 \_id lookup  | 查詢含具體條號 + 法規在 PCODE_MAP | ~25ms    | `findOne({ _id: '{pcode}-{num}' })`     |
+| S1 regex        | 查詢含具體條號但 S0 miss          | ~1000ms+ | `find({ law_name, article_no: regex })` |
+| S2 Atlas Search | 概念搜尋或 S0+S1 都 miss          | ~30-80ms | `$search` compound query                |
 
 ### 測試分類
 
-| 分類 | 數量 | 驗證重點 |
-|---|---|---|
-| A. 具體條號 | 14 | S0 命中、條號格式正確、條之X 格式 |
-| B. 縮寫條號 | 6 | ALIAS_MAP 解析 → S0 命中 |
-| C. 法規+概念 | 20 | pcode filter 精確到正確法規、概念匹配品質 |
-| D. 純概念 | 5 | 無法規名稱時的搜尋品質 |
-| E. 邊界情況 | 9 | 施行法、條之1格式、冷門法規 |
+| 分類         | 數量 | 驗證重點                                  |
+| ------------ | ---- | ----------------------------------------- |
+| A. 具體條號  | 14   | S0 命中、條號格式正確、條之X 格式         |
+| B. 縮寫條號  | 6    | ALIAS_MAP 解析 → S0 命中                  |
+| C. 法規+概念 | 20   | pcode filter 精確到正確法規、概念匹配品質 |
+| D. 純概念    | 5    | 無法規名稱時的搜尋品質                    |
+| E. 邊界情況  | 9    | 施行法、條之1格式、冷門法規               |
 
 ### 驗證項目
 
 每個測試案例驗證：
+
 1. **策略正確**：走了預期的策略（S0/S1/S2）
 2. **條號正確**（條號查詢時）：返回的 article_no 與預期匹配
 3. **法規正確**（概念查詢時）：返回結果的 law_name 是目標法規，不是其他法規
@@ -49,9 +52,9 @@ lawSearch.ts 有 3 層 fallback：
 
 ## 新增測試案例
 
-在 `search-test.mjs` 的 `TEST_CASES` 陣列中新增：
+在 `search-test.ts` 的 `TEST_CASES` 陣列中新增：
 
-```javascript
+```typescript
 {
   query: '搜尋字串',
   expect: 'S0',              // 預期策略：S0 / S1 / S2

@@ -78,10 +78,11 @@ Step 0: Case Reader + Issue Analyzer (Gemini 2.5 Flash)
 Step 1: 法條查詢（純 TypeScript 函式，無 AI）
    |  正規化 → 去重 → 批次 MongoDB 查詢
    v
-Step 2: 法律推理 + 論證策略（Claude Haiku 4.5 tool-loop）
-   |  自由推理 → 補搜法條 → finalize_strategy → JSON 輸出
+Step 2: 法律推理 + 論證策略
+   |  Phase A: Claude Haiku 4.5 tool-loop（推理 + 補搜法條 + finalize_strategy）
+   |  Phase B: Gemini 2.5 Flash native（constrained decoding JSON 輸出）
    v
-Step 3: Writer (Claude Haiku 4.5 + Citations API)
+Step 3: Writer (Claude Sonnet 4.6 + Citations API)
       逐段撰寫、自動引用、後處理
 ```
 
@@ -187,12 +188,12 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Reasoning["C1: Reasoning — 法律推理 tool-loop<br/>Claude Haiku 4.5, 最多 6 輪"]
+    Reasoning["C1: Reasoning — 法律推理 tool-loop<br/>Claude Haiku 4.5, 最多 6 輪（Phase A）"]
     Reasoning --> SearchLaw{"需要補搜<br/>法條？"}
     SearchLaw -- YES --> Search["C2: search_law<br/>查 MongoDB + 即時寫入"]
     Search --> Reasoning
     SearchLaw -- NO --> Finalize["C3: finalize_strategy<br/>推理摘要 + 補搜法條 ID"]
-    Finalize --> Structuring["C4: Structuring — 策略結構化 JSON 輸出<br/>獨立 Claude 呼叫（無工具）"]
+    Finalize --> Structuring["C4: Structuring — 策略結構化 JSON 輸出<br/>Gemini 2.5 Flash native + constrained decoding（Phase B）"]
     Structuring --> Validate{"C5: 驗證<br/>結構完整？"}
     Validate -- YES --> SetStrategy["C6: 寫入 claims 表<br/>SSE: set_claims"]
     Validate -- NO --> Retry["C7: 注入錯誤重試"]
@@ -200,16 +201,16 @@ flowchart TD
     SetStrategy --> NextStep["→ Step 3：書狀撰寫"]
 ```
 
-| 編號 | 節點                     | 實際做什麼                                                                                                                        | 目的                                                                                                |
-| ---- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| C1   | Reasoning — 法律推理 tool-loop | Claude Haiku 4.5 多輪 tool-loop：AI 自由文字推理（請求權基礎分析、構成要件檢視、攻防預判），視需要呼叫 `search_law` 補搜法條      | 產出有深度的法律推理，AI 可主動發現法條缺口並補搜，而非只是搬運條文                                 |
-| C2   | search_law 補搜          | 查 MongoDB Atlas Search，回傳條文全文。即時寫入 ContextStore + DB（fire-and-forget 持久化），確保 Step 2 失敗時已補搜的法條仍可用 | 推理過程中發現缺口時主動補搜（如時效抗辯、舉證責任倒置相關條文）                                    |
-| C3   | finalize_strategy        | AI 呼叫 `finalize_strategy` 工具，附上 `reasoning_summary`（推理摘要）和 `supplemented_law_ids`（補搜法條 ID），系統回傳簡潔確認  | 標記推理完成，進入 JSON 輸出階段。推理 / JSON 硬隔離（parser gate）：finalize 之前不嘗試 parse JSON |
-| C4   | Structuring — 策略結構化 JSON 輸出 | **獨立的 Claude 呼叫**（不帶工具、乾淨 context）：輸入推理摘要 + 爭點 + 可用法條 + 檔案 ID，輸出 claims + sections JSON           | 將推理和 JSON 輸出分離，避免推理 context 過長導致 JSON 品質下降                                     |
-| C5   | 驗證結構完整？           | `validateStrategyOutput()` 檢查：claims 結構完整性、sections 引用的 claims 存在、覆蓋率足夠                                       | 防止 AI 產出殘缺的策略                                                                              |
-| C6   | 寫入 claims 表 + SSE     | `store.setStrategyOutput(claims, sections)`；Claims 寫入 D1（每 10 筆一批避免參數上限）；SSE `set_claims` 通知前端                | 持久化主張圖譜，前端可以顯示攻防關係圖                                                              |
-| C7   | 注入錯誤訊息重試         | 將具體的驗證錯誤注入 prompt，讓 AI 修正（最多重試 1 次）。JSON 解析失敗時先用 `jsonrepair` 修復                                   | 給 AI 精確的修正指示                                                                                |
-| C5   | 寫入 claims 表 + SSE     | `store.setStrategyOutput(claims, sections)`；Claims 寫入 D1（分批 10 筆避免參數上限）；SSE `set_claims` 通知前端                  | 持久化主張圖譜，前端可以顯示攻防關係圖                                                              |
+| 編號 | 節點                               | 實際做什麼                                                                                                                                                                                                | 目的                                                                                                |
+| ---- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| C1   | Reasoning — 法律推理 tool-loop     | Claude Haiku 4.5 多輪 tool-loop：AI 自由文字推理（請求權基礎分析、構成要件檢視、攻防預判），視需要呼叫 `search_law` 補搜法條                                                                              | 產出有深度的法律推理，AI 可主動發現法條缺口並補搜，而非只是搬運條文                                 |
+| C2   | search_law 補搜                    | 查 MongoDB Atlas Search，回傳條文全文。即時寫入 ContextStore + DB（fire-and-forget 持久化），確保 Step 2 失敗時已補搜的法條仍可用                                                                         | 推理過程中發現缺口時主動補搜（如時效抗辯、舉證責任倒置相關條文）                                    |
+| C3   | finalize_strategy                  | AI 呼叫 `finalize_strategy` 工具，附上 `reasoning_summary`（推理摘要）和 `supplemented_law_ids`（補搜法條 ID），系統回傳簡潔確認                                                                          | 標記推理完成，進入 JSON 輸出階段。推理 / JSON 硬隔離（parser gate）：finalize 之前不嘗試 parse JSON |
+| C4   | Structuring — 策略結構化 JSON 輸出 | **Gemini 2.5 Flash native endpoint** + `responseSchema` constrained decoding：輸入推理摘要 + 爭點 + 可用法條 + 檔案 ID，輸出 claims + sections JSON。constrained decoding 在 token 生成時強制 schema 合規 | 將推理和 JSON 輸出分離，Gemini constrained decoding 保證 JSON schema 100% 合規                      |
+| C5   | 驗證結構完整？                     | `validateStrategyOutput()` 檢查：claims 結構完整性、sections 引用的 claims 存在、覆蓋率足夠                                                                                                               | 防止 AI 產出殘缺的策略                                                                              |
+| C6   | 寫入 claims 表 + SSE               | `store.setStrategyOutput(claims, sections)`；Claims 寫入 D1（每 10 筆一批避免參數上限）；SSE `set_claims` 通知前端                                                                                        | 持久化主張圖譜，前端可以顯示攻防關係圖                                                              |
+| C7   | 注入錯誤訊息重試                   | 將具體的驗證錯誤注入 prompt，讓 AI 修正（最多重試 1 次）。JSON 解析失敗時先用 `jsonrepair` 修復                                                                                                           | 給 AI 精確的修正指示                                                                                |
+| C5   | 寫入 claims 表 + SSE               | `store.setStrategyOutput(claims, sections)`；Claims 寫入 D1（分批 10 筆避免參數上限）；SSE `set_claims` 通知前端                                                                                          | 持久化主張圖譜，前端可以顯示攻防關係圖                                                              |
 
 #### Step 3：書狀撰寫
 
@@ -655,14 +656,14 @@ interface FetchedLaw {
 
 **檔案位置**：`src/server/agent/pipeline/reasoningStrategyStep.ts`、`src/server/agent/prompts/reasoningStrategyPrompt.ts`
 
-| 項目         | 值                                                        |
-| ------------ | --------------------------------------------------------- |
-| AI 模型      | Claude Haiku 4.5 (`claude-haiku-4-5-20251001`)            |
-| 可用工具     | `search_law`（補搜法條）、`finalize_strategy`（定稿信號） |
-| 最多輪數     | 6 輪（`MAX_ROUNDS`）                                      |
-| 最多補搜     | 6 次 search_law（`MAX_SEARCHES`）                         |
-| max_tokens   | 8192（Reasoning）/ 16384（Structuring）                   |
-| Soft timeout | 25 秒（催促 finalize，非硬切）                            |
+| 項目         | 值                                                                                                               |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| AI 模型      | Phase A: Claude Haiku 4.5 (`claude-haiku-4-5-20251001`)；Phase B: Gemini 2.5 Flash native (`callGeminiNative()`) |
+| 可用工具     | `search_law`（補搜法條）、`finalize_strategy`（定稿信號）— 僅 Phase A                                            |
+| 最多輪數     | 6 輪（`MAX_ROUNDS`）— Phase A                                                                                    |
+| 最多補搜     | 6 次 search_law（`MAX_SEARCHES`）— Phase A                                                                       |
+| max_tokens   | 8192（Phase A Reasoning）/ 32768（Phase B Structuring）                                                          |
+| Soft timeout | 25 秒（催促 finalize，非硬切）— Phase A                                                                          |
 
 #### 兩階段架構
 
@@ -670,9 +671,9 @@ interface FetchedLaw {
 
 AI 自由文字推理，執行請求權基礎分析、構成要件檢視、攻防預判。推理過程中發現法條缺口時呼叫 `search_law` 補搜。推理完成後呼叫 `finalize_strategy`，附上推理摘要。
 
-**Structuring — 策略結構化 JSON 輸出**（獨立 `callClaude` 呼叫）：
+**Structuring — 策略結構化 JSON 輸出**（`callGeminiNative()` + `responseSchema`）：
 
-獨立的 Claude 呼叫（不帶工具、乾淨 context）。輸入推理摘要 + 爭點 + 可用法條 + 檔案 ID，輸出 claims + sections JSON。將推理和 JSON 輸出分離，避免推理 context 過長導致 JSON 品質下降。
+獨立的 Gemini 2.5 Flash native endpoint 呼叫（不經 compat endpoint）。使用 `responseSchema` constrained decoding，在 token 生成時強制輸出符合 `STRATEGY_RESPONSE_SCHEMA` 的 JSON。輸入推理摘要 + 爭點 + 可用法條 + 檔案 ID，輸出 claims + sections JSON。將推理和 JSON 輸出分離，Gemini constrained decoding 保證 schema 100% 合規。
 
 #### 工具定義
 
@@ -805,7 +806,7 @@ AI 扮演資深訴訟律師，工作流程：
 
 #### 容錯機制
 
-- **Step 2 JSON 解析失敗**：三階段修復 — `jsonrepair` → 注入錯誤重試 → fallback 到簡化版 Strategist（single-shot）
+- **Step 2 JSON 解析失敗**：Gemini constrained decoding 保證 schema 合規，極少失敗。仍有截斷專用 retry 策略（`JSON_OUTPUT_MAX_TOKENS` 32768）
 - **Step 2 驗證失敗**：注入具體錯誤讓 AI 修正（最多 1 次）
 - **每輪 search_law 即時寫入**：即使 Step 2 整體失敗，已補搜的法條仍保存在 DB 中
 
@@ -817,7 +818,7 @@ AI 扮演資深訴訟律師，工作流程：
 
 | 項目       | 值                                   |
 | ---------- | ------------------------------------ |
-| AI 模型    | Claude Haiku 4.5 + Citations API     |
+| AI 模型    | Claude Sonnet 4.6 + Citations API    |
 | 呼叫方式   | 逐段撰寫，每個 section 一次 API 呼叫 |
 | max_tokens | 4096                                 |
 
@@ -1207,13 +1208,14 @@ our_claim_3 (我方/rebuttal): "原告已提出報價單及修繕費用單據"
 
 ## 各 Agent 模型一覽
 
-| 步驟    | Agent               | 模型                         | 用途                    | 呼叫方式                                          |
-| ------- | ------------------- | ---------------------------- | ----------------------- | ------------------------------------------------- |
-| Step 0a | Case Reader         | Gemini 2.5 Flash             | 閱讀檔案、案件摘要      | 多輪工具呼叫（streaming）                         |
-| Step 0b | Issue Analyzer      | Gemini 2.5 Flash             | 辨識爭點、事實分類      | 單次 JSON 輸出（non-streaming，支援 AbortSignal） |
-| Step 1  | 法條查詢（純函式）  | **無 AI**                    | 批次查詢法條全文        | 純 TypeScript 函式                                |
-| Step 2  | 法律推理 + 論證策略 | Claude Haiku 4.5             | 推理 + 補搜 + 策略 JSON | 多輪 tool-loop + 獨立 JSON 輸出                   |
-| Step 3  | Writer              | Claude Haiku 4.5 + Citations | 逐段撰寫                | 每段一次（non-streaming）                         |
+| 步驟      | Agent              | 模型                              | 用途                      | 呼叫方式                                          |
+| --------- | ------------------ | --------------------------------- | ------------------------- | ------------------------------------------------- |
+| Step 0a   | Case Reader        | Gemini 2.5 Flash                  | 閱讀檔案、案件摘要        | 多輪工具呼叫（streaming）                         |
+| Step 0b   | Issue Analyzer     | Gemini 2.5 Flash                  | 辨識爭點、事實分類        | 單次 JSON 輸出（non-streaming，支援 AbortSignal） |
+| Step 1    | 法條查詢（純函式） | **無 AI**                         | 批次查詢法條全文          | 純 TypeScript 函式                                |
+| Step 2(A) | 法律推理           | Claude Haiku 4.5                  | 推理 + 補搜法條           | 多輪 tool-loop（`callClaudeToolLoop`）            |
+| Step 2(B) | 論證策略 JSON 輸出 | Gemini 2.5 Flash native           | constrained decoding JSON | `callGeminiNative()` + `responseSchema`           |
+| Step 3    | Writer             | Claude Sonnet 4.6 + Citations API | 逐段撰寫                  | 每段一次（non-streaming）                         |
 
 所有 Claude 呼叫都透過 Cloudflare AI Gateway 路由（統一計費、速率限制、認證）。
 
@@ -1229,6 +1231,7 @@ our_claim_3 (我方/rebuttal): "原告已提出報價單及修繕費用單據"
 | `src/server/agent/pipeline/lawFetchStep.ts`           | Step 1 法條查詢（純函式，無 AI）                                                                       |
 | `src/server/agent/pipeline/reasoningStrategyStep.ts`  | Step 2 法律推理 + 論證策略（Claude tool-loop）                                                         |
 | `src/server/agent/pipeline/writerStep.ts`             | Step 3 Writer 逐段撰寫                                                                                 |
+| `src/server/agent/pipeline/enrichStrategy.ts`         | Step 2 enrichment（已退化為 validation-only，純函式）                                                  |
 | `src/server/agent/pipeline/validateStrategy.ts`       | Step 2 輸出驗證（claims 結構 + 覆蓋率）                                                                |
 | `src/server/agent/pipeline/types.ts`                  | Pipeline 共用型別定義（含 FetchedLaw、ReasoningStrategyOutput）                                        |
 | `src/server/agent/claudeClient.ts`                    | Claude API 呼叫（含 Citations + callClaudeToolLoop 多輪工具呼叫）                                      |
