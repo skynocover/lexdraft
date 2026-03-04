@@ -1,243 +1,75 @@
 {
   "caseId": "z4keVNfyuKvL68Xg1qPl2",
-  "timestamp": "2026-03-04T02:25:23.798Z",
+  "timestamp": "2026-03-04T16:40:00.089Z",
   "numRuns": 1,
   "baseline": {
-    "briefId": "eea-WXwt3PQCBWDUMTbzK",
-    "numParagraphs": 36,
+    "briefId": "SMOe6eJ7GUYKkgVS6Veff",
+    "numParagraphs": 8,
     "totalLaw": 11,
-    "totalFile": 21,
-    "totalCites": 32,
-    "totalChars": 6488,
-    "zeroLawContent": "24/34",
-    "zeroCiteAll": "12/36",
+    "totalFile": 22,
+    "totalCites": 33,
+    "totalChars": 6463,
+    "zeroLawContent": "0/6",
+    "zeroCiteAll": "2/8",
     "sections": [
       {
         "label": "壹、前言",
         "lawCites": 0,
         "fileCites": 0,
-        "charCount": 287
+        "charCount": 311
       },
       {
-        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 48
-      },
-      {
-        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
-        "lawCites": 1,
-        "fileCites": 0,
-        "charCount": 151
-      },
-      {
-        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
-        "lawCites": 0,
-        "fileCites": 1,
-        "charCount": 234
-      },
-      {
-        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
-        "lawCites": 0,
-        "fileCites": 1,
-        "charCount": 196
-      },
-      {
-        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
-        "lawCites": 1,
-        "fileCites": 0,
-        "charCount": 107
-      },
-      {
-        "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
-        "lawCites": 1,
-        "fileCites": 0,
-        "charCount": 167
-      },
-      {
-        "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 45
-      },
-      {
-        "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
+        "label": "貳、事實及理由 > 一、被告應負全部損害賠償責任",
         "lawCites": 2,
-        "fileCites": 0,
-        "charCount": 191
-      },
-      {
-        "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 2,
-        "charCount": 245
-      },
-      {
-        "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 1,
-        "charCount": 241
-      },
-      {
-        "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 93
-      },
-      {
-        "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 47
-      },
-      {
-        "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
-        "lawCites": 1,
-        "fileCites": 0,
-        "charCount": 122
-      },
-      {
-        "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 2,
-        "charCount": 181
-      },
-      {
-        "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 1,
-        "charCount": 202
-      },
-      {
-        "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
-        "lawCites": 1,
-        "fileCites": 0,
-        "charCount": 157
-      },
-      {
-        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 48
-      },
-      {
-        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
-        "lawCites": 1,
-        "fileCites": 0,
-        "charCount": 157
-      },
-      {
-        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
         "fileCites": 3,
-        "charCount": 224
+        "charCount": 831
       },
       {
-        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 1,
-        "charCount": 197
+        "label": "貳、事實及理由 > 二、醫療費用之請求為必要且合理",
+        "lawCites": 2,
+        "fileCites": 3,
+        "charCount": 837
       },
       {
-        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
+        "label": "貳、事實及理由 > 三、交通費用為治療所需之必要支出",
+        "lawCites": 2,
+        "fileCites": 4,
+        "charCount": 796
+      },
+      {
+        "label": "貳、事實及理由 > 四、不能工作損失應依實際請假日數核算",
+        "lawCites": 2,
+        "fileCites": 7,
+        "charCount": 1160
+      },
+      {
+        "label": "貳、事實及理由 > 五、機車修復費用為合理之財物損害",
+        "lawCites": 2,
         "fileCites": 2,
-        "charCount": 273
+        "charCount": 684
       },
       {
-        "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 2,
-        "charCount": 227
-      },
-      {
-        "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 61
-      },
-      {
-        "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
+        "label": "貳、事實及理由 > 六、精神慰撫金之請求符合情節重大原則",
         "lawCites": 1,
-        "fileCites": 0,
-        "charCount": 179
-      },
-      {
-        "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 1,
-        "charCount": 263
-      },
-      {
-        "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 228
-      },
-      {
-        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 91
-      },
-      {
-        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
-        "lawCites": 1,
-        "fileCites": 0,
-        "charCount": 179
-      },
-      {
-        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 1,
-        "charCount": 174
-      },
-      {
-        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 1,
-        "charCount": 230
-      },
-      {
-        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
-        "lawCites": 0,
-        "fileCites": 2,
-        "charCount": 247
-      },
-      {
-        "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
-        "lawCites": 1,
-        "fileCites": 0,
-        "charCount": 310
+        "fileCites": 3,
+        "charCount": 1225
       },
       {
         "label": "參、結論",
         "lawCites": 0,
         "fileCites": 0,
-        "charCount": 162
-      },
-      {
-        "label": "參、結論",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 401
-      },
-      {
-        "label": "參、結論",
-        "lawCites": 0,
-        "fileCites": 0,
-        "charCount": 123
+        "charCount": 619
       }
     ]
   },
   "runs": [
     {
-      "briefId": "cWo6B0MJow3CJlZjsSObO",
+      "briefId": "2hfMy1xB6zsqo66EiwbCo",
       "numParagraphs": 8,
-      "totalLaw": 7,
-      "totalFile": 20,
-      "totalCites": 27,
-      "totalChars": 6219,
+      "totalLaw": 16,
+      "totalFile": 22,
+      "totalCites": 38,
+      "totalChars": 6843,
       "zeroLawContent": "0/6",
       "zeroCiteAll": "2/8",
       "sections": [
@@ -245,52 +77,52 @@
           "label": "壹、前言",
           "lawCites": 0,
           "fileCites": 0,
-          "charCount": 334
+          "charCount": 379
         },
         {
-          "label": "貳、對對造主張之意見 > 一、被告應對本件交通事故負全部損害",
-          "lawCites": 2,
+          "label": "貳、事實及理由 > 一、被告應負全部損害賠償責任",
+          "lawCites": 3,
           "fileCites": 4,
-          "charCount": 1007
+          "charCount": 905
         },
         {
-          "label": "貳、對對造主張之意見 > 二、被告應賠償原告因本件事故所生之",
-          "lawCites": 1,
+          "label": "貳、事實及理由 > 二、醫療費用之請求",
+          "lawCites": 3,
+          "fileCites": 5,
+          "charCount": 1012
+        },
+        {
+          "label": "貳、事實及理由 > 三、交通費用之請求",
+          "lawCites": 3,
           "fileCites": 3,
-          "charCount": 775
+          "charCount": 787
         },
         {
-          "label": "貳、對對造主張之意見 > 三、被告應賠償原告因本件事故所生之",
-          "lawCites": 1,
-          "fileCites": 3,
-          "charCount": 621
-        },
-        {
-          "label": "貳、對對造主張之意見 > 四、被告應賠償原告因本件事故所生之",
-          "lawCites": 1,
+          "label": "貳、事實及理由 > 四、不能工作損失之請求",
+          "lawCites": 2,
           "fileCites": 6,
-          "charCount": 1103
+          "charCount": 1261
         },
         {
-          "label": "貳、對對造主張之意見 > 五、被告應賠償原告因本件事故所生之",
-          "lawCites": 1,
+          "label": "貳、事實及理由 > 五、機車修復費之請求",
+          "lawCites": 3,
           "fileCites": 1,
-          "charCount": 679
+          "charCount": 718
         },
         {
-          "label": "貳、對對造主張之意見 > 六、被告應賠償原告因本件事故所生之",
-          "lawCites": 1,
+          "label": "貳、事實及理由 > 六、精神慰撫金之請求",
+          "lawCites": 2,
           "fileCites": 3,
-          "charCount": 1136
+          "charCount": 1202
         },
         {
           "label": "參、結論",
           "lawCites": 0,
           "fileCites": 0,
-          "charCount": 564
+          "charCount": 579
         }
       ],
-      "elapsed": 319.7
+      "elapsed": 376.2
     }
   ]
 }

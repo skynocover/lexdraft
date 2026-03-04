@@ -157,7 +157,63 @@
 
 ## Pipeline 優化（書狀生成品質 & 速度）
 
-> 2026-03-03 分析整理。目前 pipeline 每次約 5-15 API 呼叫、2-10 分鐘。
+> 2026-03-04 分析整理。目前 pipeline 每次 ~160-310K tokens、130-360 秒、$0.25-0.40。
+
+### 成本分佈
+
+| Step | Model | 耗時 | Token 消耗 | 成本佔比 |
+|------|-------|------|-----------|---------|
+| 0. 案件確認 | Gemini 2.5 Flash | 10-30s | 0-30K | ~10% |
+| 1. 法條研究 | 無 AI（MongoDB） | 1-5s | 0 | 0% |
+| 2a. 推理 | Claude Haiku 4.5 | 40-120s | 80-150K | **~45%** |
+| 2b. 結構化 | Gemini 2.5 Flash | 15-60s | 15-60K | ~15% |
+| 3. 書狀撰寫 | Claude Sonnet 4.6 | 30-120s | 60-75K | **~30%** |
+
+### 優化計劃（按 ROI 排序）
+
+- [ ] **P5. search_law 回傳截斷法條**（省 20-40K tokens，30min，低風險）
+  - 現況：`handleSearchLaw()`（`reasoningStrategyStep.ts:369`）回傳完整法條內容到 Claude tool_result，每條 500-800 tokens，且累積在 message history 每輪重複傳送
+  - 方案：tool_result 只回傳截斷版（300 chars），完整內容已存入 `ContextStore`（line 355），Writer Step 3 獨立取用
+  - 檔案：`src/server/agent/pipeline/reasoningStrategyStep.ts`
+- [ ] **P6. 前言/結論 Writer 降級為 Haiku**（省 ~12K tokens + 5-10s，1hr，低風險）
+  - 現況：所有段落都用 Claude Sonnet 4.6（最貴），但前言/結論不需要法條引用品質
+  - 方案：前言（第 1 段）和結論（最後一段）改用 Claude Haiku 4.5，content sections 維持 Sonnet 4.6
+  - 指標：前言/結論不計入 0-law content，品質影響可控
+  - 檔案：`src/server/agent/pipeline/writerStep.ts`、`src/server/agent/claudeClient.ts`
+- [ ] **P7. law input 截斷從 600→400 chars**（省 ~10-20K tokens，10min，低風險）
+  - 現況：`MAX_LAW_CONTENT_LENGTH=600`（`lawFetchStep.ts:16`），10 條法 × 600 chars 每輪帶入
+  - 方案：降到 400 chars，推理只需法條大意，Writer 有完整版
+  - 檔案：`src/server/agent/pipeline/lawFetchStep.ts`
+- [ ] **P8. 推理輪數收斂優化**（省 ~20-30K tokens + 10-20s，1hr，中風險）
+  - 現況：`MAX_ROUNDS=6`、`SOFT_TIMEOUT_MS=25000`，大多 3-4 輪完成但少數跑滿 6 輪
+  - 方案：`MAX_ROUNDS` 6→4、`SOFT_TIMEOUT_MS` 25s→18s、搜尋 3 次後觸發收尾 nudge
+  - 風險：複雜案件可能推理不完整，需 benchmark 驗證
+  - 檔案：`src/server/agent/prompts/strategyConstants.ts`、`reasoningStrategyStep.ts`
+- [ ] **P9. completedSections 歷史壓縮**（省 ~10-15K tokens，2hr，中風險）
+  - 現況：`writerStep.ts:229-237` 把已完成段落的完整 markdown 傳入後續段落 prompt，第 8 段帶 7 段全文（~7K tokens），總累積 ~28K tokens
+  - 方案：超過 3 段後，早期段落改傳摘要（段首 100 字 + section label），只保留最近 2 段全文
+  - 風險：可能影響段落間一致性，需 A/B 測試
+  - 檔案：`src/server/agent/contextStore.ts`、`src/server/agent/pipeline/writerStep.ts`
+- [ ] **P10. Step 2b Structuring 重試優化**（省 ~10-15K tokens + 5-15s，1hr，低風險）
+  - 現況：`JSON_OUTPUT_MAX_TOKENS=32768`，截斷時重試最多 3 次（每次 ~20K tokens）
+  - 方案：加重試 counter 日誌追蹤截斷率；如 constrained decoding 穩定可降到 max 2 次；壓縮 structuring input 移除冗餘
+  - 檔案：`src/server/agent/pipeline/reasoningStrategyStep.ts`
+
+### 預估總效果
+
+| 優化項 | Token 節省 | 時間節省 | 風險 | 工作量 |
+|--------|-----------|---------|------|--------|
+| P5. search_law 截斷 | 20-40K | 0s | 低 | 30min |
+| P6. 前言/結論 Haiku | ~12K | 5-10s | 低 | 1hr |
+| P7. law input 截斷 | 10-20K | 0s | 低 | 10min |
+| P8. 推理輪數優化 | 20-30K | 10-20s | 中 | 1hr |
+| P9. history 壓縮 | 10-15K | 0s | 中 | 2hr |
+| P10. 重試優化 | 10-15K | 5-15s | 低 | 1hr |
+| **合計** | **~80-120K** | **~20-45s** | | **~6hr** |
+
+> Pipeline 預計從 ~200K tokens → ~100-120K tokens（**40-50% 降幅**），時間 ~200s → ~160s（**~20% 降幅**）
+
+### 已完成
 
 - [ ] **P0. Writer 部分並行化**
   - 現況：Step 3 Writer 逐段順序執行（每段 5-15 秒，6 段 = 30-90 秒），是 pipeline 最慢的階段
@@ -188,7 +244,7 @@
 | Smart Chips（自動識別人名/時間/金額） | 酷但非必要，律師不一定需要        |
 | 書狀格式強化（行距/段距/段落編號）    | 待觀察律師對格式的實際需求        |
 | 全文搜尋（跨 PDF/書狀/法條）          | 案件檔案不多時用不到              |
-| 混合模型策略（Flash + Sonnet 切換）   | 優化成本用，早期流量低不急        |
+| 混合模型策略（Flash + Sonnet 切換）   | 已規劃為 P6（前言/結論用 Haiku） |
 | `legal_reasoning` 結構化              | 需要更多實際使用數據再決定 schema |
 | 用戶自定義指令集                      | 需先觀察律師常用 prompt 模式      |
 | 時間軸獨立 tab                        | 形式待定                          |

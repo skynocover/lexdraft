@@ -447,8 +447,23 @@ export const runReasoningStrategy = async (
 
   try {
     // ── Reasoning: 法律推理 tool-loop ──
+    let totalCacheCreation = 0;
+    let totalCacheRead = 0;
+    let totalInput = 0;
+    let totalOutput = 0;
+
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const response = await callReasoning();
+
+      // Accumulate token usage
+      const u = response.usage;
+      totalInput += u.input_tokens;
+      totalOutput += u.output_tokens;
+      totalCacheCreation += u.cache_creation_input_tokens ?? 0;
+      totalCacheRead += u.cache_read_input_tokens ?? 0;
+      console.log(
+        `[reasoning] round ${round}: input=${u.input_tokens}, output=${u.output_tokens}, cache_write=${u.cache_creation_input_tokens ?? 0}, cache_read=${u.cache_read_input_tokens ?? 0}`,
+      );
 
       // Push assistant message (content is ClaudeContentBlock[])
       messages.push({ role: 'assistant', content: response.content });
@@ -562,6 +577,13 @@ export const runReasoningStrategy = async (
 
       const forceResp = await callReasoning();
 
+      // Accumulate force-finalize token usage
+      const fu = forceResp.usage;
+      totalInput += fu.input_tokens;
+      totalOutput += fu.output_tokens;
+      totalCacheCreation += fu.cache_creation_input_tokens ?? 0;
+      totalCacheRead += fu.cache_read_input_tokens ?? 0;
+
       const forceToolCalls = extractToolCalls(forceResp.content);
       for (const tc of forceToolCalls) {
         if (tc.name === 'finalize_strategy') {
@@ -579,6 +601,21 @@ export const runReasoningStrategy = async (
         store.setPerIssueAnalysis([]);
         await progress?.onFinalized();
       }
+    }
+
+    // Log cache summary
+    console.log(
+      `[reasoning] TOTAL: input=${totalInput}, output=${totalOutput}, cache_write=${totalCacheCreation}, cache_read=${totalCacheRead}`,
+    );
+    if (totalCacheRead > 0 && totalInput > 0) {
+      // Anthropic cache reads are 90% cheaper than uncached input tokens
+      const CACHE_READ_DISCOUNT = 0.9;
+      const savingsPercent = (((totalCacheRead * CACHE_READ_DISCOUNT) / totalInput) * 100).toFixed(
+        1,
+      );
+      console.log(
+        `[reasoning] CACHE SAVINGS: ${totalCacheRead} tokens read from cache (~${savingsPercent}% input cost reduction)`,
+      );
     }
 
     // ── Structuring: 策略結構化 JSON 輸出 ──
