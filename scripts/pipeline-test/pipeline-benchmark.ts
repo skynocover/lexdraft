@@ -17,6 +17,8 @@
 import { execSync } from 'child_process';
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
+import { buildQualityReport } from '../../src/server/agent/pipeline/qualityReport';
+import type { Paragraph } from '../../src/client/stores/useBriefStore';
 
 // ══════════════════════════════════════════════════════════
 //  Config
@@ -208,44 +210,32 @@ const analyzeBrief = (briefId: string): BriefAnalysis | null => {
   }
 
   const cs = JSON.parse(rows[0].content_structured as string) as {
-    paragraphs: Array<{
-      section: string;
-      subsection?: string;
-      dispute_id?: string;
-      content_md?: string;
-      citations?: Array<{ type: string }>;
-    }>;
+    paragraphs: Paragraph[];
   };
   const paragraphs = cs.paragraphs || [];
 
-  const sections: SectionAnalysis[] = paragraphs.map((p) => {
+  // Use shared buildQualityReport for statistics
+  const report = buildQualityReport(paragraphs);
+
+  // Map to SectionAnalysis with dispute labels (needs D1 data)
+  const sections: SectionAnalysis[] = paragraphs.map((p, i) => {
     let label = p.subsection ? `${p.section} > ${p.subsection}` : p.section;
     if (!p.subsection && p.dispute_id && disputeMap.has(p.dispute_id)) {
       label = `${p.section} [${disputeMap.get(p.dispute_id)}]`;
     }
-    const lawCites = (p.citations || []).filter((c) => c.type === 'law').length;
-    const fileCites = (p.citations || []).filter((c) => c.type === 'file').length;
-    const charCount = (p.content_md || '').length;
-    return { label, lawCites, fileCites, charCount };
+    const sq = report.perSection[i];
+    return { label, lawCites: sq.lawCites, fileCites: sq.fileCites, charCount: sq.charCount };
   });
-
-  const totalLaw = sections.reduce((s, sec) => s + sec.lawCites, 0);
-  const totalFile = sections.reduce((s, sec) => s + sec.fileCites, 0);
-  const totalChars = sections.reduce((s, sec) => s + sec.charCount, 0);
-
-  const contentSections = sections.slice(1, -1);
-  const zeroLawSections = contentSections.filter((s) => s.lawCites === 0).length;
-  const zeroCiteSections = sections.filter((s) => s.lawCites + s.fileCites === 0).length;
 
   return {
     briefId,
-    numParagraphs: paragraphs.length,
-    totalLaw,
-    totalFile,
-    totalCites: totalLaw + totalFile,
-    totalChars,
-    zeroLawContent: `${zeroLawSections}/${contentSections.length}`,
-    zeroCiteAll: `${zeroCiteSections}/${sections.length}`,
+    numParagraphs: report.totalParagraphs,
+    totalLaw: report.totalLawCites,
+    totalFile: report.totalFileCites,
+    totalCites: report.totalCites,
+    totalChars: report.totalChars,
+    zeroLawContent: `${report.zeroLawContentSections}/${report.contentSectionCount}`,
+    zeroCiteAll: `${report.zeroCiteAllSections}/${report.allSectionCount}`,
     sections,
   };
 };

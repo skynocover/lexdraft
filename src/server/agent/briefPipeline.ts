@@ -20,8 +20,14 @@ import type {
   PipelineContext,
 } from './pipeline/types';
 import { runCaseAnalysis } from './pipeline/caseAnalysisStep';
+import { buildQualityReport } from './pipeline/qualityReport';
+import { mapToJson } from './pipeline/snapshotUtils';
 
 export type { PipelineContext } from './pipeline/types';
+
+export interface PipelineOptions {
+  onStepComplete?: (stepName: string, data: unknown) => void | Promise<void>;
+}
 
 // ── Progress Tracker (4 steps) ──
 
@@ -109,12 +115,24 @@ const createProgressTracker = (sendSSE: PipelineContext['sendSSE']) => {
 
 // ── Main Pipeline ──
 
-export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult> => {
+export const runBriefPipeline = async (
+  ctx: PipelineContext,
+  opts?: PipelineOptions,
+): Promise<ToolResult> => {
   const pipelineStartTime = Date.now();
   const failedSections: string[] = [];
   const store = new ContextStore();
   const progress = createProgressTracker(ctx.sendSSE);
   let currentStep = STEP_CASE;
+
+  const emitSnapshot = async (stepName: string, data: unknown) => {
+    if (!opts?.onStepComplete) return;
+    try {
+      await opts.onStepComplete(stepName, data);
+    } catch (e) {
+      console.warn(`[pipeline] onStepComplete(${stepName}) failed:`, e);
+    }
+  };
 
   try {
     // ═══ Step 0: Case Analysis ═══
@@ -136,6 +154,15 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
         article_no: r.article,
         content: r.full_text,
       }));
+
+    await emitSnapshot('step0', {
+      store: store.serialize(),
+      briefId: step0.briefId,
+      parsedFiles: step0.parsedFiles,
+      allLawRefRows: step0.allLawRefRows,
+      templateContentMd: step0.templateContentMd,
+      fileContentMap: mapToJson(step0.fileContentMap),
+    });
 
     // ═══ Step 1: Law Fetch (pure function, no AI) ═══
     if (ctx.signal.aborted) return toolError('已取消');
@@ -190,6 +217,12 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     }
 
     await progress.completeStep(STEP_LAW, `${lawFetchResult.total} 條法條`);
+
+    await emitSnapshot('step1', {
+      store: store.serialize(),
+      fetchedLawsArray,
+      userAddedLaws,
+    });
 
     // ═══ Step 2: Reasoning + Strategy (Claude tool-loop) ═══
     if (ctx.signal.aborted) return toolError('已取消');
@@ -326,6 +359,12 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
       },
     );
 
+    await emitSnapshot('step2', {
+      store: store.serialize(),
+      strategyInput,
+      strategyOutput,
+    });
+
     // ═══ Step 3: Writer (sequential, uses strategy sections) ═══
     currentStep = STEP_WRITER;
     const paragraphs: Paragraph[] = [];
@@ -367,6 +406,12 @@ export const runBriefPipeline = async (ctx: PipelineContext): Promise<ToolResult
     }
 
     await progress.completeWriting(paragraphs.length);
+
+    await emitSnapshot('step3', {
+      store: store.serialize(),
+      paragraphs,
+      qualityReport: buildQualityReport(paragraphs),
+    });
 
     // ═══ Batch write all paragraphs to DB (single UPDATE instead of N SELECT+UPDATE) ═══
     if (paragraphs.length > 0) {

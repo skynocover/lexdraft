@@ -228,4 +228,74 @@ export class ContextStore {
       });
     }
   };
+
+  // ── Serialization ──
+
+  serialize = (): ContextStoreSnapshot => ({
+    _version: 1,
+    caseSummary: this.caseSummary,
+    parties: { ...this.parties },
+    caseMetadata: { ...this.caseMetadata },
+    timelineSummary: this.timelineSummary,
+    briefType: this.briefType,
+    legalIssues: this.legalIssues,
+    informationGaps: this.informationGaps,
+    damages: this.damages,
+    timeline: this.timeline,
+    claims: this.claims,
+    sections: this.sections,
+    reasoningSummary: this.reasoningSummary,
+    perIssueAnalysis: this.perIssueAnalysis,
+    supplementedLaws: this.supplementedLaws,
+    foundLaws: this.foundLaws,
+    draftSections: this.draftSections,
+  });
+
+  static fromSnapshot = (snap: ContextStoreSnapshot): ContextStore => {
+    const store = new ContextStore();
+    store.caseSummary = snap.caseSummary ?? '';
+    store.parties = snap.parties ?? { plaintiff: '', defendant: '' };
+    store.caseMetadata = snap.caseMetadata ?? {
+      caseNumber: '',
+      court: '',
+      clientRole: '',
+      caseInstructions: '',
+    };
+    store.timelineSummary = snap.timelineSummary ?? '';
+    store.briefType = snap.briefType ?? '';
+    store.legalIssues = snap.legalIssues ?? [];
+    store.informationGaps = snap.informationGaps ?? [];
+    store.damages = snap.damages ?? [];
+    store.timeline = snap.timeline ?? [];
+    store.claims = snap.claims ?? [];
+    store.sections = snap.sections ?? [];
+    store.reasoningSummary = snap.reasoningSummary ?? '';
+    store.perIssueAnalysis = snap.perIssueAnalysis ?? [];
+    store.supplementedLaws = snap.supplementedLaws ?? [];
+    store.foundLaws = snap.foundLaws ?? [];
+    store.draftSections = snap.draftSections ?? [];
+    return store;
+  };
+}
+
+// ── Snapshot Type ──
+
+export interface ContextStoreSnapshot {
+  _version: 1;
+  caseSummary: string;
+  parties: { plaintiff: string; defendant: string };
+  caseMetadata: CaseMetadata;
+  timelineSummary: string;
+  briefType: string;
+  legalIssues: LegalIssue[];
+  informationGaps: InformationGap[];
+  damages: DamageItem[];
+  timeline: TimelineItem[];
+  claims: Claim[];
+  sections: StrategySection[];
+  reasoningSummary: string;
+  perIssueAnalysis: PerIssueAnalysis[];
+  supplementedLaws: FetchedLaw[];
+  foundLaws: FoundLaw[];
+  draftSections: DraftSection[];
 }
