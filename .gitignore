@@ -10,8 +10,9 @@ dist
 # A/B test reports
 reports/
 
-# Pipeline snapshots
+# Pipeline snapshots & benchmark results
 snapshots/
+*-benchmark-results.json
 
 # Reference files (templates, notes)
 ref/

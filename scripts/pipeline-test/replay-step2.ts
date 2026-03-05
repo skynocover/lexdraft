@@ -22,10 +22,9 @@ import type {
   ReasoningStrategyInput,
   ReasoningStrategyOutput,
   FetchedLaw,
-  EnrichmentStats,
 } from '../../src/server/agent/pipeline/types';
-import { emptyEnrichmentStats } from '../../src/server/agent/pipeline/types';
 import { createStubContext } from './stub-context';
+import { createSnapshotWriter } from './snapshot-writer';
 import { parseArgs, loadSnapshotJson } from './_helpers';
 
 // ── Args ──
@@ -46,7 +45,7 @@ const snapshotDir = resolve(SNAPSHOT_DIR);
 interface RunResult {
   runIndex: number;
   elapsed: number;
-  enrichmentStats: EnrichmentStats;
+  disputeIdFixed: number;
   claimStats: {
     total: number;
     ours: number;
@@ -113,7 +112,7 @@ const loadSnapshots = () => {
 const runOnce = async (
   runIndex: number,
   snapshots: ReturnType<typeof loadSnapshots>,
-): Promise<RunResult> => {
+): Promise<{ result: RunResult; store: ContextStore }> => {
   // Create fresh store clone for each run
   const store = ContextStore.fromSnapshot(
     snapshots.step1Store.serialize() as Parameters<typeof ContextStore.fromSnapshot>[0],
@@ -176,7 +175,7 @@ const runOnce = async (
   store.setStrategyOutput(strategyOutput.claims, strategyOutput.sections);
 
   // Collect stats
-  const enrichmentStats: EnrichmentStats = strategyOutput.enrichmentStats || emptyEnrichmentStats();
+  const disputeIdFixed = strategyOutput.disputeIdFixed || 0;
 
   const ourClaims = strategyOutput.claims.filter((c) => c.side === 'ours');
   const theirClaims = strategyOutput.claims.filter((c) => c.side === 'theirs');
@@ -193,31 +192,35 @@ const runOnce = async (
   }));
 
   return {
-    runIndex,
-    elapsed,
-    enrichmentStats,
-    claimStats: {
-      total: strategyOutput.claims.length,
-      ours: ourClaims.length,
-      theirs: theirClaims.length,
-      rebuttals: rebuttals.length,
-      unrebutted: unrebutted.length,
+    result: {
+      runIndex,
+      elapsed,
+      disputeIdFixed,
+      claimStats: {
+        total: strategyOutput.claims.length,
+        ours: ourClaims.length,
+        theirs: theirClaims.length,
+        rebuttals: rebuttals.length,
+        unrebutted: unrebutted.length,
+      },
+      sectionStats: {
+        total: strategyOutput.sections.length,
+        withLaws: strategyOutput.sections.filter((s) => (s.relevant_law_ids?.length || 0) > 0)
+          .length,
+        withFiles: strategyOutput.sections.filter((s) => (s.relevant_file_ids?.length || 0) > 0)
+          .length,
+        totalLawIds: strategyOutput.sections.reduce(
+          (sum, s) => sum + (s.relevant_law_ids?.length || 0),
+          0,
+        ),
+        totalFileIds: strategyOutput.sections.reduce(
+          (sum, s) => sum + (s.relevant_file_ids?.length || 0),
+          0,
+        ),
+      },
+      sections,
     },
-    sectionStats: {
-      total: strategyOutput.sections.length,
-      withLaws: strategyOutput.sections.filter((s) => (s.relevant_law_ids?.length || 0) > 0).length,
-      withFiles: strategyOutput.sections.filter((s) => (s.relevant_file_ids?.length || 0) > 0)
-        .length,
-      totalLawIds: strategyOutput.sections.reduce(
-        (sum, s) => sum + (s.relevant_law_ids?.length || 0),
-        0,
-      ),
-      totalFileIds: strategyOutput.sections.reduce(
-        (sum, s) => sum + (s.relevant_file_ids?.length || 0),
-        0,
-      ),
-    },
-    sections,
+    store,
   };
 };
 
@@ -254,14 +257,7 @@ const printTable = (title: string, metrics: MetricDef[], results: RunResult[]) =
 };
 
 const ENRICHMENT_METRICS: MetricDef[] = [
-  { label: 'dispute_id_fix', getValue: (r) => r.enrichmentStats.disputeIdFixed },
-  { label: 'sec←claim', getValue: (r) => r.enrichmentStats.sectionDisputeFromClaim },
-  { label: 'claim←sec', getValue: (r) => r.enrichmentStats.claimDisputeFromSection },
-  { label: 'claim↔sec', getValue: (r) => r.enrichmentStats.claimConsistency },
-  { label: 'legal_basis', getValue: (r) => r.enrichmentStats.legalBasis },
-  { label: 'law_ids', getValue: (r) => r.enrichmentStats.lawIds },
-  { label: 'subsection', getValue: (r) => r.enrichmentStats.subsection },
-  { label: 'TOTAL', getValue: (r) => r.enrichmentStats.totalPatched },
+  { label: 'dispute_id_fix', getValue: (r) => r.disputeIdFixed },
 ];
 
 const STRUCTURE_METRICS: MetricDef[] = [
@@ -312,22 +308,28 @@ const main = async () => {
   console.log(`  userAddedLaws: ${snapshots.userAddedLaws.length}`);
 
   const results: RunResult[] = [];
+  let lastStore: ContextStore | null = null;
 
   for (let i = 0; i < NUM_RUNS; i++) {
     console.log(`\n── Run ${i + 1}/${NUM_RUNS} ──`);
     try {
-      const result = await runOnce(i, snapshots);
+      const { result, store } = await runOnce(i, snapshots);
       results.push(result);
+      lastStore = store;
       console.log(`  完成 (${result.elapsed}s)`);
     } catch (err) {
       console.error(`  ✗ Run ${i + 1} failed: ${(err as Error).message}`);
     }
   }
 
-  if (results.length === 0) {
+  if (results.length === 0 || !lastStore) {
     console.error('\nNo successful runs!');
     process.exit(1);
   }
+
+  // ── Save step2.json snapshot (from last successful run) ──
+  const saveSnapshot = createSnapshotWriter(snapshotDir);
+  saveSnapshot('step2', { store: lastStore.serialize() });
 
   // ── Output Tables ──
   printTable('Enrichment Stats', ENRICHMENT_METRICS, results);
@@ -344,26 +346,8 @@ const main = async () => {
     averages:
       results.length > 1
         ? {
-            enrichment: Object.fromEntries(
-              (
-                [
-                  'disputeIdFixed',
-                  'sectionDisputeFromClaim',
-                  'claimDisputeFromSection',
-                  'claimConsistency',
-                  'legalBasis',
-                  'lawIds',
-                  'subsection',
-                  'totalPatched',
-                ] as (keyof EnrichmentStats)[]
-              ).map((key) => [
-                key,
-                parseFloat(
-                  (
-                    results.reduce((sum, r) => sum + r.enrichmentStats[key], 0) / results.length
-                  ).toFixed(1),
-                ),
-              ]),
+            disputeIdFixed: parseFloat(
+              (results.reduce((sum, r) => sum + r.disputeIdFixed, 0) / results.length).toFixed(1),
             ),
             elapsed: parseFloat(
               (results.reduce((sum, r) => sum + r.elapsed, 0) / results.length).toFixed(1),

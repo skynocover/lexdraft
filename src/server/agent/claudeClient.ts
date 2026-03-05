@@ -70,6 +70,8 @@ export interface TextSegment {
 export interface ClaudeUsage {
   input_tokens: number;
   output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
 }
 
 export interface ClaudeCitationResult {
@@ -346,16 +348,25 @@ export const callClaudeToolLoop = async (
 ): Promise<ClaudeToolLoopResponse> => {
   const gatewayUrl = `${getGatewayBaseUrl(env)}/anthropic/v1/messages`;
 
+  const cacheControl = { type: 'ephemeral' as const };
+
+  // Build system as array with cache_control for prompt caching
+  const system = [{ type: 'text' as const, text: options.system, cache_control: cacheControl }];
+
+  // Build tools with cache_control on last tool for prompt caching
+  const tools = options.tools.map((t, i) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.input_schema,
+    ...(i === options.tools.length - 1 ? { cache_control: cacheControl } : {}),
+  }));
+
   const body = {
     model: options.model,
     max_tokens: options.max_tokens,
-    system: options.system,
+    system,
     messages: options.messages,
-    tools: options.tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      input_schema: t.input_schema,
-    })),
+    tools,
   };
 
   const response = await callClaudeWithRetry(gatewayUrl, env, body);
@@ -363,7 +374,12 @@ export const callClaudeToolLoop = async (
   const data = (await response.json()) as {
     content: Array<Record<string, unknown>>;
     stop_reason: string;
-    usage?: { input_tokens: number; output_tokens: number };
+    usage?: {
+      input_tokens: number;
+      output_tokens: number;
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
   };
 
   // Strip U+FFFD at AI Gateway boundary (text + tool_use input string values)
@@ -390,10 +406,17 @@ export const callClaudeToolLoop = async (
     return block as ClaudeContentBlock;
   });
 
+  const usage: ClaudeUsage = {
+    input_tokens: data.usage?.input_tokens ?? 0,
+    output_tokens: data.usage?.output_tokens ?? 0,
+    cache_creation_input_tokens: data.usage?.cache_creation_input_tokens,
+    cache_read_input_tokens: data.usage?.cache_read_input_tokens,
+  };
+
   return {
     content,
     stop_reason: data.stop_reason as ClaudeToolLoopResponse['stop_reason'],
-    usage: data.usage || { input_tokens: 0, output_tokens: 0 },
+    usage,
   };
 };
 

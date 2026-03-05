@@ -1,12 +1,9 @@
-// ── Programmatic Enrichment (補齊 AI 偷懶填空的欄位) ──
-// Pure functions extracted from reasoningStrategyStep.ts for testability.
+// ── Enrichment: fuzzy-match corrupted dispute_ids ──
+// Gemini copies 21-char nanoid strings from prompt to output and sometimes
+// introduces character-level errors (typos, inserted spaces). Schema validation
+// can't catch these — only fuzzy string matching can.
 
-import type {
-  ReasoningStrategyOutput,
-  PerIssueAnalysis,
-  LegalIssue,
-  EnrichmentStats,
-} from './types';
+import type { ReasoningStrategyOutput, LegalIssue } from './types';
 
 /**
  * Levenshtein distance between two strings.
@@ -72,150 +69,24 @@ export const fixCorruptedDisputeIds = (
   return fixed;
 };
 
+/**
+ * Post-process Gemini strategy output: fix corrupted dispute_ids via fuzzy matching.
+ * Returns the number of IDs fixed.
+ */
 export const enrichStrategyOutput = (
   output: ReasoningStrategyOutput,
-  perIssueAnalysis: PerIssueAnalysis[],
   legalIssues: LegalIssue[] = [],
-): EnrichmentStats => {
-  const { claims, sections } = output;
-  const stats = {
-    disputeIdFixed: 0,
-    sectionDisputeFromClaim: 0,
-    claimDisputeFromSection: 0,
-    claimConsistency: 0,
-    legalBasis: 0,
-    lawIds: 0,
-    subsection: 0,
-  };
+): number => {
+  if (legalIssues.length === 0) return 0;
 
-  // 0. 修正 corrupted dispute_id（Gemini 經常抄錯 nanoid）
-  if (legalIssues.length > 0) {
-    const validIds = new Set(legalIssues.map((i) => i.id));
-    stats.disputeIdFixed += fixCorruptedDisputeIds(sections, validIds, 'section');
-    stats.disputeIdFixed += fixCorruptedDisputeIds(claims, validIds, 'claim');
+  const validIds = new Set(legalIssues.map((i) => i.id));
+  const fixed =
+    fixCorruptedDisputeIds(output.sections, validIds, 'section') +
+    fixCorruptedDisputeIds(output.claims, validIds, 'claim');
+
+  if (fixed > 0) {
+    console.log(`[enrichment] fixed ${fixed} corrupted dispute_id(s)`);
   }
 
-  // 1. 修正 section dispute_id — 從其 claims 推導
-  for (const sec of sections) {
-    if (!sec.dispute_id && sec.claims.length > 0) {
-      const sectionClaimIds = new Set(sec.claims);
-      const disputeIds = new Set(
-        claims.filter((c) => sectionClaimIds.has(c.id) && c.dispute_id).map((c) => c.dispute_id!),
-      );
-      if (disputeIds.size === 1) {
-        sec.dispute_id = [...disputeIds][0];
-        stats.sectionDisputeFromClaim++;
-      }
-    }
-  }
-
-  // 2. 修正 claim dispute_id — 從其 assigned_section 的 section 取
-  const sectionMap = new Map(sections.map((s) => [s.id, s]));
-  for (const claim of claims) {
-    if (!claim.dispute_id && claim.assigned_section) {
-      const sec = sectionMap.get(claim.assigned_section);
-      if (sec?.dispute_id) {
-        claim.dispute_id = sec.dispute_id;
-        stats.claimDisputeFromSection++;
-      }
-    }
-  }
-
-  // 3. 修正 section claims[] 一致性 — claim.assigned_section 指向 section 但 section.claims 沒有它
-  for (const claim of claims) {
-    if (claim.assigned_section) {
-      const sec = sectionMap.get(claim.assigned_section);
-      if (sec && !sec.claims.includes(claim.id)) {
-        sec.claims.push(claim.id);
-        stats.claimConsistency++;
-      }
-    }
-  }
-
-  // 4. 填 argumentation.legal_basis（如果空且有 dispute_id）
-  const analysisMap = new Map(perIssueAnalysis.map((a) => [a.issue_id, a]));
-  for (const sec of sections) {
-    if (sec.dispute_id && sec.argumentation.legal_basis.length === 0) {
-      const analysis = analysisMap.get(sec.dispute_id);
-      if (analysis && analysis.key_law_ids.length > 0) {
-        sec.argumentation.legal_basis = [...analysis.key_law_ids];
-        stats.legalBasis++;
-      }
-    }
-  }
-
-  // 5. relevant_law_ids — validation only（AI 應自行填寫，此處只記錄缺漏不修改）
-  for (const sec of sections) {
-    // Defensive normalization: ensure array exists even if upstream skipped it
-    sec.relevant_law_ids = sec.relevant_law_ids || [];
-    if (!sec.dispute_id) continue;
-
-    const analysis = analysisMap.get(sec.dispute_id);
-    const fromAnalysis = analysis?.key_law_ids || [];
-    const fromBasis = sec.argumentation.legal_basis || [];
-
-    const expected = new Set([...fromAnalysis, ...fromBasis]);
-    const missing = [...expected].filter((id) => !sec.relevant_law_ids.includes(id));
-    if (missing.length > 0) {
-      stats.lawIds++;
-      console.warn(
-        `[enrichment] section "${sec.subsection || sec.section}" missing law_ids: [${missing.join(', ')}]`,
-      );
-    }
-  }
-
-  // 6. subsection — validation only（AI 應自行填寫，此處只記錄缺漏不修改）
-  if (legalIssues.length > 0) {
-    for (const sec of sections) {
-      if (sec.subsection || !sec.dispute_id) continue;
-      stats.subsection++;
-      console.warn(
-        `[enrichment] section "${sec.section}" missing subsection (dispute=${sec.dispute_id})`,
-      );
-    }
-  }
-
-  // Summary log
-  const enrichedCount = sections.filter((s) => s.relevant_law_ids.length > 0).length;
-  const totalLawIds = sections.reduce((sum, s) => sum + s.relevant_law_ids.length, 0);
-  const actualPatches =
-    stats.disputeIdFixed +
-    stats.sectionDisputeFromClaim +
-    stats.claimDisputeFromSection +
-    stats.claimConsistency +
-    stats.legalBasis;
-  const validationWarnings = stats.lawIds + stats.subsection;
-  const totalPatched = actualPatches + validationWarnings;
-
-  console.log(
-    `[enrichment] ${actualPatches} patches, ${validationWarnings} warnings — ` +
-      `dispute_id_fixed: ${stats.disputeIdFixed}, ` +
-      `sec.dispute_id←claim: ${stats.sectionDisputeFromClaim}, ` +
-      `claim.dispute_id←sec: ${stats.claimDisputeFromSection}, ` +
-      `claim↔sec consistency: ${stats.claimConsistency}, ` +
-      `legal_basis: ${stats.legalBasis}, ` +
-      `law_ids: ${stats.lawIds}, ` +
-      `subsection: ${stats.subsection}`,
-  );
-  console.log(
-    `[enrichment] result: ${enrichedCount}/${sections.length} sections have law_ids (${totalLawIds} total)`,
-  );
-
-  // Per-section detail for debugging
-  for (const sec of sections) {
-    const label = sec.subsection ? `${sec.section} > ${sec.subsection}` : sec.section;
-    console.log(
-      `[enrichment]   "${label}" dispute=${sec.dispute_id || 'null'} ` +
-        `laws=[${sec.relevant_law_ids.join(', ')}] ` +
-        `basis=[${sec.argumentation.legal_basis.join(', ')}]`,
-    );
-  }
-
-  if (actualPatches > sections.length) {
-    console.warn(
-      `[enrichment] WARNING: ${actualPatches} patches for ${sections.length} sections — AI output quality may be degrading`,
-    );
-  }
-
-  return { ...stats, totalPatched };
+  return fixed;
 };

@@ -28,6 +28,7 @@ import {
   MAX_TOKENS,
   JSON_OUTPUT_MAX_TOKENS,
   CLAUDE_MODEL,
+  TOOL_RESULT_MAX_CHARS,
 } from '../prompts/strategyConstants';
 import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy';
 import { enrichStrategyOutput } from './enrichStrategy';
@@ -38,7 +39,6 @@ import type {
   FetchedLaw,
   PerIssueAnalysis,
   LegalIssue,
-  EnrichmentStats,
 } from './types';
 import type { PipelineContext } from './types';
 import type { ContextStore } from '../contextStore';
@@ -320,7 +320,7 @@ const handleSearchLaw = async (
   lawSession: LawSearchSession,
   searchCount: number,
   progress?: ReasoningStrategyProgressCallback,
-): Promise<{ content: string; newCount: number }> => {
+): Promise<{ content: string; summary: string; newCount: number }> => {
   const query = input.query as string;
   const lawName = input.law_name as string | undefined;
   const purpose = input.purpose as string;
@@ -329,6 +329,7 @@ const handleSearchLaw = async (
   if (searchCount >= MAX_SEARCHES) {
     return {
       content: '已達到搜尋上限。請根據現有法條完成推理並呼叫 finalize_strategy。',
+      summary: '已達搜尋上限',
       newCount: searchCount,
     };
   }
@@ -340,6 +341,7 @@ const handleSearchLaw = async (
     await progress?.onSearchLaw(query, purpose, 0, []);
     return {
       content: `未找到「${query}」的相關法條。請嘗試用更短的關鍵字，或繼續推理。`,
+      summary: `搜尋「${query}」未找到結果`,
       newCount,
     };
   }
@@ -366,14 +368,24 @@ const handleSearchLaw = async (
     console.error('[reasoningStrategy] Failed to persist law refs:', err),
   );
 
+  // Tool result 只回傳截斷版（完整內容已存入 ContextStore，Writer Step 3 獨立取用）
   const resultText = fetchedLaws
-    .map((l) => `[${l.id}] ${l.law_name} ${l.article_no}\n${l.content}`)
+    .map((l) => {
+      const truncated =
+        l.content.length > TOOL_RESULT_MAX_CHARS
+          ? l.content.slice(0, TOOL_RESULT_MAX_CHARS) + '…'
+          : l.content;
+      return `[${l.id}] ${l.law_name} ${l.article_no}\n${truncated}`;
+    })
     .join('\n\n');
 
   const lawNames = fetchedLaws.map((l) => `${l.law_name} ${l.article_no}`);
   await progress?.onSearchLaw(query, purpose, fetchedLaws.length, lawNames);
 
+  const summary = `已搜尋「${query}」，找到 ${fetchedLaws.length} 條：${lawNames.join('、')}`;
+
   return {
+    summary,
     content: `找到 ${fetchedLaws.length} 筆結果：\n\n${resultText}`,
     newCount,
   };
@@ -406,6 +418,10 @@ export const runReasoningStrategy = async (
   const startTime = Date.now();
   const lawSession = createLawSearchSession(ctx.mongoUrl, ctx.mongoApiKey);
 
+  // tool_use_id → 摘要。用於壓縮舊 tool_result，減少每輪重傳的 input tokens。
+  const toolResultSummaries = new Map<string, string>();
+  const processedMsgIndices = new Set<number>();
+
   // Helper: call Claude with current messages (reasoning phase)
   const callReasoning = () =>
     callClaudeToolLoop(ctx.aiEnv, {
@@ -430,8 +446,23 @@ export const runReasoningStrategy = async (
 
   try {
     // ── Reasoning: 法律推理 tool-loop ──
+    let totalCacheCreation = 0;
+    let totalCacheRead = 0;
+    let totalInput = 0;
+    let totalOutput = 0;
+
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const response = await callReasoning();
+
+      // Accumulate token usage
+      const u = response.usage;
+      totalInput += u.input_tokens;
+      totalOutput += u.output_tokens;
+      totalCacheCreation += u.cache_creation_input_tokens ?? 0;
+      totalCacheRead += u.cache_read_input_tokens ?? 0;
+      console.log(
+        `[reasoning] round ${round}: input=${u.input_tokens}, output=${u.output_tokens}, cache_write=${u.cache_creation_input_tokens ?? 0}, cache_read=${u.cache_read_input_tokens ?? 0}`,
+      );
 
       // Push assistant message (content is ClaudeContentBlock[])
       messages.push({ role: 'assistant', content: response.content });
@@ -471,6 +502,7 @@ export const runReasoningStrategy = async (
         if (tc.name === 'search_law') {
           const r = await handleSearchLaw(tc.input, ctx, store, lawSession, searchCount, progress);
           resultBlocks.push({ type: 'tool_result', tool_use_id: tc.id, content: r.content });
+          toolResultSummaries.set(tc.id, r.summary);
           searchCount = r.newCount;
         }
 
@@ -503,6 +535,23 @@ export const runReasoningStrategy = async (
 
       messages.push({ role: 'user', content: resultBlocks });
 
+      // 壓縮舊的 search_law tool_result：最新一則保留完整（Claude 尚未讀過），
+      // 更早的替換為摘要，減少下一輪重傳的 input tokens。
+      const lastUserIdx = messages.length - 1;
+      for (let i = 0; i < lastUserIdx; i++) {
+        if (processedMsgIndices.has(i)) continue;
+        const msg = messages[i];
+        if (msg.role !== 'user' || typeof msg.content === 'string') continue;
+        for (const block of msg.content as ClaudeContentBlock[]) {
+          if (block.type !== 'tool_result') continue;
+          const summary = toolResultSummaries.get(block.tool_use_id);
+          if (summary) {
+            block.content = summary;
+          }
+        }
+        processedMsgIndices.add(i);
+      }
+
       // If finalize just happened, break out of loop — don't wait for next round
       if (finalized) break;
     }
@@ -527,6 +576,13 @@ export const runReasoningStrategy = async (
 
       const forceResp = await callReasoning();
 
+      // Accumulate force-finalize token usage
+      const fu = forceResp.usage;
+      totalInput += fu.input_tokens;
+      totalOutput += fu.output_tokens;
+      totalCacheCreation += fu.cache_creation_input_tokens ?? 0;
+      totalCacheRead += fu.cache_read_input_tokens ?? 0;
+
       const forceToolCalls = extractToolCalls(forceResp.content);
       for (const tc of forceToolCalls) {
         if (tc.name === 'finalize_strategy') {
@@ -546,16 +602,26 @@ export const runReasoningStrategy = async (
       }
     }
 
+    // Log cache summary
+    console.log(
+      `[reasoning] TOTAL: input=${totalInput}, output=${totalOutput}, cache_write=${totalCacheCreation}, cache_read=${totalCacheRead}`,
+    );
+    if (totalCacheRead > 0 && totalInput > 0) {
+      // Anthropic cache reads are 90% cheaper than uncached input tokens
+      const CACHE_READ_DISCOUNT = 0.9;
+      const savingsPercent = (((totalCacheRead * CACHE_READ_DISCOUNT) / totalInput) * 100).toFixed(
+        1,
+      );
+      console.log(
+        `[reasoning] CACHE SAVINGS: ${totalCacheRead} tokens read from cache (~${savingsPercent}% input cost reduction)`,
+      );
+    }
+
     // ── Structuring: 策略結構化 JSON 輸出 ──
     await progress?.onOutputStart();
 
     const jsonMessage = buildJsonOutputMessage(store, input);
-    return await callJsonAndParse(
-      jsonMessage,
-      store.legalIssues,
-      store.perIssueAnalysis,
-      callJsonOutput,
-    );
+    return await callJsonAndParse(jsonMessage, store.legalIssues, callJsonOutput);
   } finally {
     await lawSession.close();
   }
@@ -585,23 +651,20 @@ type JsonOutputFn = (
   msg: string,
 ) => Promise<{ content: string; usage: { output_tokens: number }; truncated: boolean }>;
 
-/** Try parse + enrich in one step, returns null on failure */
+/** Try parse + fix corrupted dispute_ids in one step, returns null on failure */
 const tryParseAndEnrich = (
   text: string,
-  perIssueAnalysis: PerIssueAnalysis[],
   legalIssues: LegalIssue[] = [],
-): { output: ReasoningStrategyOutput; stats: EnrichmentStats } | null => {
+): ReasoningStrategyOutput | null => {
   const output = tryParse(text);
   if (!output) return null;
-  const stats = enrichStrategyOutput(output, perIssueAnalysis, legalIssues);
-  output.enrichmentStats = stats;
-  return { output, stats };
+  output.disputeIdFixed = enrichStrategyOutput(output, legalIssues);
+  return output;
 };
 
 const callJsonAndParse = async (
   userMessage: string,
   legalIssues: ContextStore['legalIssues'],
-  perIssueAnalysis: PerIssueAnalysis[],
   callJsonOutput: JsonOutputFn,
 ): Promise<ReasoningStrategyOutput> => {
   // First attempt
@@ -611,7 +674,7 @@ const callJsonAndParse = async (
     `[reasoningStrategy] JSON output: truncated=${resp.truncated}, output_tokens=${resp.usage.output_tokens}, text_length=${resp.content.length}`,
   );
 
-  let result = tryParseAndEnrich(resp.content, perIssueAnalysis, legalIssues);
+  let result = tryParseAndEnrich(resp.content, legalIssues);
 
   // Retry on parse failure
   if (!result) {
@@ -623,7 +686,7 @@ const callJsonAndParse = async (
         '\n\n重要：只輸出純 JSON，不要加 markdown code block、換行解釋或任何其他文字。確保 JSON string 值中沒有未轉義的換行字元。';
 
     const retryResp = await callJsonOutput(retryMsg);
-    result = tryParseAndEnrich(retryResp.content, perIssueAnalysis, legalIssues);
+    result = tryParseAndEnrich(retryResp.content, legalIssues);
 
     // If retry also truncated and parse still failed, try once more with stronger constraint
     if (!result && retryResp.truncated) {
@@ -633,7 +696,7 @@ const callJsonAndParse = async (
         TRUNCATION_RETRY_SUFFIX +
         '\n- 每個 string 欄位盡量精簡，避免冗餘描述\n- 如果有超過 8 個 sections，合併相似段落';
       const compactResp = await callJsonOutput(compactMsg);
-      result = tryParseAndEnrich(compactResp.content, perIssueAnalysis, legalIssues);
+      result = tryParseAndEnrich(compactResp.content, legalIssues);
     }
 
     if (!result) {
@@ -645,8 +708,8 @@ const callJsonAndParse = async (
   }
 
   // Validate structure
-  const validation = validateStrategyOutput(result.output, legalIssues);
-  if (validation.valid) return result.output;
+  const validation = validateStrategyOutput(result, legalIssues);
+  if (validation.valid) return result;
 
   // Retry with validation errors
   console.warn('[reasoningStrategy] Validation failed, retrying:', validation.errors);
@@ -658,16 +721,13 @@ const callJsonAndParse = async (
 
   const fixResp = await callJsonOutput(fixMsg);
 
-  const fixOutput = tryParse(fixResp.content);
+  const fixOutput = tryParseAndEnrich(fixResp.content, legalIssues);
   if (fixOutput) {
-    const fixStats = enrichStrategyOutput(fixOutput, perIssueAnalysis, legalIssues);
-    fixOutput.enrichmentStats = fixStats;
-
     // Re-validate the fix attempt
     const fixValidation = validateStrategyOutput(fixOutput, legalIssues);
     if (fixValidation.valid) return fixOutput;
 
-    // Fix attempt still invalid — enrichment may have repaired dispute_ids,
+    // Fix attempt still invalid — fuzzy match may have repaired dispute_ids,
     // so use it if it's better than the original (fewer errors)
     console.warn(
       `[reasoningStrategy] Fix attempt still has ${fixValidation.errors.length} errors (original had ${validation.errors.length})`,
@@ -675,6 +735,6 @@ const callJsonAndParse = async (
     if (fixValidation.errors.length < validation.errors.length) return fixOutput;
   }
 
-  // Fall back to the original enriched output (enrichment's fuzzy match may have fixed it)
-  return result.output;
+  // Fall back to the original output (fuzzy match may have fixed it)
+  return result;
 };

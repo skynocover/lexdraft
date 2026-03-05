@@ -165,6 +165,7 @@ const GEMINI_NATIVE_MODEL = 'gemini-2.5-flash';
 interface GeminiNativeOptions {
   maxTokens?: number;
   responseSchema?: Record<string, unknown>;
+  responseMimeType?: string;
   signal?: AbortSignal;
 }
 
@@ -189,7 +190,7 @@ export const callGeminiNative = async (
     systemInstruction: { parts: [{ text: systemPrompt }] },
     generationConfig: {
       maxOutputTokens: opts?.maxTokens || 4096,
-      responseMimeType: 'application/json',
+      responseMimeType: opts?.responseMimeType || 'application/json',
       ...(opts?.responseSchema ? { responseSchema: opts.responseSchema } : {}),
     },
   };

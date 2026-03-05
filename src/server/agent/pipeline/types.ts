@@ -221,34 +221,10 @@ export interface ReasoningSection extends StrategySection {
   legal_reasoning: string; // ≤300 chars free-text reasoning per section
 }
 
-// ── Enrichment Stats (追蹤 enrichment 修補了什麼) ──
-
-export interface EnrichmentStats {
-  disputeIdFixed: number;
-  sectionDisputeFromClaim: number;
-  claimDisputeFromSection: number;
-  claimConsistency: number;
-  legalBasis: number;
-  lawIds: number;
-  subsection: number;
-  totalPatched: number;
-}
-
-export const emptyEnrichmentStats = (): EnrichmentStats => ({
-  disputeIdFixed: 0,
-  sectionDisputeFromClaim: 0,
-  claimDisputeFromSection: 0,
-  claimConsistency: 0,
-  legalBasis: 0,
-  lawIds: 0,
-  subsection: 0,
-  totalPatched: 0,
-});
-
 export interface ReasoningStrategyOutput {
   claims: Claim[];
   sections: ReasoningSection[];
-  enrichmentStats?: EnrichmentStats;
+  disputeIdFixed?: number;
 }
 
 // Step 2 input
