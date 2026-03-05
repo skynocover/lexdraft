@@ -1,13 +1,8 @@
-import { eq, count } from 'drizzle-orm';
-import { nanoid } from 'nanoid';
-import { briefs, briefVersions, claims } from '../db/schema';
-import { upsertManyLawRefs } from '../lib/lawRefsJson';
-import type { LawRefItem } from '../lib/lawRefsJson';
 import { toolError, toolSuccess } from './toolHelpers';
 import { ContextStore } from './contextStore';
 import type { ToolResult } from './tools/types';
 import type { Paragraph } from '../../client/stores/useBriefStore';
-import type { PipelineStep, PipelineStepChild } from '../../shared/types';
+import type { PipelineStepChild } from '../../shared/types';
 import { writeSection, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
 import { fetchAndCacheUncitedMentions } from '../lib/lawRefService';
 import { runLawFetch, truncateLawContent } from './pipeline/lawFetchStep';
@@ -20,99 +15,29 @@ import type {
   ReasoningStrategyOutput,
   PipelineContext,
 } from './pipeline/types';
+import type { LawRefItem } from '../lib/lawRefsJson';
 import { runCaseAnalysis } from './pipeline/caseAnalysisStep';
 import { buildQualityReport } from './pipeline/qualityReport';
 import { mapToJson } from './pipeline/snapshotUtils';
+import {
+  createProgressTracker,
+  STEP_CASE,
+  STEP_LAW,
+  STEP_STRATEGY,
+  STEP_WRITER,
+} from './pipeline/pipelineProgress';
+import {
+  persistClaims,
+  persistBriefContent,
+  saveBriefVersion,
+  persistLawRefs,
+} from './pipeline/pipelinePersistence';
 
 export type { PipelineContext } from './pipeline/types';
 
 export interface PipelineOptions {
   onStepComplete?: (stepName: string, data: unknown) => void | Promise<void>;
 }
-
-// ── Progress Tracker (4 steps) ──
-
-const STEP_CASE = 0;
-const STEP_LAW = 1;
-const STEP_STRATEGY = 2;
-const STEP_WRITER = 3;
-
-const createProgressTracker = (sendSSE: PipelineContext['sendSSE']) => {
-  const steps: PipelineStep[] = [
-    { label: '案件確認', status: 'pending' },
-    { label: '法條研究', status: 'pending' },
-    { label: '論證策略', status: 'pending' },
-    { label: '書狀撰寫', status: 'pending' },
-  ];
-  const stepStartTimes: (number | null)[] = [null, null, null, null];
-
-  const send = () => sendSSE({ type: 'pipeline_progress', steps: structuredClone(steps) });
-
-  return {
-    startStep: async (index: number) => {
-      steps[index].status = 'running';
-      stepStartTimes[index] = Date.now();
-      await send();
-    },
-    completeStep: async (index: number, detail?: string, content?: Record<string, unknown>) => {
-      steps[index].status = 'done';
-      if (detail) steps[index].detail = detail;
-      if (content) steps[index].content = content;
-      if (stepStartTimes[index]) {
-        steps[index].durationMs = Date.now() - stepStartTimes[index]!;
-      }
-      await send();
-    },
-    setStepChildren: async (index: number, children: PipelineStepChild[]) => {
-      steps[index].children = children;
-      await send();
-    },
-    updateStepChild: async (
-      stepIndex: number,
-      childIndex: number,
-      update: Partial<PipelineStepChild>,
-    ) => {
-      const children = steps[stepIndex].children;
-      if (children && children[childIndex]) {
-        Object.assign(children[childIndex], update);
-        await send();
-      }
-    },
-    setStepContent: async (index: number, content: Record<string, unknown>) => {
-      steps[index].content = content;
-      await send();
-    },
-    updateWriting: async (current: number, total: number, sectionLabel: string) => {
-      steps[STEP_WRITER] = {
-        ...steps[STEP_WRITER],
-        label: `書狀撰寫 ${current}/${total}`,
-        detail: sectionLabel,
-        status: 'running',
-      };
-      await send();
-    },
-    failStep: async (index: number, errorMsg: string) => {
-      steps[index].status = 'error';
-      steps[index].detail = errorMsg;
-      if (stepStartTimes[index]) {
-        steps[index].durationMs = Date.now() - stepStartTimes[index]!;
-      }
-      await send();
-    },
-    completeWriting: async (total: number) => {
-      steps[STEP_WRITER] = {
-        ...steps[STEP_WRITER],
-        label: '書狀撰寫',
-        detail: `${total} 段完成`,
-        status: 'done',
-        durationMs: stepStartTimes[STEP_WRITER]
-          ? Date.now() - stepStartTimes[STEP_WRITER]!
-          : undefined,
-      };
-      await send();
-    },
-  };
-};
 
 // ── Main Pipeline ──
 
@@ -182,7 +107,6 @@ export const runBriefPipeline = async (
       ctx.mongoApiKey,
     );
 
-    // Cache fetched laws in DB
     const fetchedLawsArray = [...lawFetchResult.laws.values()];
 
     // Build progress children showing actual law names
@@ -206,6 +130,8 @@ export const runBriefPipeline = async (
       });
     }
     await progress.setStepChildren(STEP_LAW, [...lawFetchChildren]);
+
+    // Cache fetched laws in DB
     const lawRefsToCache: LawRefItem[] = mentionedLaws.map((l) => ({
       id: l.id,
       law_name: l.law_name,
@@ -213,9 +139,7 @@ export const runBriefPipeline = async (
       full_text: l.content,
       is_manual: false,
     }));
-    if (lawRefsToCache.length) {
-      await upsertManyLawRefs(ctx.drizzle, ctx.caseId, lawRefsToCache);
-    }
+    await persistLawRefs(ctx, lawRefsToCache);
 
     await progress.completeStep(STEP_LAW, `${lawFetchResult.total} 條法條`);
 
@@ -246,7 +170,6 @@ export const runBriefPipeline = async (
         await progress.setStepChildren(STEP_STRATEGY, [...strategyChildren]);
       },
       onFinalized: async () => {
-        // Mark reasoning as done
         const idx = strategyChildren.findIndex(
           (c) => c.label === 'AI 法律推理中' && c.status === 'running',
         );
@@ -296,39 +219,11 @@ export const runBriefPipeline = async (
     // Set found laws in ContextStore (fetchedLaws + supplementedLaws)
     store.setFoundLaws(fetchedLawsArray);
 
-    // ═══ Common: Set strategy + persist claims ═══
-
     // Set strategy in ContextStore
     store.setStrategyOutput(strategyOutput.claims, strategyOutput.sections);
 
-    // Persist claims to DB (batch to avoid D1's ~100 bound-param limit; 9 cols × 10 = 90)
-    await ctx.drizzle.delete(claims).where(eq(claims.case_id, ctx.caseId));
-    const now = new Date().toISOString();
-    const CLAIM_BATCH_SIZE = 10;
-    for (let i = 0; i < strategyOutput.claims.length; i += CLAIM_BATCH_SIZE) {
-      const batch = strategyOutput.claims.slice(i, i + CLAIM_BATCH_SIZE);
-      await ctx.drizzle.insert(claims).values(
-        batch.map((c) => ({
-          id: c.id,
-          case_id: ctx.caseId,
-          side: c.side,
-          claim_type: c.claim_type,
-          statement: c.statement,
-          assigned_section: c.assigned_section,
-          dispute_id: c.dispute_id,
-          responds_to: c.responds_to,
-          created_at: now,
-        })),
-      );
-    }
-
-    // Send claims to frontend via SSE
-    await ctx.sendSSE({
-      type: 'brief_update',
-      brief_id: '',
-      action: 'set_claims',
-      data: strategyOutput.claims,
-    });
+    // Persist claims to DB + notify frontend
+    await persistClaims(ctx, strategyOutput.claims);
 
     const ourClaimCount = strategyOutput.claims.filter((c) => c.side === 'ours').length;
     const theirClaimCount = strategyOutput.claims.filter((c) => c.side === 'theirs').length;
@@ -368,6 +263,7 @@ export const runBriefPipeline = async (
 
     // ═══ Step 3: Writer (sequential, uses strategy sections) ═══
     currentStep = STEP_WRITER;
+    await progress.startStep(STEP_WRITER);
     const paragraphs: Paragraph[] = [];
 
     for (let i = 0; i < store.sections.length; i++) {
@@ -409,8 +305,6 @@ export const runBriefPipeline = async (
     await progress.completeWriting(paragraphs.length);
 
     // ═══ Batch: detect uncited law mentions across all paragraphs at once ═══
-    // Fetches and caches law refs mentioned in text but not cited.
-    // SSE is sent by cleanupUncitedLaws below, so we skip sending here.
     if (paragraphs.length > 0) {
       const fullText = paragraphs.map((p) => p.content_md).join('\n');
       const citedLawLabels = new Set<string>();
@@ -435,37 +329,10 @@ export const runBriefPipeline = async (
       qualityReport: buildQualityReport(paragraphs),
     });
 
-    // ═══ Batch write all paragraphs to DB (single UPDATE instead of N SELECT+UPDATE) ═══
-    if (paragraphs.length > 0) {
-      await ctx.drizzle
-        .update(briefs)
-        .set({
-          content_structured: JSON.stringify({ paragraphs }),
-          updated_at: new Date().toISOString(),
-        })
-        .where(eq(briefs.id, step0.briefId));
-    }
-
-    // ═══ Cleanup: delete uncited non-manual law refs ═══
+    // ═══ Persist: brief content + version snapshot + cleanup ═══
+    await persistBriefContent(ctx, step0.briefId, paragraphs);
     await cleanupUncitedLaws(ctx, paragraphs);
-
-    // Save version snapshot (one version for entire pipeline)
-    const finalBrief = await ctx.drizzle.select().from(briefs).where(eq(briefs.id, step0.briefId));
-    if (finalBrief.length) {
-      const [{ value: versionCount }] = await ctx.drizzle
-        .select({ value: count() })
-        .from(briefVersions)
-        .where(eq(briefVersions.brief_id, step0.briefId));
-      await ctx.drizzle.insert(briefVersions).values({
-        id: nanoid(),
-        brief_id: step0.briefId,
-        version_no: versionCount + 1,
-        label: `AI 撰寫完成（${paragraphs.length} 段）`,
-        content_structured: finalBrief[0].content_structured || JSON.stringify({ paragraphs: [] }),
-        created_at: new Date().toISOString(),
-        created_by: 'ai',
-      });
-    }
+    await saveBriefVersion(ctx, step0.briefId, paragraphs);
 
     // Report pipeline timing
     await ctx.sendSSE({
