@@ -4,6 +4,7 @@ import { ChevronsLeft, FileText, BookOpen } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import { useUIStore } from '../../stores/useUIStore';
 import { MessageBubble } from '../chat/MessageBubble';
+import { TooltipProvider } from '../ui/tooltip';
 
 export function ChatPanel() {
   const { caseId } = useParams();
@@ -132,23 +133,25 @@ export function ChatPanel() {
           </div>
         )}
 
-        {messages.map((msg, idx) => {
-          const nextToolResult =
-            msg.role === 'tool_call'
-              ? messages.slice(idx + 1).find((m) => m.role === 'tool_result')
-              : undefined;
-          const isLastAssistant = msg.id === lastAssistantId;
-          return (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              isStreaming={isStreaming}
-              nextToolResult={nextToolResult}
-              isLastAssistant={isLastAssistant}
-              caseId={caseId}
-            />
-          );
-        })}
+        <TooltipProvider delayDuration={300}>
+          {messages.map((msg, idx) => {
+            const nextToolResult =
+              msg.role === 'tool_call'
+                ? messages.slice(idx + 1).find((m) => m.role === 'tool_result')
+                : undefined;
+            const isLastAssistant = msg.id === lastAssistantId;
+            return (
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                isStreaming={isStreaming}
+                nextToolResult={nextToolResult}
+                isLastAssistant={isLastAssistant}
+                caseId={caseId}
+              />
+            );
+          })}
+        </TooltipProvider>
 
         {/* Error banner */}
         {error && (

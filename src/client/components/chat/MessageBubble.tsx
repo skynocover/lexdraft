@@ -5,9 +5,23 @@ import { useRewindStore } from '../../stores/useRewindStore';
 import { QuickActionButtons } from './QuickActionButtons';
 import { PipelineStages } from './PipelineStages';
 import { SearchLawDisplay } from './SearchLawDisplay';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { getCategoryTagCls, getCategoryLabel } from '../../lib/categoryConfig';
 import { getToolLabel } from './getToolLabel';
 import type { PipelineStep } from '../../../shared/types';
+
+const formatTime = (iso: string): string => {
+  const d = new Date(iso);
+  const now = new Date();
+  const time = d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+  const isToday =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (isToday) return time;
+  const date = d.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
+  return `${date} ${time}`;
+};
 
 export const MessageBubble = memo(function MessageBubble({
   message,
@@ -33,9 +47,14 @@ export const MessageBubble = memo(function MessageBubble({
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-lg bg-ac/15 px-3 py-2 text-sm text-t1">
-          <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p>
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="max-w-[85%] rounded-lg bg-ac/15 px-3 py-2 text-sm text-t1">
+              <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="left">{formatTime(message.created_at)}</TooltipContent>
+        </Tooltip>
       </div>
     );
   }
@@ -61,24 +80,29 @@ export const MessageBubble = memo(function MessageBubble({
 
     return (
       <div className="flex justify-start">
-        <div className="chat-markdown max-w-[85%] rounded-lg bg-bg-3 px-3 py-2 text-sm text-t1">
-          {message.content ? (
-            <>
-              <Markdown>{message.content}</Markdown>
-              {isStreaming && <span className="animate-pulse">|</span>}
-            </>
-          ) : (
-            <span className="text-t3">...</span>
-          )}
-          {(showRewind || (showSuggestions && suggestedActions.length > 0)) && (
-            <QuickActionButtons
-              actions={showSuggestions ? suggestedActions : []}
-              onAction={handleQuickAction}
-              showRewind={showRewind}
-              onRewind={handleRewind}
-            />
-          )}
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="chat-markdown max-w-[85%] rounded-lg bg-bg-3 px-3 py-2 text-sm text-t1">
+              {message.content ? (
+                <>
+                  <Markdown>{message.content}</Markdown>
+                  {isStreaming && <span className="animate-pulse">|</span>}
+                </>
+              ) : (
+                <span className="text-t3">...</span>
+              )}
+              {(showRewind || (showSuggestions && suggestedActions.length > 0)) && (
+                <QuickActionButtons
+                  actions={showSuggestions ? suggestedActions : []}
+                  onAction={handleQuickAction}
+                  showRewind={showRewind}
+                  onRewind={handleRewind}
+                />
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="right">{formatTime(message.created_at)}</TooltipContent>
+        </Tooltip>
       </div>
     );
   }
