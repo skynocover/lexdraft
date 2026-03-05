@@ -6,7 +6,7 @@ import { callAI, type AIEnv } from '../agent/aiClient';
 
 const CMAP_BASE_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/';
 
-const FLASH_LITE_MODEL = 'google-ai-studio/gemini-2.0-flash-lite';
+const FLASH_LITE_MODEL = 'google-ai-studio/gemini-2.5-flash-lite';
 
 /**
  * Workers 環境用的 CMap reader。
