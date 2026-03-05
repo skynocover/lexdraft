@@ -1,122 +1,103 @@
 # LexDraft — 開發計劃
 
-> 依 ROI（影響力 / 開發成本）排序。核心目標：讓律師用 vibe coding 方式寫書狀。
+> 依優先順序排列。核心目標：讓律師產出可直接送法院的書狀，只需 10-15 分鐘校閱。
 
 ---
 
-## Tier S — 極高 ROI（低成本、高感知）
+## Phase 1 — 書狀可信度（必做）
 
-> 做一天就能讓產品明顯變好的項目
+> 解決「律師不敢直接用」的根本問題：格式要件缺失、事實幻覺
 
-- [ ] **S1. 案型速查表**（`supplementByBriefType`）
-  - 按書狀類型硬編碼必搜法條（如交通事故 → 184、191-2、193、196 等）
-  - 一張 mapping table，確保常見案型的關鍵法條不漏，直接提升書狀品質
-- [ ] **S2. 相鄰條群規則表**（`adjacentLawRules.ts`）
-  - 規則驅動的關聯法條帶出（如查到 184 → 自動帶出 185、186、191-2）
-  - 一張規則表，法條覆蓋率大幅提升
-- [ ] **S3. AI 一鍵初始化**
-  - 上傳檔案後 AI 自動分析產生爭點/時間軸/當事人/金額
-  - 現有 tool 串起來即可，目前用戶要手動請 AI 分析，自動化後整個流程變順
-- [ ] **S4. 前端錯誤 toast 通知**
-  - 安裝 sonner，在 API 層統一攔截
-  - API 錯誤自動 toast（上傳失敗、儲存失敗、搜尋失敗等）
-  - 成功操作 toast（書狀已儲存、檔案已刪除等）
-  - SSE 連線中斷 toast + 自動重連提示
-  - Agent loop 異常中斷：顯示錯誤訊息、允許重新發送
-  - PDF 文字提取失敗：顯示「無法提取文字，請確認 PDF 非純圖片掃描檔」
-
----
-
-## Tier A — 高 ROI（中等成本、核心體驗）
-
-> 直接影響「律師信不信任 AI 產出」的功能
-
-- [ ] **A1. Word 匯出精修**
+- [ ] **P1-1. 訴之聲明段落生成**
+  - 法官收到書狀第一眼看的段落，目前完全缺失
+  - Template 驅動：依 brief_type 決定訴之聲明格式
+  - 從 damages 表自動組裝金額項目 + 總額
+  - 含法定遲延利息（見 P1-4）、訴訟費用負擔、假執行聲請（「原告願供擔保，請准宣告假執行」）
+  - 起訴狀：完整訴之聲明；準備書狀：引用原訴之聲明或重述
+- [ ] **P1-2. 證物編號系統**
+  - 目前引用文件用原始檔名，但法院要求「原證一」「原證二」
+  - files 表加 `exhibit_no` 欄位（如 `原證一`），可手動或自動編號
+  - Writer 段落內自動替換：「交通事故初步分析研判表（原證一）」
+  - 書狀末尾自動生成證物清單
+- [ ] **P1-3. 前言/結論 fact-check**
+  - 問題：Gemini Flash Lite 無 citation grounding，本次產出前言把 113 年寫成 114 年、提及「過失比例」但原告無過失
+  - 方案 A（推薦）：前言/結論改回 Claude Citations API（成本微增但最可靠）
+  - 方案 B：加 fact-check 後處理層（比對日期/人名/金額是否與 case data 一致）
+  - 方案 C：Gemini prompt 注入更結構化的 case metadata（成本最低但不保證）
+- [ ] **P1-4. 法定遲延利息**
+  - 幾乎所有侵權訴訟都請求「自起訴狀繕本送達翌日起至清償日止按年息 5% 計算之利息」
+  - 模板化固定文字，pipeline 自動插入訴之聲明段
+  - 依案型決定起算日（侵權：起訴狀繕本送達翌日；契約：催告到達翌日等）
+- [ ] **P1-5. 書狀微調（prompt 層）**
+  - 消除 meta 段落（「次就交通費用之請求，敬陳意見如下」17 字空洞過渡句仍出現）
+  - 結論字數控制（目標 100-200 字，目前 Gemini Flash Lite 產出 368 字）
+  - 物損折舊處理：brief_type + damage_category 觸發特定 prompt injection，主動論述折舊問題
+- [ ] **P1-6. 書狀首尾格式**
+  - 書狀首頁：法院名稱、案號、股別、案由、當事人欄（原告/被告姓名地址）
+  - 書狀末尾：「謹狀」、受理法院名稱、具狀人簽名欄、具狀日期
+  - 資料來源：`cases` 表已有 `court`、`case_number`、`plaintiff`、`defendant` 欄位
+  - cases 表可能需新增欄位：`plaintiff_address`、`defendant_address`、`judge_division`（股別）
+  - Pipeline 產出時自動組裝，前端 editor 顯示為不可編輯的 header/footer 區塊
+- [ ] **P1-7. Word 匯出**
+  - 律師交給法院的是 Word，沒這個功能產品不完整
   - 引用轉換：inline badge → 括號引用文字（如「（原證一，事故分析研判表）」）
   - content_structured → docx 段落映射（section/subsection 對應 heading 層級）
   - Word 格式：A4、邊距 2.54/3.17cm、標楷體/新細明體、12pt 內文、1.8 倍行距
-  - 律師最終要交給法院的是 Word，格式對了產品才算「可用」
-- [ ] **A2. 引用審查完善**
+  - 含訴之聲明、證物清單等結構化段落
+
+---
+
+## Phase 2 — 核心體驗
+
+> 從「能用」到「好用」，建立律師信任與協作模式
+
+- [ ] **P2-1. 引用審查 UX**
   - 點擊 citation badge → 展開完整引文內容，可確認/拒絕/修改
   - 檔案展開後的「插入引用」「查看全文」按鈕
   - AI 書狀的信任基礎，律師需要確認每個引用來源
-- [ ] **A3. 爭點↔書狀段落跳轉**
-  - 右側爭點卡片點擊 → 跳到書狀對應段落（手動或自動標記）
-  - 幫律師快速 review AI 有沒有漏掉爭點
-- [ ] **A4. 律師手動調整推理**
+- [ ] **P2-2. AI 一鍵初始化**
+  - 上傳檔案後 AI 自動分析產生爭點/時間軸/當事人/金額
+  - 現有 tool 串起來即可，目前用戶要手動請 AI 分析，自動化後整個流程變順
+- [ ] **P2-3. 對造書狀攻防強化**
+  - 現有基礎已可運作：`fileProcessor` 自動分類 `category: 'theirs'`，Step 2 reasoning 有完整 `ours/theirs` claims 攻防結構
+  - 強化項：prompt 更明確強調「優先針對 theirs 文件中的主張進行逐一反駁」
+  - 準備書狀場景：查詢本案已有書狀，注入前狀 context 供 AI 參考
+  - 先實測品質再決定調整幅度
+- [ ] **P2-5. 案型法律知識庫**
+  - 按案型（車禍、醫療、勞資）硬編碼常見法律議題及攻防要點
+  - 如：車禍物損 → 折舊抗辯、精神慰撫金 → 兩造身分地位資力、不能工作 → 職業特殊性
+  - 注入 Step 2 reasoning prompt，提升法律推理深度
+- [ ] **P2-6. 律師手動調整推理**
   - 前端「調整推理」按鈕，讓律師能修改 claims 或 legal_reasoning 後重新生成書狀
   - 從「全自動」變成「人機協作」，vibe coding 的核心體驗
 
 ---
 
-## Tier B — 中 ROI（中等成本、錦上添花）
+## Phase 3 — 差異化功能
 
-> 讓產品更完整，但不做也不影響核心流程
+> 讓產品從「能替代人工」變成「超越人工」
 
-- [x] **B1. 模板系統** ✅
-  - 預設書狀模板（`defaultTemplates.ts`）、自動選擇（`autoSelectTemplate`）、範本編輯器（`TemplateEditor.tsx`）
-  - Pipeline Step 2 注入範本結構（`templateHelper.ts`）
-- [ ] **B2. 金額↔書狀雙向同步**
-  - 互動式金額表格，修改金額自動連動訴之聲明段落
-  - 實作複雜（需追蹤段落內金額位置），但對損害賠償類案件很有價值
-- [ ] **B3. 版本比對 diff view**
-  - 左右雙欄語意層級段落比對
-  - AI 每次改稿後能看差異，補上版本歷史的最後一哩
-- [ ] **B4. 判例搜尋 tool**（`search_precedent`）
-  - Step 2 tool-loop 架構天然支持新增工具
+- [ ] **P3-1. 判例搜尋與引用**
+  - 真正的書狀會引用判決字號（如「最高法院 108 年度台上字第 123 號判決參照」）
   - 需要新 DB/向量搜尋基礎建設，對品質影響大但建設成本高
+  - Step 2 tool-loop 架構天然支持新增 `search_precedent` 工具
+- [ ] **P3-2. 爭點↔書狀段落跳轉**
+  - 右側爭點卡片點擊 → 跳到書狀對應段落
+  - 幫律師快速 review AI 有沒有漏掉爭點
+- [ ] **P3-3. 版本比對 diff view**
+  - 左右雙欄語意層級段落比對
+  - AI 每次改稿後能看差異
 
 ---
 
-## Tier C — 低 ROI（高成本 或 非核心）
+## Phase 4 — 商業化前置
 
-> 穩定性基礎建設，上線前需要但不影響產品價值感知
+> 有 traction 後再做
 
-- [ ] **C1. Zod 驗證層**
-  - 安裝 zod + @hono/zod-validator
-  - 為所有 API route 的 request body 加入 Zod schema 驗證
-    - `POST /api/cases` — title required, case_number optional string
-    - `PUT /api/cases/:id` — partial case fields
-    - `PUT /api/files/:id` — category enum, doc_type enum, doc_date optional
-    - `PUT /api/briefs/:id` — title string, content_structured object
-    - `POST /api/law/search` — query required string, limit optional number
-  - Agent tool arguments 加入 runtime Zod 驗證（替代目前的 `as string` 強制型別轉換）
-  - 統一錯誤回傳格式：`{ error: string, details?: ZodError['issues'] }`
-- [ ] **C2. 統一錯誤處理**
-  - 建立 `src/server/lib/errors.ts`：AppError class（statusCode + message + code）
-  - Hono global error handler：捕獲 AppError → 回傳結構化錯誤 JSON
-  - Agent tool 執行錯誤：統一用 toolError helper，加入 error code 分類
-  - AI API 呼叫：加入 retry with exponential backoff（最多 3 次）
-  - Queue Consumer：失敗時寫回 D1（status: error + error_message），支援手動重試
-- [ ] **C3. PDF 匯出**
-  - `POST /api/briefs/:id/export/pdf`，嵌入 Noto Serif TC 字體
-  - 台灣法院收 Word 為主，PDF 需求較低
-- [ ] **C4. 配置清理**
-  - 將 AI model name、max rounds、file size limits 等硬編碼值抽到共用 config
-  - 統一 AI prompt templates 到 `src/server/agent/prompts/`
-  - 移除開發用 console.error，改為結構化 logging
-- [ ] **C5. 響應式佈局**
-  - 窄螢幕（< 1280px）：右側 sidebar 預設收合，只顯示 icon bar；左側 Chat 預設收合
-  - 寬螢幕（≥ 1920px）：右側 sidebar 預設寬度加大到 480px
-  - 確認 sidebar resize handle 與 editor panel resize handle 不衝突
-  - 確認檔案上傳（drag-drop）在新佈局中正常運作
-  - 確認 OutlinePanel / VersionPanel 浮動 overlay 在新佈局中位置正確
-- [ ] **C6. 快捷鍵**
-  - `Cmd+B` — 切換右側 sidebar 展開/收合
-  - `Cmd+J` — 展開左側 Chat + focus 輸入框
-  - `Cmd+1` — 切換到案件資料 tab
-  - `Cmd+2` — 切換到分析 tab
-
----
-
-## Tier D — 商業化前置（有 traction 後再做）
-
-> 需要用戶驗證後才值得投入
-
-- [ ] **D1. Email/password 認證**
+- [ ] **P4-1. Email/password 認證**
   - PBKDF2 via Web Crypto API，register/login/logout
   - 上線必須，但對核心體驗無加分
-- [ ] **D2. 額度 & 收費系統**
+- [ ] **P4-2. 額度 & 收費系統**
   - 只收「產生書狀」，其餘操作全部免費
   - 收費模式：
     | 動作 | 收費 | 理由 |
@@ -149,19 +130,56 @@
     - [ ] 前端：額度不足卡片，導向付費頁面
     - [ ] 前端：某處顯示當前剩餘書狀額度（header 或 sidebar）
     - [ ] 每月自動重置免費額度（cron 或按月份判斷）
-- [ ] **D3. 多用戶 / RBAC**
+- [ ] **P4-3. 多用戶 / RBAC**
   - 團隊協作、案件權限控管
   - 早期不需要，團隊版功能
 
 ---
 
-## 暫緩（ROI 不明確，視實際使用數據再決定）
+## 基礎建設（穿插進行）
 
-| 項目                                  | 暫緩理由                          |
-| ------------------------------------- | --------------------------------- |
-| Smart Chips（自動識別人名/時間/金額） | 酷但非必要，律師不一定需要        |
-| 書狀格式強化（行距/段距/段落編號）    | 待觀察律師對格式的實際需求        |
-| 全文搜尋（跨 PDF/書狀/法條）          | 案件檔案不多時用不到              |
-| ~~`legal_reasoning` 結構化~~          | ✅ 已在 `StrategySection.legal_reasoning` 實作 |
-| 用戶自定義指令集                      | 需先觀察律師常用 prompt 模式      |
-| 時間軸獨立 tab                        | 形式待定                          |
+> 不直接影響用戶但提升開發效率與穩定性
+
+- [ ] **Infra-0. Pipeline 錯誤恢復（Phase 2 前完成）**
+  - Pipeline 每完成一個 step，把中間結果存到 D1 或 Durable Object storage
+  - 失敗時記錄 `failed_at_step` + `error_message`
+  - 前端顯示「生成失敗，點擊重試」→ 從失敗的 step 重跑
+  - 已有 `ContextStore` serialize/deserialize 基礎，實作成本不高
+  - Phase 2 開始面向律師用戶，pipeline 失敗不能讓用戶束手無策
+- [ ] **Infra-1. Zod 驗證層**
+  - 為所有 API route 的 request body 加入 Zod schema 驗證
+  - Agent tool arguments 加入 runtime Zod 驗證
+  - 統一錯誤回傳格式：`{ error: string, details?: ZodError['issues'] }`
+- [ ] **Infra-2. 統一錯誤處理**
+  - AppError class + Hono global error handler
+  - AI API 呼叫：retry with exponential backoff（最多 3 次）
+  - Queue Consumer：失敗時寫回 D1（status: error + error_message）
+
+---
+
+## 降級 / 暫緩
+
+| 項目 | 原 Tier | 降級理由 |
+|------|---------|---------|
+| 案型速查表 | S1 → 基礎建設 | AI reasoning + 補搜機制已解決法條覆蓋率（本次 9 條法條、0/6 sections 缺法條），作為 safety net 仍有價值但 ROI 大幅下降 |
+| 相鄰條群規則表 | S2 → 基礎建設 | 同上，Step 2 已能主動補搜相關法條（§213、§217） |
+| 金額↔書狀雙向同步 | B2 → 暫緩 | 實作複雜度極高，且 pipeline 已能從 damages 表正確帶入金額（5 項全部吻合） |
+| PDF 匯出 | C3 → 暫緩 | 台灣法院收 Word 為主，A1 做完後需求極低 |
+| 響應式佈局 | C5 → 暫緩 | 律師辦公環境幾乎都是大螢幕 |
+| 快捷鍵 | C6 → 暫緩 | Polish 項目，不影響核心價值 |
+| 配置清理 | C4 → 暫緩 | 工程衛生，視開發需要穿插進行 |
+| 書狀類型擴展（上訴狀等） | 暫緩 | 現有範本系統已涵蓋起訴狀/答辯狀/準備書狀的格式差異；上訴狀攻防結構不同（攻擊判決理由），等實際需求再加程式邏輯 |
+| Smart Chips | 暫緩 | 酷但非必要 |
+| 全文搜尋 | 暫緩 | 案件檔案不多時用不到 |
+| 時間軸獨立 tab | 暫緩 | 形式待定 |
+
+---
+
+## 已完成
+
+- [x] **模板系統**（原 B1）
+  - 預設書狀模板、自動選擇、範本編輯器、Pipeline Step 2 注入
+- [x] **前端錯誤 toast 通知**（原 S4）
+  - sonner 整合、API 層統一攔截
+- [x] **`legal_reasoning` 結構化**
+  - 已在 `StrategySection.legal_reasoning` 實作
