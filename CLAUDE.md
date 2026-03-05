@@ -142,6 +142,11 @@ npx wrangler d1 execute lexdraft-db --local --command "PRAGMA table_info(cases)"
 
 ⚠️ **常見陷阱**：`claims` 表的外鍵是 `case_id`，不是 `brief_id`。`content_structured` 只在 `briefs` 和 `brief_versions` 表，不在 `cases` 表。
 
+## Architecture Decision Records (ADR)
+
+- 決策紀錄放在 `docs/adr/`，做架構或模型相關決策前先查閱
+- 不要自行建立 ADR，由用戶決定是否需要記錄
+
 ## Critical Rules
 
 ### ✅ DO
