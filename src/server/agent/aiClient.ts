@@ -155,7 +155,7 @@ export const callAI = async (
     output_tokens: data.usage?.completion_tokens || 0,
   };
   const truncated = data.choices[0]?.finish_reason === 'length';
-  return { content: data.choices[0]?.message?.content || '', usage, truncated };
+  return { content: stripFFFD(data.choices[0]?.message?.content || ''), usage, truncated };
 };
 
 // ── Gemini Native (provider-native endpoint, constrained decoding) ──
@@ -232,6 +232,67 @@ export const callGeminiNative = async (
   const usage = {
     input_tokens: data.usageMetadata?.promptTokenCount || 0,
     output_tokens: data.usageMetadata?.candidatesTokenCount || 0,
+  };
+
+  return { content, usage, truncated };
+};
+
+// ── OpenRouter Text (for Gemini 3.1 Flash Lite intro/conclusion) ──
+
+const OPENROUTER_MODEL = 'google/gemini-3.1-flash-lite-preview';
+const OPENROUTER_BYOK_ALIAS = 'lex-draft-openrouter';
+
+/**
+ * Call Gemini 3.1 Flash Lite via OpenRouter (AI Gateway stored key).
+ * Used for intro/conclusion writing where text/plain output suffices.
+ */
+export const callOpenRouterText = async (
+  env: AIEnv,
+  systemPrompt: string,
+  userMessage: string,
+  opts?: { maxTokens?: number; signal?: AbortSignal },
+): Promise<{
+  content: string;
+  usage: { input_tokens: number; output_tokens: number };
+  truncated: boolean;
+}> => {
+  const url = `${getGatewayBaseUrl(env)}/openrouter/v1/chat/completions`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+      'cf-aig-byok-alias': OPENROUTER_BYOK_ALIAS,
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      stream: false,
+      max_tokens: opts?.maxTokens || 2048,
+    }),
+    signal: opts?.signal,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error(`OpenRouter ${response.status}: ${errText.slice(0, 500)}`);
+    throw new Error(`OpenRouter error: ${response.status} - ${errText}`);
+  }
+
+  const data = (await response.json()) as {
+    choices: Array<{ message: { content: string }; finish_reason?: string }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+
+  const content = stripFFFD(data.choices[0]?.message?.content || '');
+  const truncated = data.choices[0]?.finish_reason === 'length';
+  const usage = {
+    input_tokens: data.usage?.prompt_tokens || 0,
+    output_tokens: data.usage?.completion_tokens || 0,
   };
 
   return { content, usage, truncated };

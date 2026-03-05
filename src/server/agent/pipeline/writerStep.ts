@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
-import { callGeminiNative } from '../aiClient';
+import { callOpenRouterText } from '../aiClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
 import type { StrategyOutput, PipelineContext } from './types';
@@ -330,17 +330,16 @@ ${completedText}`;
   let citations: Citation[];
 
   if (isIntroOrConclusion) {
-    // Gemini Flash for intro/conclusion (no citations needed)
+    // Gemini 3.1 Flash Lite via OpenRouter for intro/conclusion (no citations needed)
     const systemPrompt =
       '你是台灣資深訴訟律師。請根據指示撰寫法律書狀段落。只輸出段落內容，不要加標題、markdown 或其他格式。';
-    const result = await callGeminiNative(ctx.aiEnv, systemPrompt, instruction, {
+    const result = await callOpenRouterText(ctx.aiEnv, systemPrompt, instruction, {
       maxTokens: 2048,
-      responseMimeType: 'text/plain',
     });
     text = stripMarkdown(result.content.trim());
     segments = [{ text, citations: [] }];
     citations = [];
-    console.log(`[writer] Gemini Flash: ${text.length} chars`);
+    console.log(`[writer] Gemini 3.1 Flash Lite: ${text.length} chars`);
   } else {
     // Claude Sonnet + Citations API for content sections
     const {
