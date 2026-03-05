@@ -22,9 +22,7 @@ import type {
   ReasoningStrategyInput,
   ReasoningStrategyOutput,
   FetchedLaw,
-  EnrichmentStats,
 } from '../../src/server/agent/pipeline/types';
-import { emptyEnrichmentStats } from '../../src/server/agent/pipeline/types';
 import { createStubContext } from './stub-context';
 import { createSnapshotWriter } from './snapshot-writer';
 import { parseArgs, loadSnapshotJson } from './_helpers';
@@ -47,7 +45,7 @@ const snapshotDir = resolve(SNAPSHOT_DIR);
 interface RunResult {
   runIndex: number;
   elapsed: number;
-  enrichmentStats: EnrichmentStats;
+  disputeIdFixed: number;
   claimStats: {
     total: number;
     ours: number;
@@ -177,7 +175,7 @@ const runOnce = async (
   store.setStrategyOutput(strategyOutput.claims, strategyOutput.sections);
 
   // Collect stats
-  const enrichmentStats: EnrichmentStats = strategyOutput.enrichmentStats || emptyEnrichmentStats();
+  const disputeIdFixed = strategyOutput.disputeIdFixed || 0;
 
   const ourClaims = strategyOutput.claims.filter((c) => c.side === 'ours');
   const theirClaims = strategyOutput.claims.filter((c) => c.side === 'theirs');
@@ -197,7 +195,7 @@ const runOnce = async (
     result: {
       runIndex,
       elapsed,
-      enrichmentStats,
+      disputeIdFixed,
       claimStats: {
         total: strategyOutput.claims.length,
         ours: ourClaims.length,
@@ -259,14 +257,7 @@ const printTable = (title: string, metrics: MetricDef[], results: RunResult[]) =
 };
 
 const ENRICHMENT_METRICS: MetricDef[] = [
-  { label: 'dispute_id_fix', getValue: (r) => r.enrichmentStats.disputeIdFixed },
-  { label: 'sec←claim', getValue: (r) => r.enrichmentStats.sectionDisputeFromClaim },
-  { label: 'claim←sec', getValue: (r) => r.enrichmentStats.claimDisputeFromSection },
-  { label: 'claim↔sec', getValue: (r) => r.enrichmentStats.claimConsistency },
-  { label: 'legal_basis', getValue: (r) => r.enrichmentStats.legalBasis },
-  { label: 'law_ids', getValue: (r) => r.enrichmentStats.lawIds },
-  { label: 'subsection', getValue: (r) => r.enrichmentStats.subsection },
-  { label: 'TOTAL', getValue: (r) => r.enrichmentStats.totalPatched },
+  { label: 'dispute_id_fix', getValue: (r) => r.disputeIdFixed },
 ];
 
 const STRUCTURE_METRICS: MetricDef[] = [
@@ -355,26 +346,8 @@ const main = async () => {
     averages:
       results.length > 1
         ? {
-            enrichment: Object.fromEntries(
-              (
-                [
-                  'disputeIdFixed',
-                  'sectionDisputeFromClaim',
-                  'claimDisputeFromSection',
-                  'claimConsistency',
-                  'legalBasis',
-                  'lawIds',
-                  'subsection',
-                  'totalPatched',
-                ] as (keyof EnrichmentStats)[]
-              ).map((key) => [
-                key,
-                parseFloat(
-                  (
-                    results.reduce((sum, r) => sum + r.enrichmentStats[key], 0) / results.length
-                  ).toFixed(1),
-                ),
-              ]),
+            disputeIdFixed: parseFloat(
+              (results.reduce((sum, r) => sum + r.disputeIdFixed, 0) / results.length).toFixed(1),
             ),
             elapsed: parseFloat(
               (results.reduce((sum, r) => sum + r.elapsed, 0) / results.length).toFixed(1),

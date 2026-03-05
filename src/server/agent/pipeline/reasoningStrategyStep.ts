@@ -39,7 +39,6 @@ import type {
   FetchedLaw,
   PerIssueAnalysis,
   LegalIssue,
-  EnrichmentStats,
 } from './types';
 import type { PipelineContext } from './types';
 import type { ContextStore } from '../contextStore';
@@ -622,12 +621,7 @@ export const runReasoningStrategy = async (
     await progress?.onOutputStart();
 
     const jsonMessage = buildJsonOutputMessage(store, input);
-    return await callJsonAndParse(
-      jsonMessage,
-      store.legalIssues,
-      store.perIssueAnalysis,
-      callJsonOutput,
-    );
+    return await callJsonAndParse(jsonMessage, store.legalIssues, callJsonOutput);
   } finally {
     await lawSession.close();
   }
@@ -657,23 +651,20 @@ type JsonOutputFn = (
   msg: string,
 ) => Promise<{ content: string; usage: { output_tokens: number }; truncated: boolean }>;
 
-/** Try parse + enrich in one step, returns null on failure */
+/** Try parse + fix corrupted dispute_ids in one step, returns null on failure */
 const tryParseAndEnrich = (
   text: string,
-  perIssueAnalysis: PerIssueAnalysis[],
   legalIssues: LegalIssue[] = [],
-): { output: ReasoningStrategyOutput; stats: EnrichmentStats } | null => {
+): ReasoningStrategyOutput | null => {
   const output = tryParse(text);
   if (!output) return null;
-  const stats = enrichStrategyOutput(output, perIssueAnalysis, legalIssues);
-  output.enrichmentStats = stats;
-  return { output, stats };
+  output.disputeIdFixed = enrichStrategyOutput(output, legalIssues);
+  return output;
 };
 
 const callJsonAndParse = async (
   userMessage: string,
   legalIssues: ContextStore['legalIssues'],
-  perIssueAnalysis: PerIssueAnalysis[],
   callJsonOutput: JsonOutputFn,
 ): Promise<ReasoningStrategyOutput> => {
   // First attempt
@@ -683,7 +674,7 @@ const callJsonAndParse = async (
     `[reasoningStrategy] JSON output: truncated=${resp.truncated}, output_tokens=${resp.usage.output_tokens}, text_length=${resp.content.length}`,
   );
 
-  let result = tryParseAndEnrich(resp.content, perIssueAnalysis, legalIssues);
+  let result = tryParseAndEnrich(resp.content, legalIssues);
 
   // Retry on parse failure
   if (!result) {
@@ -695,7 +686,7 @@ const callJsonAndParse = async (
         '\n\n重要：只輸出純 JSON，不要加 markdown code block、換行解釋或任何其他文字。確保 JSON string 值中沒有未轉義的換行字元。';
 
     const retryResp = await callJsonOutput(retryMsg);
-    result = tryParseAndEnrich(retryResp.content, perIssueAnalysis, legalIssues);
+    result = tryParseAndEnrich(retryResp.content, legalIssues);
 
     // If retry also truncated and parse still failed, try once more with stronger constraint
     if (!result && retryResp.truncated) {
@@ -705,7 +696,7 @@ const callJsonAndParse = async (
         TRUNCATION_RETRY_SUFFIX +
         '\n- 每個 string 欄位盡量精簡，避免冗餘描述\n- 如果有超過 8 個 sections，合併相似段落';
       const compactResp = await callJsonOutput(compactMsg);
-      result = tryParseAndEnrich(compactResp.content, perIssueAnalysis, legalIssues);
+      result = tryParseAndEnrich(compactResp.content, legalIssues);
     }
 
     if (!result) {
@@ -717,8 +708,8 @@ const callJsonAndParse = async (
   }
 
   // Validate structure
-  const validation = validateStrategyOutput(result.output, legalIssues);
-  if (validation.valid) return result.output;
+  const validation = validateStrategyOutput(result, legalIssues);
+  if (validation.valid) return result;
 
   // Retry with validation errors
   console.warn('[reasoningStrategy] Validation failed, retrying:', validation.errors);
@@ -730,16 +721,13 @@ const callJsonAndParse = async (
 
   const fixResp = await callJsonOutput(fixMsg);
 
-  const fixOutput = tryParse(fixResp.content);
+  const fixOutput = tryParseAndEnrich(fixResp.content, legalIssues);
   if (fixOutput) {
-    const fixStats = enrichStrategyOutput(fixOutput, perIssueAnalysis, legalIssues);
-    fixOutput.enrichmentStats = fixStats;
-
     // Re-validate the fix attempt
     const fixValidation = validateStrategyOutput(fixOutput, legalIssues);
     if (fixValidation.valid) return fixOutput;
 
-    // Fix attempt still invalid — enrichment may have repaired dispute_ids,
+    // Fix attempt still invalid — fuzzy match may have repaired dispute_ids,
     // so use it if it's better than the original (fewer errors)
     console.warn(
       `[reasoningStrategy] Fix attempt still has ${fixValidation.errors.length} errors (original had ${validation.errors.length})`,
@@ -747,6 +735,6 @@ const callJsonAndParse = async (
     if (fixValidation.errors.length < validation.errors.length) return fixOutput;
   }
 
-  // Fall back to the original enriched output (enrichment's fuzzy match may have fixed it)
-  return result.output;
+  // Fall back to the original output (fuzzy match may have fixed it)
+  return result;
 };
