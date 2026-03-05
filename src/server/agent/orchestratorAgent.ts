@@ -19,7 +19,7 @@ import {
   type FileNote,
   type OrchestratorInput,
 } from './prompts/orchestratorPrompt';
-import { parseJsonField, parseLLMJsonResponse } from './toolHelpers';
+import { parseSummaryText, parseLLMJsonResponse } from './toolHelpers';
 
 // ── Constants ──
 
@@ -112,8 +112,7 @@ export const runCaseReader = async (
   const handleListFiles = (): string => {
     return input.readyFiles
       .map((f) => {
-        const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
-        const summaryText = (summary.summary as string) || '（無摘要）';
+        const summaryText = parseSummaryText(f.summary) || '（無摘要）';
         return `[${f.id}] ${f.filename}（${f.category || '未分類'}）\n  摘要：${summaryText}`;
       })
       .join('\n\n');

@@ -58,7 +58,7 @@ export const files = sqliteTable('files', {
   doc_date: text('doc_date'),
   full_text: text('full_text'),
   content_md: text('content_md'), // AI-generated markdown (for citation chunking)
-  summary: text('summary'), // JSON
+  summary: text('summary'), // plain text (legacy: JSON with sub-fields)
 
   created_at: text('created_at'),
   updated_at: text('updated_at'),

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { files } from '../../db/schema';
-import { parseJsonField } from '../toolHelpers';
+import { parseSummaryText } from '../toolHelpers';
 import type { ToolHandler } from './types';
 
 export const handleListFiles: ToolHandler = async (_args, caseId, _db, drizzle) => {
@@ -22,7 +22,7 @@ export const handleListFiles: ToolHandler = async (_args, caseId, _db, drizzle) 
     category: f.category,
     status: f.status,
     doc_date: f.doc_date,
-    summary: parseJsonField(f.summary, null),
+    summary: parseSummaryText(f.summary),
   }));
 
   return {

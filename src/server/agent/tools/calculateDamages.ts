@@ -11,8 +11,6 @@ interface DamageItem {
 }
 
 export const handleCalculateDamages = createAnalysisTool<DamageItem>({
-  fileContextOptions: { includeClaims: true, includeKeyAmounts: true },
-
   buildPrompt: (
     fileContext,
   ) => `你是專業的台灣法律分析助手。請根據以下案件文件摘要，計算各項請求金額明細。

@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import type { CaseFile } from '../../../stores/useCaseStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { CATEGORY_CONFIG } from '../../../lib/categoryConfig';
+import { parseSummaryText } from '../../../../shared/summaryUtils';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 
@@ -21,7 +22,7 @@ export function FileItem({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const openFileTab = useTabStore((s) => s.openFileTab);
-  const summary = file.summary ? JSON.parse(file.summary) : null;
+  const summaryText = parseSummaryText(file.summary);
 
   const focusedPanelId = useTabStore((s) => s.focusedPanelId);
   const panels = useTabStore((s) => s.panels);
@@ -96,7 +97,7 @@ export function FileItem({
         </button>
 
         <div className="flex shrink-0 items-center gap-1">
-          {summary && (
+          {summaryText && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -120,19 +121,10 @@ export function FileItem({
         </div>
       </div>
 
-      {expanded && summary && (
+      {expanded && summaryText && (
         <div className="ml-14 mr-2 mb-1 rounded-lg bg-bg-2 p-3">
           <p className="mb-1 text-xs font-medium text-t3">AI 摘要</p>
-          <p className="text-xs leading-relaxed text-t2">{summary.summary}</p>
-          {summary.key_claims?.length > 0 && (
-            <ul className="mt-1.5 space-y-0.5">
-              {summary.key_claims.map((claim: string, i: number) => (
-                <li key={i} className="text-xs text-t3">
-                  · {claim}
-                </li>
-              ))}
-            </ul>
-          )}
+          <p className="text-xs leading-relaxed text-t2">{summaryText}</p>
         </div>
       )}
 
