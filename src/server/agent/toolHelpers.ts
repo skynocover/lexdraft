@@ -4,6 +4,7 @@ import { files } from '../db/schema';
 import { callAIStreaming, type AIEnv } from './aiClient';
 import { collectStreamText } from './sseParser';
 import { parseJsonField } from '../lib/jsonUtils';
+import { parseSummaryText } from '../../shared/summaryUtils';
 
 // Re-export JSON utilities for backward compatibility
 export {
@@ -13,6 +14,9 @@ export {
   repairTruncatedJson,
   parseLLMJsonArray,
 } from '../lib/jsonUtils';
+
+// Re-export shared summary parser
+export { parseSummaryText } from '../../shared/summaryUtils';
 
 /** Standard error return for tool execution */
 export function toolError(message: string): { result: string; success: false } {
@@ -62,14 +66,12 @@ export async function loadReadyFiles(db: D1Database, caseId: string): Promise<Re
 // ── File Context Builder ──
 
 export interface FileContextOptions {
-  includeClaims?: boolean;
-  includeKeyAmounts?: boolean;
   includeDocDate?: boolean;
 }
 
 /**
  * Build a text context string from ready files for analysis tool prompts.
- * Field order: filename → 日期(optional) → 摘要 → 金額(optional) → 主張(optional)
+ * Summary is now a plain string (no longer JSON with sub-fields).
  */
 export const buildFileContext = (
   readyFiles: ReadyFile[],
@@ -77,23 +79,13 @@ export const buildFileContext = (
 ): string => {
   return readyFiles
     .map((f) => {
-      const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
       const lines: string[] = [`【${f.filename}】(${f.category})`];
 
       if (options.includeDocDate) {
         lines.push(`日期：${f.doc_date || '不明'}`);
       }
 
-      lines.push(`摘要：${summary.summary || '無'}`);
-
-      if (options.includeKeyAmounts) {
-        lines.push(`金額：${summary.key_amounts ? JSON.stringify(summary.key_amounts) : '無'}`);
-      }
-
-      if (options.includeClaims) {
-        const claims = (summary.key_claims as string[]) || [];
-        lines.push(`主張：${claims.length > 0 ? claims.join('；') : '無'}`);
-      }
+      lines.push(`摘要：${parseSummaryText(f.summary) || '無'}`);
 
       return lines.join('\n');
     })

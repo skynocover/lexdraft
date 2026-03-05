@@ -18,7 +18,7 @@ import type { SSEEvent } from '../../../shared/types';
 
 export interface AnalysisToolConfig<TItem> {
   /** Options passed to buildFileContext */
-  fileContextOptions: FileContextOptions;
+  fileContextOptions?: FileContextOptions;
   /** Build the AI prompt, with fileContext injected */
   buildPrompt: (fileContext: string) => string;
   /** Error label for parseLLMJsonArray failure */

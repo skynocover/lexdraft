@@ -13,8 +13,6 @@ interface DisputeItem {
 }
 
 export const handleAnalyzeDisputes = createAnalysisTool<DisputeItem>({
-  fileContextOptions: { includeClaims: true },
-
   buildPrompt: (
     fileContext,
   ) => `你是專業的台灣法律分析助手。請根據以下案件文件摘要，分析雙方的爭點。

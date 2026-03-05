@@ -14,7 +14,7 @@ import {
   type IssueAnalyzerOutput,
   type OrchestratorProgressCallback,
 } from '../orchestratorAgent';
-import { parseJsonField, loadReadyFiles } from '../toolHelpers';
+import { parseJsonField, parseSummaryText, loadReadyFiles } from '../toolHelpers';
 import type { ToolResult } from '../tools/types';
 import type { ContextStore } from '../contextStore';
 import type { LegalIssue, TimelineItem, DamageItem, PipelineContext } from './types';
@@ -130,15 +130,12 @@ export const runCaseAnalysis = async (
   const readChildren: PipelineStepChild[] = [];
 
   // Parse file summaries once — reused in both branches
-  const parsedFiles = readyFiles.map((f) => {
-    const summary = parseJsonField<Record<string, unknown>>(f.summary, {});
-    return {
-      id: f.id,
-      filename: f.filename,
-      category: f.category,
-      parsedSummary: (summary.summary as string) || null,
-    };
-  });
+  const parsedFiles = readyFiles.map((f) => ({
+    id: f.id,
+    filename: f.filename,
+    category: f.category,
+    parsedSummary: parseSummaryText(f.summary),
+  }));
 
   store.briefType = ctx.briefType;
   store.caseMetadata = {
