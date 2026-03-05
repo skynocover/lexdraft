@@ -21,13 +21,17 @@ import { parseArgs, loadSnapshotJson } from './_helpers';
 
 // ── Args ──
 
-const { getArg } = parseArgs();
+const { getArg, hasFlag } = parseArgs();
 
 const SNAPSHOT_DIR = getArg('--snapshot-dir', '');
 if (!SNAPSHOT_DIR) {
-  console.error('Usage: npx tsx replay-step3.ts --snapshot-dir <path>');
+  console.error(
+    'Usage: npx tsx replay-step3.ts --snapshot-dir <path> [--max-sections N] [--rerun-last]',
+  );
   process.exit(1);
 }
+const MAX_SECTIONS = parseInt(getArg('--max-sections', '0'), 10);
+const RERUN_LAST = hasFlag('--rerun-last');
 
 const snapshotDir = resolve(SNAPSHOT_DIR);
 
@@ -58,17 +62,62 @@ const main = async () => {
     briefType: store.briefType,
   });
 
+  // ── Rerun-last mode: load previous results, inject completedSections, re-run last section ──
+
+  if (RERUN_LAST) {
+    const prev = loadSnapshotJson(snapshotDir, 'replay-step3.json') as {
+      paragraphs: Paragraph[];
+    };
+    const prevParagraphs = prev.paragraphs;
+    console.log(`  Loading ${prevParagraphs.length} previous paragraphs from replay-step3.json`);
+
+    // Inject sections 0..N-2 as completedSections
+    for (let i = 0; i < prevParagraphs.length - 1; i++) {
+      const p = prevParagraphs[i];
+      store.addDraftSection({
+        paragraph_id: p.id,
+        section_id: store.sections[i].id,
+        content: p.content_md,
+        segments: p.segments || [],
+        citations: p.citations,
+      });
+    }
+
+    const lastIdx = prevParagraphs.length - 1;
+    const section = store.sections[lastIdx];
+    const sectionKey = getSectionKey(section.section, section.subsection);
+
+    console.log(`\n  Re-running last section: ${sectionKey}`);
+    const startTime = Date.now();
+    const writerCtx = store.getContextForSection(lastIdx);
+    const paragraph = await writeSection(ctx, briefId, section, writerCtx, fileContentMap, store);
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`  ✓ ${elapsed}s`);
+    console.log(`\n  字數: ${paragraph.content_md.length}`);
+    console.log(`  內容:\n${paragraph.content_md}`);
+
+    // Save to a separate file
+    const outPath = `${snapshotDir}/replay-step3-rerun-last.json`;
+    writeFileSync(outPath, JSON.stringify({ paragraph, elapsed }, null, 2));
+    console.log(`\n  Saved to: ${outPath}`);
+    return;
+  }
+
   // ── Run Writer for each section ──
 
   const paragraphs: Paragraph[] = [];
   const failedSections: string[] = [];
 
-  for (let i = 0; i < store.sections.length; i++) {
+  const sectionCount =
+    MAX_SECTIONS > 0 ? Math.min(MAX_SECTIONS, store.sections.length) : store.sections.length;
+
+  for (let i = 0; i < sectionCount; i++) {
     const section = store.sections[i];
     const sectionKey = getSectionKey(section.section, section.subsection);
     const startTime = Date.now();
 
-    process.stdout.write(`  [${i + 1}/${store.sections.length}] ${sectionKey}...`);
+    process.stdout.write(`  [${i + 1}/${sectionCount}] ${sectionKey}...`);
 
     try {
       const writerCtx = store.getContextForSection(i);

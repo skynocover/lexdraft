@@ -167,19 +167,19 @@
 | 1. 法條研究 | 無 AI（MongoDB） | 1-5s | 0 | 0% |
 | 2a. 推理 | Claude Haiku 4.5 | 40-120s | 80-150K | **~45%** |
 | 2b. 結構化 | Gemini 2.5 Flash | 15-60s | 15-60K | ~15% |
-| 3. 書狀撰寫 | Claude Sonnet 4.6 | 30-120s | 60-75K | **~30%** |
+| 3. 書狀撰寫 | Sonnet 4.6 (內容) + Gemini Flash (前言/結論) | 30-120s | 60-75K | **~30%** |
 
 ### 優化計劃（按 ROI 排序）
 
-- [ ] **P5. search_law 回傳截斷法條**（省 20-40K tokens，30min，低風險）
-  - 現況：`handleSearchLaw()`（`reasoningStrategyStep.ts:369`）回傳完整法條內容到 Claude tool_result，每條 500-800 tokens，且累積在 message history 每輪重複傳送
-  - 方案：tool_result 只回傳截斷版（300 chars），完整內容已存入 `ContextStore`（line 355），Writer Step 3 獨立取用
-  - 檔案：`src/server/agent/pipeline/reasoningStrategyStep.ts`
-- [ ] **P6. 前言/結論 Writer 降級為 Haiku**（省 ~12K tokens + 5-10s，1hr，低風險）
-  - 現況：所有段落都用 Claude Sonnet 4.6（最貴），但前言/結論不需要法條引用品質
-  - 方案：前言（第 1 段）和結論（最後一段）改用 Claude Haiku 4.5，content sections 維持 Sonnet 4.6
-  - 指標：前言/結論不計入 0-law content，品質影響可控
-  - 檔案：`src/server/agent/pipeline/writerStep.ts`、`src/server/agent/claudeClient.ts`
+- [x] **P5. search_law 回傳截斷法條 + 歷史壓縮**（已完成）
+  - tool_result 截斷至 200 chars（`TOOL_RESULT_MAX_CHARS`），完整內容存 ContextStore
+  - 舊 tool_result 壓縮為摘要，減少每輪重傳的 input tokens
+  - 檔案：`reasoningStrategyStep.ts`、`strategyConstants.ts`
+- [x] **P6. 前言/結論改用 Gemini Flash**（已完成）
+  - 前言/結論（`dispute_id === null`）改用 Gemini 2.5 Flash，content sections 維持 Sonnet 4.6
+  - 測試結果：品質相當甚至更好（Gemini 結論 282 字精簡 vs Sonnet 769 字過長）
+  - 速度：前言 8.4s、結論 11s（Gemini）vs 9.2s、23s（Sonnet）
+  - 檔案：`writerStep.ts`、`aiClient.ts`
 - [ ] **P7. law input 截斷從 600→400 chars**（省 ~10-20K tokens，10min，低風險）
   - 現況：`MAX_LAW_CONTENT_LENGTH=600`（`lawFetchStep.ts:16`），10 條法 × 600 chars 每輪帶入
   - 方案：降到 400 chars，推理只需法條大意，Writer 有完整版
@@ -203,8 +203,8 @@
 
 | 優化項 | Token 節省 | 時間節省 | 風險 | 工作量 |
 |--------|-----------|---------|------|--------|
-| P5. search_law 截斷 | 20-40K | 0s | 低 | 30min |
-| P6. 前言/結論 Haiku | ~12K | 5-10s | 低 | 1hr |
+| ~~P5. search_law 截斷~~ | ~~20-40K~~ | ~~0s~~ | ~~低~~ | ✅ 完成 |
+| ~~P6. 前言/結論 Gemini~~ | ~~12K~~ | ~~5-10s~~ | ~~低~~ | ✅ 完成 |
 | P7. law input 截斷 | 10-20K | 0s | 低 | 10min |
 | P8. 推理輪數優化 | 20-30K | 10-20s | 中 | 1hr |
 | P9. history 壓縮 | 10-15K | 0s | 中 | 2hr |
@@ -244,7 +244,7 @@
 | Smart Chips（自動識別人名/時間/金額） | 酷但非必要，律師不一定需要        |
 | 書狀格式強化（行距/段距/段落編號）    | 待觀察律師對格式的實際需求        |
 | 全文搜尋（跨 PDF/書狀/法條）          | 案件檔案不多時用不到              |
-| 混合模型策略（Flash + Sonnet 切換）   | 已規劃為 P6（前言/結論用 Haiku） |
+| ~~混合模型策略（Flash + Sonnet 切換）~~   | ✅ 已完成（P6，前言/結論用 Gemini Flash） |
 | `legal_reasoning` 結構化              | 需要更多實際使用數據再決定 schema |
 | 用戶自定義指令集                      | 需先觀察律師常用 prompt 模式      |
 | 時間軸獨立 tab                        | 形式待定                          |

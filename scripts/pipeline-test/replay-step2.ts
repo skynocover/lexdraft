@@ -26,6 +26,7 @@ import type {
 } from '../../src/server/agent/pipeline/types';
 import { emptyEnrichmentStats } from '../../src/server/agent/pipeline/types';
 import { createStubContext } from './stub-context';
+import { createSnapshotWriter } from './snapshot-writer';
 import { parseArgs, loadSnapshotJson } from './_helpers';
 
 // ── Args ──
@@ -113,7 +114,7 @@ const loadSnapshots = () => {
 const runOnce = async (
   runIndex: number,
   snapshots: ReturnType<typeof loadSnapshots>,
-): Promise<RunResult> => {
+): Promise<{ result: RunResult; store: ContextStore }> => {
   // Create fresh store clone for each run
   const store = ContextStore.fromSnapshot(
     snapshots.step1Store.serialize() as Parameters<typeof ContextStore.fromSnapshot>[0],
@@ -193,31 +194,35 @@ const runOnce = async (
   }));
 
   return {
-    runIndex,
-    elapsed,
-    enrichmentStats,
-    claimStats: {
-      total: strategyOutput.claims.length,
-      ours: ourClaims.length,
-      theirs: theirClaims.length,
-      rebuttals: rebuttals.length,
-      unrebutted: unrebutted.length,
+    result: {
+      runIndex,
+      elapsed,
+      enrichmentStats,
+      claimStats: {
+        total: strategyOutput.claims.length,
+        ours: ourClaims.length,
+        theirs: theirClaims.length,
+        rebuttals: rebuttals.length,
+        unrebutted: unrebutted.length,
+      },
+      sectionStats: {
+        total: strategyOutput.sections.length,
+        withLaws: strategyOutput.sections.filter((s) => (s.relevant_law_ids?.length || 0) > 0)
+          .length,
+        withFiles: strategyOutput.sections.filter((s) => (s.relevant_file_ids?.length || 0) > 0)
+          .length,
+        totalLawIds: strategyOutput.sections.reduce(
+          (sum, s) => sum + (s.relevant_law_ids?.length || 0),
+          0,
+        ),
+        totalFileIds: strategyOutput.sections.reduce(
+          (sum, s) => sum + (s.relevant_file_ids?.length || 0),
+          0,
+        ),
+      },
+      sections,
     },
-    sectionStats: {
-      total: strategyOutput.sections.length,
-      withLaws: strategyOutput.sections.filter((s) => (s.relevant_law_ids?.length || 0) > 0).length,
-      withFiles: strategyOutput.sections.filter((s) => (s.relevant_file_ids?.length || 0) > 0)
-        .length,
-      totalLawIds: strategyOutput.sections.reduce(
-        (sum, s) => sum + (s.relevant_law_ids?.length || 0),
-        0,
-      ),
-      totalFileIds: strategyOutput.sections.reduce(
-        (sum, s) => sum + (s.relevant_file_ids?.length || 0),
-        0,
-      ),
-    },
-    sections,
+    store,
   };
 };
 
@@ -312,22 +317,28 @@ const main = async () => {
   console.log(`  userAddedLaws: ${snapshots.userAddedLaws.length}`);
 
   const results: RunResult[] = [];
+  let lastStore: ContextStore | null = null;
 
   for (let i = 0; i < NUM_RUNS; i++) {
     console.log(`\n── Run ${i + 1}/${NUM_RUNS} ──`);
     try {
-      const result = await runOnce(i, snapshots);
+      const { result, store } = await runOnce(i, snapshots);
       results.push(result);
+      lastStore = store;
       console.log(`  完成 (${result.elapsed}s)`);
     } catch (err) {
       console.error(`  ✗ Run ${i + 1} failed: ${(err as Error).message}`);
     }
   }
 
-  if (results.length === 0) {
+  if (results.length === 0 || !lastStore) {
     console.error('\nNo successful runs!');
     process.exit(1);
   }
+
+  // ── Save step2.json snapshot (from last successful run) ──
+  const saveSnapshot = createSnapshotWriter(snapshotDir);
+  saveSnapshot('step2', { store: lastStore.serialize() });
 
   // ── Output Tables ──
   printTable('Enrichment Stats', ENRICHMENT_METRICS, results);

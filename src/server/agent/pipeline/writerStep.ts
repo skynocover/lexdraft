@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
+import { callGeminiNative } from '../aiClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
 import type { StrategyOutput, PipelineContext } from './types';
@@ -321,35 +322,57 @@ ${completedText}`;
 - 每段的論述角度和句式必須有所區分。參考[已完成段落]，避免重複使用相同的開頭句式（如不要每段都以「原告請求…悉數應予准許」開頭）、相同的法條引用模式、或相同的結尾語式
 - 每個損害項目有不同的法律依據和舉證重點，撰寫時應突出該項目的獨特論點，而非套用通用模板`;
 
-  // Call Claude Citations API
-  const {
-    text: rawText,
-    segments: rawSegments,
-    citations: rawCitations,
-  } = await callClaudeWithCitations(ctx.aiEnv, documents, instruction);
+  // ── Route: intro/conclusion → Gemini Flash, content → Sonnet Citations ──
+  const isIntroOrConclusion = !strategySection.dispute_id;
 
-  // Strip duplicate headings that Claude may have included
-  const {
-    text: headingStrippedText,
-    segments: headingStrippedSegments,
-    citations,
-  } = stripLeadingHeadings(
-    rawText,
-    rawSegments,
-    rawCitations,
-    strategySection.section,
-    strategySection.subsection,
-  );
+  let text: string;
+  let segments: TextSegment[];
+  let citations: Citation[];
 
-  // Strip markdown from full text first, then rebuild segments to guarantee consistency.
-  // If we stripped segments individually, cross-segment markdown (e.g. **bold** split across
-  // two segments) would be removed from full text but not from individual segments.
-  const strippedText = stripMarkdown(headingStrippedText);
-  const { text, segments } = rebuildSegmentsAfterStrip(
-    headingStrippedText,
-    headingStrippedSegments,
-    strippedText,
-  );
+  if (isIntroOrConclusion) {
+    // Gemini Flash for intro/conclusion (no citations needed)
+    const systemPrompt =
+      '你是台灣資深訴訟律師。請根據指示撰寫法律書狀段落。只輸出段落內容，不要加標題、markdown 或其他格式。';
+    const result = await callGeminiNative(ctx.aiEnv, systemPrompt, instruction, {
+      maxTokens: 2048,
+      responseMimeType: 'text/plain',
+    });
+    text = stripMarkdown(result.content.trim());
+    segments = [{ text, citations: [] }];
+    citations = [];
+    console.log(`[writer] Gemini Flash: ${text.length} chars`);
+  } else {
+    // Claude Sonnet + Citations API for content sections
+    const {
+      text: rawText,
+      segments: rawSegments,
+      citations: rawCitations,
+    } = await callClaudeWithCitations(ctx.aiEnv, documents, instruction);
+
+    // Strip duplicate headings that Claude may have included
+    const {
+      text: headingStrippedText,
+      segments: headingStrippedSegments,
+      citations: strippedCitations,
+    } = stripLeadingHeadings(
+      rawText,
+      rawSegments,
+      rawCitations,
+      strategySection.section,
+      strategySection.subsection,
+    );
+
+    // Strip markdown from full text first, then rebuild segments to guarantee consistency.
+    const strippedText = stripMarkdown(headingStrippedText);
+    const rebuilt = rebuildSegmentsAfterStrip(
+      headingStrippedText,
+      headingStrippedSegments,
+      strippedText,
+    );
+    text = rebuilt.text;
+    segments = rebuilt.segments;
+    citations = strippedCitations;
+  }
 
   // Build paragraph
   const paragraph: Paragraph = {
