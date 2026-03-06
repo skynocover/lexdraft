@@ -322,6 +322,41 @@ ${completedText}`;
 - 每段的論述角度和句式必須有所區分。參考[已完成段落]，避免重複使用相同的開頭句式（如不要每段都以「原告請求…悉數應予准許」開頭）、相同的法條引用模式、或相同的結尾語式
 - 每個損害項目有不同的法律依據和舉證重點，撰寫時應突出該項目的獨特論點，而非套用通用模板`;
 
+  // ── Intro/conclusion: inject structured facts + scope rules ──
+  if (!strategySection.dispute_id) {
+    const isIntro = strategySection.section.includes('前言');
+
+    const damagesLines = store.damages
+      .filter((d) => d.amount > 0 && !d.description?.includes('總計'))
+      .map((d) => `  ${d.description || d.category}：新臺幣${d.amount.toLocaleString()}元`)
+      .join('\n');
+    const totalDamage = store.damages.find((d) => d.description?.includes('總計'));
+
+    const issueLines = store.legalIssues.map((li) => `  - ${li.title}`).join('\n');
+
+    instruction += `
+
+[案件事實摘要]（以下資訊已從案件文件中確認，你必須嚴格依照這些事實撰寫，不得修改任何日期、姓名、數字或傷勢描述）
+${store.caseSummary}
+
+[爭點列表]
+${issueLines}
+
+[賠償項目]
+${damagesLines}
+  合計：新臺幣${totalDamage ? totalDamage.amount.toLocaleString() : ''}元
+
+[本段撰寫範圍]（此規則優先於上方通用規則）
+${
+  isIntro
+    ? `- 前言僅需概述案件背景（當事人、事故經過梗概、責任認定結果）與本狀訴訟目的
+- 不要論述個別損害項目的具體金額或計算方式（那是後續段落的工作）
+- 段落長度控制在 150-300 字`
+    : `- 結論需總結上述論述要旨，提出具體請求總金額，懇請法院判決
+- 段落長度控制在 150-300 字`
+}`;
+  }
+
   // ── Route: intro/conclusion → Gemini Flash, content → Sonnet Citations ──
   const isIntroOrConclusion = !strategySection.dispute_id;
 
