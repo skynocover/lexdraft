@@ -1,33 +1,65 @@
 import { useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Trash2, GripVertical } from 'lucide-react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { CaseFile } from '../../../stores/useCaseStore';
+import { useCaseStore } from '../../../stores/useCaseStore';
+import { useBriefStore, type Exhibit } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
-import { CATEGORY_CONFIG } from '../../../lib/categoryConfig';
-import { parseSummaryText } from '../../../../shared/summaryUtils';
+import { CATEGORY_CONFIG, SELECTABLE_CATEGORIES } from '../../../lib/categoryConfig';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 
-export function FileItem({
-  file,
-  isRebuttalTarget,
-  onDelete,
-  onCategoryChange,
-}: {
+interface FileItemProps {
   file: CaseFile;
+  exhibit?: Exhibit;
   isRebuttalTarget: boolean;
   onDelete: (id: string) => void;
   onCategoryChange: (fileId: string, category: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
+  dragHandleProps?: Record<string, unknown>;
+}
+
+/** Wrapper that adds sortable behavior — only used inside SortableContext */
+export function SortableFileItem(
+  props: Omit<FileItemProps, 'dragHandleProps'> & { exhibit: Exhibit },
+) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: props.exhibit.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <FileItem {...props} dragHandleProps={{ ...attributes, ...listeners }} />
+    </div>
+  );
+}
+
+export function FileItem({
+  file,
+  exhibit,
+  isRebuttalTarget,
+  onDelete,
+  onCategoryChange,
+  dragHandleProps,
+}: FileItemProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false);
   const openFileTab = useTabStore((s) => s.openFileTab);
-  const summaryText = parseSummaryText(file.summary);
+  const currentCase = useCaseStore((s) => s.currentCase);
+  const updateExhibit = useBriefStore((s) => s.updateExhibit);
 
   const focusedPanelId = useTabStore((s) => s.focusedPanelId);
   const panels = useTabStore((s) => s.panels);
   const focusedPanel = panels.find((p) => p.id === focusedPanelId);
   const isFileActive = focusedPanel?.activeTabId === `file:${file.id}`;
+
+  const caseId = currentCase?.id || '';
 
   const handleClick = () => {
     if (file.status === 'ready') {
@@ -37,48 +69,63 @@ export function FileItem({
 
   const isProcessing = file.status === 'pending' || file.status === 'processing';
   const categoryKey = file.category || 'other';
-  const badge = CATEGORY_CONFIG[categoryKey] || CATEGORY_CONFIG.other;
+  const catConfig = CATEGORY_CONFIG[categoryKey] || CATEGORY_CONFIG.other;
 
   return (
     <div>
       <div
-        className={`group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition ${
+        className={`group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition ${
           isRebuttalTarget ? 'bg-yl/8' : isFileActive ? 'bg-ac/8' : 'hover:bg-bg-2'
         }`}
       >
-        {/* Badge with Popover */}
-        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+        {/* Drag handle — only for exhibits */}
+        {dragHandleProps ? (
+          <span {...dragHandleProps} className="shrink-0 cursor-grab text-t3 hover:text-t1">
+            <GripVertical className="h-3.5 w-3.5" />
+          </span>
+        ) : (
+          <span className="w-3.5 shrink-0" />
+        )}
+
+        {/* Badge: exhibit short label (甲1) or category badge — click to change category */}
+        <Popover open={categoryPopoverOpen} onOpenChange={setCategoryPopoverOpen}>
           <PopoverTrigger asChild>
             <button
-              className={`flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm font-bold transition hover:ring-2 hover:ring-current/25 ${badge.badgeCls}`}
+              className={`flex h-9 min-w-9 shrink-0 cursor-pointer items-center justify-center rounded-full px-1 text-xs font-bold transition hover:ring-2 hover:ring-current/25 ${exhibit ? (exhibit.prefix === '乙證' ? 'bg-rd/10 text-rd' : 'bg-or/10 text-or') : catConfig.badgeCls}`}
             >
-              {badge.badge}
+              {exhibit
+                ? `${(exhibit.prefix || '甲證').replace('證', '')}${exhibit.number ?? ''}`
+                : catConfig.badge}
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-36 p-1" side="bottom" align="start">
-            {Object.entries(CATEGORY_CONFIG).map(([key, config]) => (
-              <button
-                key={key}
-                onClick={() => {
-                  onCategoryChange(file.id, key);
-                  setPopoverOpen(false);
-                }}
-                className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm transition hover:bg-bg-2 ${
-                  categoryKey === key ? 'text-ac' : 'text-t1'
-                }`}
-              >
-                <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${config.badgeCls}`}
+            {SELECTABLE_CATEGORIES.map((key) => {
+              const config = CATEGORY_CONFIG[key];
+              return (
+                <button
+                  key={key}
+                  onClick={() => {
+                    onCategoryChange(file.id, key);
+                    setCategoryPopoverOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm transition hover:bg-bg-2 ${
+                    categoryKey === key ? 'text-ac' : 'text-t1'
+                  }`}
                 >
-                  {config.badge}
-                </span>
-                {config.label}
-              </button>
-            ))}
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${config.badgeCls}`}
+                  >
+                    {config.badge}
+                  </span>
+                  {config.label}
+                </button>
+              );
+            })}
           </PopoverContent>
         </Popover>
 
-        <button onClick={handleClick} className="flex-1 min-w-0 text-left">
+        {/* Filename + date */}
+        <button onClick={handleClick} className="min-w-0 flex-1 text-left">
           <p
             className={`truncate text-sm leading-snug ${
               isRebuttalTarget
@@ -91,42 +138,40 @@ export function FileItem({
             {isRebuttalTarget && '* '}
             {file.filename}
           </p>
-          {file.doc_date && <p className="mt-0.5 text-xs text-t3">{file.doc_date}</p>}
+          {(file.doc_date || exhibit) && (
+            <p className="mt-0.5 flex items-center gap-1 text-xs text-t3">
+              {file.doc_date && <span>{file.doc_date}</span>}
+              {file.doc_date && exhibit && <span>·</span>}
+              {exhibit && caseId && (
+                <select
+                  value={exhibit.doc_type || '影本'}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => updateExhibit(caseId, exhibit.id, { doc_type: e.target.value })}
+                  className="rounded bg-transparent text-xs text-t3 outline-none hover:text-t1"
+                >
+                  <option value="影本">影本</option>
+                  <option value="正本">正本</option>
+                  <option value="繕本">繕本</option>
+                </select>
+              )}
+            </p>
+          )}
           {isProcessing && <p className="mt-0.5 text-xs text-yl">處理中...</p>}
           {file.status === 'error' && <p className="mt-0.5 text-xs text-rd">處理失敗</p>}
         </button>
 
-        <div className="flex shrink-0 items-center gap-1">
-          {summaryText && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setExpanded(!expanded);
-              }}
-              className="rounded p-1 text-xs text-t3 transition hover:bg-bg-3 hover:text-t1"
-            >
-              {expanded ? '▾' : '▸'}
-            </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirmDelete(true);
-            }}
-            className="rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
-            title="刪除檔案"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
+        {/* Delete */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setConfirmDelete(true);
+          }}
+          className="shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
+          title="刪除檔案"
+        >
+          <Trash2 size={14} />
+        </button>
       </div>
-
-      {expanded && summaryText && (
-        <div className="ml-14 mr-2 mb-1 rounded-lg bg-bg-2 p-3">
-          <p className="mb-1 text-xs font-medium text-t3">AI 摘要</p>
-          <p className="text-xs leading-relaxed text-t2">{summaryText}</p>
-        </div>
-      )}
 
       {confirmDelete && (
         <ConfirmDialog

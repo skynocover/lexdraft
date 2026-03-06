@@ -8,27 +8,35 @@ import {
   Footer,
   PageNumber,
   convertMillimetersToTwip,
-} from 'docx'
-import { saveAs } from 'file-saver'
-import type { Paragraph } from '../../../stores/useBriefStore'
+} from 'docx';
+import { saveAs } from 'file-saver';
+import type { Paragraph, Citation } from '../../../stores/useBriefStore';
 
-const FONT = 'DFKai-SB'
-const FONT_SIZE_PT = 14
-const FONT_SIZE_HALF_PT = FONT_SIZE_PT * 2
-const HEADING2_SIZE_HALF_PT = 16 * 2
-const LINE_SPACING_PT = 25
-const LINE_SPACING_TWIPS = Math.round(LINE_SPACING_PT * 20) // 1pt = 20 twips
-const MARGIN_MM = 25
+const FONT = 'DFKai-SB';
+const FONT_SIZE_PT = 14;
+const FONT_SIZE_HALF_PT = FONT_SIZE_PT * 2;
+const HEADING2_SIZE_HALF_PT = 16 * 2;
+const LINE_SPACING_PT = 25;
+const LINE_SPACING_TWIPS = Math.round(LINE_SPACING_PT * 20); // 1pt = 20 twips
+const MARGIN_MM = 25;
 
-function buildCitationText(label: string): string {
-  return `（${label}）`
+function buildCitationText(label: string, type: string): string {
+  return type === 'law' ? label : `（${label}）`;
+}
+
+function resolveCitationLabel(c: Citation, exhibitMap?: Map<string, string>): string {
+  if (c.type === 'file' && c.file_id && exhibitMap) {
+    return exhibitMap.get(c.file_id) ?? c.label;
+  }
+  return c.label;
 }
 
 export async function exportBriefToDocx(
   paragraphs: Paragraph[],
   title: string,
+  exhibitMap?: Map<string, string>,
 ) {
-  const children: DocxParagraph[] = []
+  const children: DocxParagraph[] = [];
 
   // Title
   children.push(
@@ -44,10 +52,10 @@ export async function exportBriefToDocx(
         }),
       ],
     }),
-  )
+  );
 
-  let prevSection = ''
-  let prevSubsection = ''
+  let prevSection = '';
+  let prevSubsection = '';
 
   for (const p of paragraphs) {
     // Section heading
@@ -65,9 +73,9 @@ export async function exportBriefToDocx(
             }),
           ],
         }),
-      )
-      prevSection = p.section
-      prevSubsection = ''
+      );
+      prevSection = p.section;
+      prevSubsection = '';
     }
 
     // Subsection heading
@@ -85,12 +93,12 @@ export async function exportBriefToDocx(
             }),
           ],
         }),
-      )
-      prevSubsection = p.subsection
+      );
+      prevSubsection = p.subsection;
     }
 
     // Paragraph body
-    const runs: TextRun[] = []
+    const runs: TextRun[] = [];
 
     if (p.segments && p.segments.length > 0) {
       for (const seg of p.segments) {
@@ -101,17 +109,17 @@ export async function exportBriefToDocx(
               font: FONT,
               size: FONT_SIZE_HALF_PT,
             }),
-          )
+          );
         }
         for (const c of seg.citations) {
           runs.push(
             new TextRun({
-              text: buildCitationText(c.label),
+              text: buildCitationText(resolveCitationLabel(c, exhibitMap), c.type),
               font: FONT,
               size: FONT_SIZE_HALF_PT,
               color: c.type === 'law' ? '6d28d9' : '1d4ed8',
             }),
-          )
+          );
         }
       }
     } else {
@@ -122,17 +130,17 @@ export async function exportBriefToDocx(
             font: FONT,
             size: FONT_SIZE_HALF_PT,
           }),
-        )
+        );
       }
       for (const c of p.citations) {
         runs.push(
           new TextRun({
-            text: buildCitationText(c.label),
+            text: buildCitationText(resolveCitationLabel(c, exhibitMap), c.type),
             font: FONT,
             size: FONT_SIZE_HALF_PT,
             color: c.type === 'law' ? '6d28d9' : '1d4ed8',
           }),
-        )
+        );
       }
     }
 
@@ -142,7 +150,7 @@ export async function exportBriefToDocx(
         spacing: { after: 60, line: LINE_SPACING_TWIPS },
         children: runs,
       }),
-    )
+    );
   }
 
   const doc = new Document({
@@ -181,8 +189,8 @@ export async function exportBriefToDocx(
         children,
       },
     ],
-  })
+  });
 
-  const blob = await Packer.toBlob(doc)
-  saveAs(blob, `${title}.docx`)
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `${title}.docx`);
 }

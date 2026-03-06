@@ -18,6 +18,7 @@ export function CitationReviewModal({ open, onClose }: CitationReviewModalProps)
   const updateCitationStatus = useBriefStore((s) => s.updateCitationStatus);
   const removeCitation = useBriefStore((s) => s.removeCitation);
   const setHighlightCitationId = useBriefStore((s) => s.setHighlightCitationId);
+  const exhibitMap = useBriefStore((s) => s.exhibitMap);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [confirmedCount, setConfirmedCount] = useState(0);
@@ -156,7 +157,9 @@ export function CitationReviewModal({ open, onClose }: CitationReviewModalProps)
                   {current.citation.type === 'law' ? '法條' : '文件'}
                 </span>
                 <span className="truncate text-sm font-medium text-t1">
-                  {current.citation.label}
+                  {(current.citation.type === 'file' && current.citation.file_id
+                    ? exhibitMap().get(current.citation.file_id)
+                    : null) || current.citation.label}
                 </span>
                 <span className="shrink-0 rounded bg-yl/20 px-1.5 py-0.5 text-[11px] text-yl">
                   待確認

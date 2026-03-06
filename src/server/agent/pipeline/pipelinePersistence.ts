@@ -3,11 +3,18 @@
 
 import { eq, max } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { briefs, briefVersions, claims } from '../../db/schema';
+import { briefs, briefVersions, claims, exhibits } from '../../db/schema';
 import { upsertManyLawRefs } from '../../lib/lawRefsJson';
 import type { LawRefItem } from '../../lib/lawRefsJson';
 import type { Claim, PipelineContext } from './types';
 import type { Paragraph } from '../../../client/stores/useBriefStore';
+import {
+  assignExhibits,
+  toExhibitRows,
+  buildExhibitLabel,
+  type FileInfo,
+  type ExistingExhibit,
+} from '../../lib/exhibitAssign';
 
 const CLAIM_BATCH_SIZE = 10;
 
@@ -76,6 +83,60 @@ export const saveBriefVersion = async (
     created_at: new Date().toISOString(),
     created_by: 'ai',
   });
+};
+
+/** Auto-assign exhibit numbers for newly cited files, persist to DB, notify frontend. */
+export const persistExhibits = async (
+  ctx: PipelineContext,
+  paragraphs: Paragraph[],
+  clientRole: string,
+  files: FileInfo[],
+): Promise<void> => {
+  const role = clientRole === 'defendant' ? 'defendant' : 'plaintiff';
+
+  // Load existing exhibits for this case
+  const existingRows = await ctx.drizzle
+    .select({
+      id: exhibits.id,
+      file_id: exhibits.file_id,
+      prefix: exhibits.prefix,
+      number: exhibits.number,
+    })
+    .from(exhibits)
+    .where(eq(exhibits.case_id, ctx.caseId));
+
+  const existing: ExistingExhibit[] = existingRows;
+
+  // Compute new exhibits to assign
+  const newExhibits = assignExhibits(paragraphs, role, files, existing);
+
+  // Batch insert new exhibit rows
+  if (newExhibits.length > 0) {
+    const rows = toExhibitRows(ctx.caseId, newExhibits);
+    await ctx.drizzle.insert(exhibits).values(rows);
+  }
+
+  // Fetch all exhibits and send to frontend
+  const allExhibits = await ctx.drizzle
+    .select()
+    .from(exhibits)
+    .where(eq(exhibits.case_id, ctx.caseId));
+
+  await ctx.sendSSE({
+    type: 'brief_update',
+    brief_id: '',
+    action: 'set_exhibits',
+    data: allExhibits.map((e) => ({
+      ...e,
+      label: buildExhibitLabel(e.prefix, e.number),
+    })),
+  });
+
+  if (newExhibits.length > 0) {
+    console.log(
+      `[exhibits] Assigned ${newExhibits.length} new exhibits (total: ${allExhibits.length})`,
+    );
+  }
 };
 
 /** Upsert fetched law refs into the case's law_refs JSON column. */

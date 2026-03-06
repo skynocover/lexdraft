@@ -14,16 +14,11 @@
   - 從 damages 表自動組裝金額項目 + 總額
   - 含法定遲延利息（見 P1-4）、訴訟費用負擔、假執行聲請（「原告願供擔保，請准宣告假執行」）
   - 起訴狀：完整訴之聲明；準備書狀：引用原訴之聲明或重述
-- [ ] **P1-2. 證物編號系統**
-  - 目前引用文件用原始檔名，但法院要求「原證一」「原證二」
-  - files 表加 `exhibit_no` 欄位（如 `原證一`），可手動或自動編號
-  - Writer 段落內自動替換：「交通事故初步分析研判表（原證一）」
-  - 書狀末尾自動生成證物清單
-- [ ] **P1-3. 前言/結論 fact-check**
-  - 問題：Gemini Flash Lite 無 citation grounding，本次產出前言把 113 年寫成 114 年、提及「過失比例」但原告無過失
-  - 方案 A（推薦）：前言/結論改回 Claude Citations API（成本微增但最可靠）
-  - 方案 B：加 fact-check 後處理層（比對日期/人名/金額是否與 case data 一致）
-  - 方案 C：Gemini prompt 注入更結構化的 case metadata（成本最低但不保證）
+- [x] **P1-2. 證物編號系統** ✅
+  - `exhibits` 表（case-level），AI pipeline 自動分配甲證/乙證編號
+  - 律師可在 ExhibitsTab 手動編輯、拖放排序、新增刪除
+  - Render-time mapping：citation 顯示時查詢 exhibitMap，不修改 content_structured
+  - Word 匯出 + 證物清單複製到剪貼簿，零 token 成本
 - [ ] **P1-4. 法定遲延利息**
   - 幾乎所有侵權訴訟都請求「自起訴狀繕本送達翌日起至清償日止按年息 5% 計算之利息」
   - 模板化固定文字，pipeline 自動插入訴之聲明段

@@ -13,6 +13,7 @@ import { lawRouter } from './server/routes/law';
 import { timelineRouter } from './server/routes/timeline';
 import { inlineAIRouter } from './server/routes/inlineAI';
 import { templatesRouter } from './server/routes/templates';
+import { exhibitsRouter } from './server/routes/exhibits';
 import { processFileMessage } from './server/queue/fileProcessor';
 
 const app = new Hono<AppEnv>();
@@ -66,6 +67,9 @@ api.route('/', inlineAIRouter);
 
 // 書狀範本
 api.route('/', templatesRouter);
+
+// 證物編號
+api.route('/', exhibitsRouter);
 
 app.route('/api', api);
 

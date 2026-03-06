@@ -135,7 +135,23 @@ export const claims = sqliteTable('claims', {
   created_at: text('created_at'),
 });
 
-// 3.7 messages — 聊天記錄
+// 3.7 exhibits — 證物編號（case-level）
+export const exhibits = sqliteTable('exhibits', {
+  id: text('id').primaryKey(),
+  case_id: text('case_id')
+    .notNull()
+    .references(() => cases.id),
+  file_id: text('file_id')
+    .notNull()
+    .references(() => files.id),
+  prefix: text('prefix'), // '甲證' | '乙證' | null
+  number: integer('number'), // 1, 2, 3...
+  doc_type: text('doc_type').default('影本'), // '影本' | '正本' | '繕本'
+  description: text('description'),
+  created_at: text('created_at'),
+});
+
+// 3.8 messages — 聊天記錄
 export const messages = sqliteTable('messages', {
   id: text('id').primaryKey(),
   case_id: text('case_id')

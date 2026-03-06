@@ -30,6 +30,7 @@ export function CaseWorkspace() {
   const setCurrentBrief = useBriefStore((s) => s.setCurrentBrief);
   const loadBriefs = useBriefStore((s) => s.loadBriefs);
   const loadLawRefs = useBriefStore((s) => s.loadLawRefs);
+  const loadExhibits = useBriefStore((s) => s.loadExhibits);
   const loadDisputes = useAnalysisStore((s) => s.loadDisputes);
   const loadDamages = useAnalysisStore((s) => s.loadDamages);
   const loadTimeline = useAnalysisStore((s) => s.loadTimeline);
@@ -180,6 +181,9 @@ export function CaseWorkspace() {
 
     // 載入主張圖譜
     loadClaims(caseId);
+
+    // 載入證物編號
+    loadExhibits(caseId);
 
     return () => {
       cancelled = true;

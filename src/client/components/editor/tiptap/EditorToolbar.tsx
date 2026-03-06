@@ -85,7 +85,8 @@ export const EditorToolbar = ({
   const handleDownloadWord = async () => {
     if (!currentBrief?.content_structured) return;
     const title = currentBrief.title || '書狀';
-    await exportBriefToDocx(currentBrief.content_structured.paragraphs, title);
+    const eMap = useBriefStore.getState().exhibitMap();
+    await exportBriefToDocx(currentBrief.content_structured.paragraphs, title, eMap);
   };
 
   return (

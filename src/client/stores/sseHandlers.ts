@@ -1,5 +1,11 @@
 import { toast } from 'sonner';
-import { useBriefStore, type Brief, type Paragraph, type LawRef } from './useBriefStore';
+import {
+  useBriefStore,
+  type Brief,
+  type Paragraph,
+  type LawRef,
+  type Exhibit,
+} from './useBriefStore';
 import {
   useAnalysisStore,
   type Dispute,
@@ -225,6 +231,13 @@ const handleBriefUpdate = (event: Extract<SSEEvent, { type: 'brief_update' }>) =
       analysisStore.setClaims(claims);
       if (claims.length > 0)
         toast.success('主張分析已產生', { description: `${claims.length} 項主張` });
+      break;
+    }
+    case 'set_exhibits': {
+      const exhibits = event.data as Exhibit[];
+      briefStore.setExhibits(exhibits);
+      if (exhibits.length > 0)
+        toast.success('證物編號已分配', { description: `${exhibits.length} 項證物` });
       break;
     }
   }

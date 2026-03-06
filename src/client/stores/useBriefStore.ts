@@ -65,6 +65,18 @@ export interface LawRef {
   is_manual: boolean;
 }
 
+export interface Exhibit {
+  id: string;
+  case_id: string;
+  file_id: string;
+  prefix: string | null;
+  number: number | null;
+  label: string | null; // computed: prefix + number
+  doc_type: string | null;
+  description: string | null;
+  created_at: string | null;
+}
+
 type ContentSnapshot = { paragraphs: Paragraph[] };
 
 const MAX_HISTORY = 50;
@@ -118,6 +130,16 @@ interface BriefState {
   restoreVersion: (versionId: string) => Promise<void>;
 
   citationStats: () => { confirmed: number; pending: number };
+
+  // Exhibits
+  exhibits: Exhibit[];
+  setExhibits: (exhibits: Exhibit[]) => void;
+  loadExhibits: (caseId: string) => Promise<void>;
+  addExhibit: (caseId: string, fileId: string, prefix?: string) => Promise<void>;
+  updateExhibit: (caseId: string, exhibitId: string, patch: Partial<Exhibit>) => Promise<void>;
+  reorderExhibits: (caseId: string, prefix: string, order: string[]) => Promise<void>;
+  removeExhibit: (caseId: string, exhibitId: string) => Promise<void>;
+  exhibitMap: () => Map<string, string>; // file_id → label
 }
 
 const cloneSnapshot = (s: ContentSnapshot): ContentSnapshot => structuredClone(s);
@@ -466,5 +488,93 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       else if (c.status === 'pending') pending++;
     });
     return { confirmed, pending };
+  },
+
+  // ── Exhibits ──
+  exhibits: [],
+  setExhibits: (exhibits) => set({ exhibits }),
+
+  loadExhibits: async (caseId: string) => {
+    try {
+      const exhibits = await api.get<Exhibit[]>(`/cases/${caseId}/exhibits`);
+      set({ exhibits });
+    } catch (err) {
+      console.error('loadExhibits error:', err);
+    }
+  },
+
+  addExhibit: async (caseId: string, fileId: string, prefix?: string) => {
+    try {
+      const exhibit = await api.post<Exhibit>(`/cases/${caseId}/exhibits`, {
+        file_id: fileId,
+        prefix,
+      });
+      set({ exhibits: [...get().exhibits, exhibit] });
+      toast.success('證物已新增');
+    } catch (err) {
+      console.error('addExhibit error:', err);
+      toast.error('新增證物失敗');
+    }
+  },
+
+  updateExhibit: async (caseId: string, exhibitId: string, patch: Partial<Exhibit>) => {
+    // Optimistic update
+    set({
+      exhibits: get().exhibits.map((e) => (e.id === exhibitId ? { ...e, ...patch } : e)),
+    });
+    try {
+      await api.patch(`/cases/${caseId}/exhibits/${exhibitId}`, patch);
+    } catch (err) {
+      console.error('updateExhibit error:', err);
+      toast.error('更新證物失敗');
+      // Reload to fix state
+      get().loadExhibits(caseId);
+    }
+  },
+
+  reorderExhibits: async (caseId: string, prefix: string, order: string[]) => {
+    // Optimistic update
+    const updated = get().exhibits.map((e) => {
+      if (e.prefix !== prefix) return e;
+      const idx = order.indexOf(e.id);
+      if (idx < 0) return e;
+      const newNum = idx + 1;
+      return { ...e, number: newNum, label: `${prefix}${newNum}` };
+    });
+    set({ exhibits: updated });
+    try {
+      const result = await api.patch<Exhibit[]>(`/cases/${caseId}/exhibits/reorder`, {
+        prefix,
+        order,
+      });
+      set({ exhibits: result });
+    } catch (err) {
+      console.error('reorderExhibits error:', err);
+      toast.error('排序證物失敗');
+      get().loadExhibits(caseId);
+    }
+  },
+
+  removeExhibit: async (caseId: string, exhibitId: string) => {
+    const prev = get().exhibits;
+    set({ exhibits: prev.filter((e) => e.id !== exhibitId) });
+    try {
+      await api.delete(`/cases/${caseId}/exhibits/${exhibitId}`);
+      // Reload to get renumbered results
+      get().loadExhibits(caseId);
+      toast.success('證物已移除');
+    } catch (err) {
+      console.error('removeExhibit error:', err);
+      toast.error('移除證物失敗');
+      set({ exhibits: prev });
+    }
+  },
+
+  exhibitMap: () => {
+    const map = new Map<string, string>();
+    for (const e of get().exhibits) {
+      if (e.label) map.set(e.file_id, e.label);
+    }
+    return map;
   },
 }));

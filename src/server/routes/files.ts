@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import type { AppEnv } from '../types';
 import { getDB } from '../db';
-import { files } from '../db/schema';
+import { files, exhibits } from '../db/schema';
 import { badRequest, notFound } from '../lib/errors';
+import { getExhibitPrefix, getMaxExhibitNumber, renumberExhibitPrefix } from '../lib/exhibitAssign';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const MAX_FILES_PER_CASE = 30;
@@ -120,11 +121,60 @@ filesRouter.put('/files/:id', async (c) => {
   const existing = await db.select().from(files).where(eq(files.id, id));
   if (existing.length === 0) throw notFound('檔案');
 
+  const fileRow = existing[0];
   const updates: Record<string, string | null> = { updated_at: new Date().toISOString() };
   if (body.category !== undefined) updates.category = body.category;
   if (body.doc_date !== undefined) updates.doc_date = body.doc_date;
 
   await db.update(files).set(updates).where(eq(files.id, id));
+
+  // Sync exhibit prefix when category changes
+  if (body.category !== undefined) {
+    const [exhibitRow] = await db
+      .select()
+      .from(exhibits)
+      .where(and(eq(exhibits.file_id, id), eq(exhibits.case_id, fileRow.case_id)));
+
+    const newPrefix = getExhibitPrefix(body.category);
+
+    if (exhibitRow) {
+      const oldPrefix = exhibitRow.prefix;
+
+      if (newPrefix === null) {
+        // Category doesn't map to exhibit (brief/court/other) → delete exhibit
+        await db.delete(exhibits).where(eq(exhibits.id, exhibitRow.id));
+        if (oldPrefix) {
+          await renumberExhibitPrefix(db, fileRow.case_id, oldPrefix);
+        }
+      } else if (newPrefix !== oldPrefix) {
+        // Prefix changed → move exhibit to new prefix group
+        const maxNum = await getMaxExhibitNumber(db, fileRow.case_id, newPrefix);
+
+        await db
+          .update(exhibits)
+          .set({ prefix: newPrefix, number: maxNum + 1 })
+          .where(eq(exhibits.id, exhibitRow.id));
+
+        if (oldPrefix) {
+          await renumberExhibitPrefix(db, fileRow.case_id, oldPrefix);
+        }
+      }
+    } else if (newPrefix) {
+      // No exhibit yet but new category needs one → create
+      const maxNum = await getMaxExhibitNumber(db, fileRow.case_id, newPrefix);
+      await db.insert(exhibits).values({
+        id: nanoid(),
+        case_id: fileRow.case_id,
+        file_id: id,
+        prefix: newPrefix,
+        number: maxNum + 1,
+        doc_type: '影本',
+        description: null,
+        created_at: new Date().toISOString(),
+      });
+    }
+  }
+
   const updated = await db.select().from(files).where(eq(files.id, id));
   return c.json(updated[0]);
 });
@@ -137,8 +187,23 @@ filesRouter.delete('/files/:id', async (c) => {
   const existing = await db.select().from(files).where(eq(files.id, id));
   if (existing.length === 0) throw notFound('檔案');
 
+  const fileRow = existing[0];
+
+  // Delete associated exhibit and renumber
+  const [exhibitRow] = await db
+    .select()
+    .from(exhibits)
+    .where(and(eq(exhibits.file_id, id), eq(exhibits.case_id, fileRow.case_id)));
+
+  if (exhibitRow) {
+    await db.delete(exhibits).where(eq(exhibits.id, exhibitRow.id));
+    if (exhibitRow.prefix) {
+      await renumberExhibitPrefix(db, fileRow.case_id, exhibitRow.prefix);
+    }
+  }
+
   // 從 R2 刪除
-  await c.env.BUCKET.delete(existing[0].r2_key);
+  await c.env.BUCKET.delete(fileRow.r2_key);
   // 從 D1 刪除
   await db.delete(files).where(eq(files.id, id));
 

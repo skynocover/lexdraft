@@ -31,6 +31,7 @@ import {
   persistBriefContent,
   saveBriefVersion,
   persistLawRefs,
+  persistExhibits,
 } from './pipeline/pipelinePersistence';
 
 export type { PipelineContext } from './pipeline/types';
@@ -329,10 +330,22 @@ export const runBriefPipeline = async (
       qualityReport: buildQualityReport(paragraphs),
     });
 
-    // ═══ Persist: brief content + version snapshot + cleanup ═══
+    // ═══ Persist: brief content + version snapshot + cleanup + exhibits ═══
     await persistBriefContent(ctx, step0.briefId, paragraphs);
     await cleanupUncitedLaws(ctx, paragraphs);
     await saveBriefVersion(ctx, step0.briefId, paragraphs);
+
+    // Auto-assign exhibit numbers for cited files
+    await persistExhibits(
+      ctx,
+      paragraphs,
+      store.caseMetadata.clientRole,
+      step0.parsedFiles.map((f) => ({
+        id: f.id,
+        category: f.category,
+        summary: f.parsedSummary,
+      })),
+    );
 
     // Report pipeline timing
     await ctx.sendSSE({

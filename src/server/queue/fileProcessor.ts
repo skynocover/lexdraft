@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { getDocumentProxy, extractText } from 'unpdf';
 import { getDB } from '../db';
-import { files } from '../db/schema';
+import { files, cases } from '../db/schema';
 import { callAI, type AIEnv } from '../agent/aiClient';
 
 const CMAP_BASE_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/';
@@ -41,30 +41,36 @@ interface FileMessage {
 }
 
 interface ClassificationResult {
-  category: 'ours' | 'theirs' | 'court' | 'evidence' | 'other';
+  category: 'brief' | 'exhibit_a' | 'exhibit_b' | 'court' | 'other';
   doc_date: string | null;
   summary: string;
 }
 
-const CLASSIFY_PROMPT = `你是法律文件分類助手。根據以下檔案名稱和內容，判斷：
+const buildClassifyPrompt = (clientRole: 'plaintiff' | 'defendant'): string => {
+  const ourSide = clientRole === 'plaintiff' ? 'exhibit_a' : 'exhibit_b';
+  const theirSide = clientRole === 'plaintiff' ? 'exhibit_b' : 'exhibit_a';
+  const roleLabel = clientRole === 'plaintiff' ? '原告' : '被告';
 
-1. category: ours（我方書狀）| theirs（對方書狀）| court（法院文件）| evidence（證據）| other
+  return `你是法律文件分類助手。本案當事人為${roleLabel}方。根據以下檔案名稱和內容，判斷：
+
+1. category: brief（書狀）| ${ourSide}（我方證物）| ${theirSide}（對方證物）| court（法院文件）| other
 2. doc_date: 文件日期（YYYY-MM-DD），如無法判斷則 null
 3. summary: 50-100 字繁體中文摘要，包含文件類型、當事人、核心主張、關鍵金額
 
 分類依據：
-- ours：包含「起訴狀」「準備狀」「準備○狀」且為我方
-- theirs：包含「答辯」「答辯○狀」「爭點整理狀」且為對方
-- court：包含「筆錄」「通知書」「裁定」「判決」
-- evidence：合約、發票、照片、診斷證明等獨立證據
+- brief：起訴狀、準備狀、答辯狀、爭點整理狀等書狀（不論哪方）
+- ${ourSide}：我方提出的證據（合約、發票、照片、診斷證明等）
+- ${theirSide}：對方提出的證據
+- court：筆錄、通知書、裁定、判決等法院文件
 - other：無法分類
 
 回傳純 JSON，不要包含 markdown 標記。格式：
 {
-  "category": "ours",
+  "category": "${ourSide}",
   "doc_date": "2024-03-15",
   "summary": "原告民事起訴狀，主張被告於111年3月15日超速行駛致原告受傷，請求醫療費15萬元及精神慰撫金50萬元，合計65萬元"
 }`;
+};
 
 const MARKDOWN_PROMPT = `你是文件格式轉換助手。將以下從 PDF 提取的純文字轉換為結構化的 Markdown 格式。
 
@@ -101,6 +107,7 @@ const convertToMarkdown = async (text: string, aiEnv: AIEnv): Promise<string> =>
 const classifyWithAI = async (
   filename: string,
   text: string,
+  clientRole: 'plaintiff' | 'defendant',
   aiEnv: AIEnv,
 ): Promise<ClassificationResult> => {
   const truncated = text.slice(0, 8000);
@@ -108,7 +115,7 @@ const classifyWithAI = async (
   const { content } = await callAI(
     aiEnv,
     [
-      { role: 'system', content: CLASSIFY_PROMPT },
+      { role: 'system', content: buildClassifyPrompt(clientRole) },
       { role: 'user', content: `檔案名稱：${filename}\n\n文件內容（前 8000 字）：\n${truncated}` },
     ],
     {
@@ -170,11 +177,19 @@ export const processFileMessage = async (
     }
 
     // 3. AI 分類 + 摘要 + Markdown 轉換（透過 Cloudflare AI Gateway）
+    // Get client_role from case for AI classification
+    const [caseRow] = await db
+      .select({ client_role: cases.client_role })
+      .from(cases)
+      .where(eq(cases.id, message.caseId));
+    const clientRole =
+      caseRow?.client_role === 'defendant' ? ('defendant' as const) : ('plaintiff' as const);
+
     let classification: ClassificationResult;
     let contentMd: string | null = null;
     if (env.CF_ACCOUNT_ID && env.CF_GATEWAY_ID && env.CF_AIG_TOKEN) {
       const [classResult, mdResult] = await Promise.all([
-        classifyWithAI(message.filename, fullText, aiEnv),
+        classifyWithAI(message.filename, fullText, clientRole, aiEnv),
         convertToMarkdown(fullText, aiEnv).catch((err) => {
           console.error(`Markdown conversion failed for ${message.fileId}:`, err);
           return null;
@@ -184,7 +199,7 @@ export const processFileMessage = async (
       contentMd = mdResult;
     } else {
       // 無 AI Gateway 設定時用 fallback 分類
-      classification = fallbackClassify(message.filename);
+      classification = fallbackClassify(message.filename, clientRole);
     }
 
     // 4. 更新 D1
@@ -215,21 +230,38 @@ export const processFileMessage = async (
 };
 
 /** 無 API key 時的 fallback 分類（純靠檔名） */
-const fallbackClassify = (filename: string): ClassificationResult => {
+const fallbackClassify = (
+  filename: string,
+  clientRole: 'plaintiff' | 'defendant',
+): ClassificationResult => {
   const name = filename.toLowerCase();
   let category: ClassificationResult['category'] = 'other';
 
-  if (name.includes('起訴') || name.includes('準備')) {
-    category = 'ours';
-  } else if (name.includes('答辯') || name.includes('爭點')) {
-    category = 'theirs';
+  if (
+    name.includes('起訴') ||
+    name.includes('準備') ||
+    name.includes('答辯') ||
+    name.includes('爭點')
+  ) {
+    category = 'brief';
   } else if (
     name.includes('筆錄') ||
     name.includes('裁定') ||
     name.includes('判決') ||
-    name.includes('通知')
+    name.includes('通知') ||
+    name.includes('調解')
   ) {
     category = 'court';
+  } else if (
+    name.includes('診斷') ||
+    name.includes('收據') ||
+    name.includes('發票') ||
+    name.includes('合約') ||
+    name.includes('照片') ||
+    name.includes('證明')
+  ) {
+    // Evidence — assign to our side by default
+    category = clientRole === 'plaintiff' ? 'exhibit_a' : 'exhibit_b';
   }
 
   return {
