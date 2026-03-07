@@ -8,37 +8,41 @@
 
 > 解決「律師不敢直接用」的根本問題：格式要件缺失、事實幻覺
 
-- [ ] **P1-1. 訴之聲明段落生成**
+- [x] **P1-1. 訴之聲明段落生成** ✅
   - 法官收到書狀第一眼看的段落，目前完全缺失
   - Template 驅動：依 brief_type 決定訴之聲明格式
   - 從 damages 表自動組裝金額項目 + 總額
   - 含法定遲延利息（見 P1-4）、訴訟費用負擔、假執行聲請（「原告願供擔保，請准宣告假執行」）
   - 起訴狀：完整訴之聲明；準備書狀：引用原訴之聲明或重述
+  - 實作：`templateRenderer.ts` + `defaultTemplates.ts`，pipeline 自動渲染模板 header/sections
 - [x] **P1-2. 證物編號系統** ✅
   - `exhibits` 表（case-level），AI pipeline 自動分配甲證/乙證編號
   - 律師可在 ExhibitsTab 手動編輯、拖放排序、新增刪除
   - Render-time mapping：citation 顯示時查詢 exhibitMap，不修改 content_structured
   - Word 匯出 + 證物清單複製到剪貼簿，零 token 成本
-- [ ] **P1-4. 法定遲延利息**
+- [x] **P1-4. 法定遲延利息** ✅
   - 幾乎所有侵權訴訟都請求「自起訴狀繕本送達翌日起至清償日止按年息 5% 計算之利息」
   - 模板化固定文字，pipeline 自動插入訴之聲明段
   - 依案型決定起算日（侵權：起訴狀繕本送達翌日；契約：催告到達翌日等）
+  - 實作：已納入 `defaultTemplates.ts` 模板文字，隨 P1-1 一併完成
 - [ ] **P1-5. 書狀微調（prompt 層）**
-  - 消除 meta 段落（「次就交通費用之請求，敬陳意見如下」17 字空洞過渡句仍出現）
-  - 結論字數控制（目標 100-200 字，目前 Gemini Flash Lite 產出 368 字）
+  - ~~消除 meta 段落~~ ✅ 已不再出現空洞過渡句
+  - 結論字數控制（目標 100-200 字，目前實際產出 349-435 字）
   - 物損折舊處理：brief_type + damage_category 觸發特定 prompt injection，主動論述折舊問題
-- [ ] **P1-6. 書狀首尾格式**
+- [x] **P1-6. 書狀首尾格式** ✅
   - 書狀首頁：法院名稱、案號、股別、案由、當事人欄（原告/被告姓名地址）
   - 書狀末尾：「謹狀」、受理法院名稱、具狀人簽名欄、具狀日期
   - 資料來源：`cases` 表已有 `court`、`case_number`、`plaintiff`、`defendant` 欄位
   - cases 表可能需新增欄位：`plaintiff_address`、`defendant_address`、`judge_division`（股別）
   - Pipeline 產出時自動組裝，前端 editor 顯示為不可編輯的 header/footer 區塊
-- [ ] **P1-7. Word 匯出**
+  - 實作：`templateRenderer.ts` 解析模板 header/footer，`briefPipeline.ts` 組裝為 paragraphs
+- [x] **P1-7. Word 匯出** ✅
   - 律師交給法院的是 Word，沒這個功能產品不完整
   - 引用轉換：inline badge → 括號引用文字（如「（原證一，事故分析研判表）」）
   - content_structured → docx 段落映射（section/subsection 對應 heading 層級）
   - Word 格式：A4、邊距 2.54/3.17cm、標楷體/新細明體、12pt 內文、1.8 倍行距
   - 含訴之聲明、證物清單等結構化段落
+  - 實作：`exportDocx.ts`（docx 產出 + 證物編號映射）、EditorToolbar「下載 Word」按鈕
 
 ---
 
