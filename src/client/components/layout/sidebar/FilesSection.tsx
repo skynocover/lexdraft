@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
+import { Upload } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -12,6 +13,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useCaseStore, type CaseFile } from '../../../stores/useCaseStore';
 import { useBriefStore, type Exhibit } from '../../../stores/useBriefStore';
 import { api } from '../../../lib/api';
+import { useFileUpload } from '../../../hooks/useFileUpload';
 import { FileItem, SortableFileItem } from './FileItem';
 
 const CATEGORY_ORDER: Record<string, number> = {
@@ -188,7 +190,7 @@ export const FilesSection = () => {
 
       {groups.unassigned.length > 0 && (
         <div className="mb-2">
-          {hasExhibits && <p className="mb-1 px-3 text-[11px] font-medium text-t3">未編號</p>}
+          {hasExhibits && <p className="mb-1 px-3 text-[11px] font-medium text-t3">其他文件</p>}
           <div className="px-3 space-y-0.5">
             {groups.unassigned.map(({ file }) => (
               <FileItem
@@ -203,11 +205,33 @@ export const FilesSection = () => {
         </div>
       )}
 
-      {caseFiles.length === 0 && (
-        <div className="px-4 py-3">
-          <p className="text-xs text-t3">尚無檔案</p>
-        </div>
-      )}
+      {caseFiles.length === 0 && <EmptyFilesState />}
+    </div>
+  );
+};
+
+const EmptyFilesState = () => {
+  const { fileInputRef, uploading, handleUpload, triggerFileSelect } = useFileUpload();
+
+  return (
+    <div className="flex flex-col items-center gap-2 px-4 py-6">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/pdf"
+        multiple
+        onChange={handleUpload}
+        className="hidden"
+      />
+      <Upload size={24} className="text-t3" />
+      <p className="text-xs text-t3">尚無檔案</p>
+      <button
+        onClick={triggerFileSelect}
+        disabled={uploading}
+        className="rounded-md bg-ac/10 px-3 py-1.5 text-xs font-medium text-ac transition hover:bg-ac/20 disabled:opacity-50"
+      >
+        {uploading ? '上傳中...' : '上傳 PDF'}
+      </button>
     </div>
   );
 };

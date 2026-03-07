@@ -4,11 +4,14 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CaseFile } from '../../../stores/useCaseStore';
 import { useCaseStore } from '../../../stores/useCaseStore';
+import { formatROCDate } from '../../../lib/dateUtils';
 import { useBriefStore, type Exhibit } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { CATEGORY_CONFIG, SELECTABLE_CATEGORIES } from '../../../lib/categoryConfig';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
+
+const DOC_TYPES = ['影本', '正本', '繕本'] as const;
 
 interface FileItemProps {
   file: CaseFile;
@@ -50,6 +53,7 @@ export function FileItem({
 }: FileItemProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false);
+  const [docTypePopoverOpen, setDocTypePopoverOpen] = useState(false);
   const openFileTab = useTabStore((s) => s.openFileTab);
   const currentCase = useCaseStore((s) => s.currentCase);
   const updateExhibit = useBriefStore((s) => s.updateExhibit);
@@ -79,19 +83,17 @@ export function FileItem({
         }`}
       >
         {/* Drag handle — only for exhibits */}
-        {dragHandleProps ? (
+        {dragHandleProps && (
           <span {...dragHandleProps} className="shrink-0 cursor-grab text-t3 hover:text-t1">
             <GripVertical className="h-3.5 w-3.5" />
           </span>
-        ) : (
-          <span className="w-3.5 shrink-0" />
         )}
 
         {/* Badge: exhibit short label (甲1) or category badge — click to change category */}
         <Popover open={categoryPopoverOpen} onOpenChange={setCategoryPopoverOpen}>
           <PopoverTrigger asChild>
             <button
-              className={`flex h-9 min-w-9 shrink-0 cursor-pointer items-center justify-center rounded-full px-1 text-xs font-bold transition hover:ring-2 hover:ring-current/25 ${exhibit ? (exhibit.prefix === '乙證' ? 'bg-rd/10 text-rd' : 'bg-or/10 text-or') : catConfig.badgeCls}`}
+              className={`flex h-9 min-w-9 shrink-0 cursor-pointer items-center justify-center rounded-full px-1 text-xs font-bold transition hover:ring-2 hover:ring-current/30 hover:brightness-125 ${exhibit ? (exhibit.prefix === '乙證' ? 'bg-rd/10 text-rd' : 'bg-or/10 text-or') : catConfig.badgeCls}`}
             >
               {exhibit
                 ? `${(exhibit.prefix || '甲證').replace('證', '')}${exhibit.number ?? ''}`
@@ -127,6 +129,7 @@ export function FileItem({
         {/* Filename + date */}
         <button onClick={handleClick} className="min-w-0 flex-1 text-left">
           <p
+            title={file.filename}
             className={`truncate text-sm leading-snug ${
               isRebuttalTarget
                 ? 'text-yl font-medium'
@@ -140,19 +143,36 @@ export function FileItem({
           </p>
           {(file.doc_date || exhibit) && (
             <p className="mt-0.5 flex items-center gap-1 text-xs text-t3">
-              {file.doc_date && <span>{file.doc_date}</span>}
+              {file.doc_date && <span>{formatROCDate(file.doc_date)}</span>}
               {file.doc_date && exhibit && <span>·</span>}
               {exhibit && caseId && (
-                <select
-                  value={exhibit.doc_type || '影本'}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => updateExhibit(caseId, exhibit.id, { doc_type: e.target.value })}
-                  className="rounded bg-transparent text-xs text-t3 outline-none hover:text-t1"
-                >
-                  <option value="影本">影本</option>
-                  <option value="正本">正本</option>
-                  <option value="繕本">繕本</option>
-                </select>
+                <Popover open={docTypePopoverOpen} onOpenChange={setDocTypePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded px-1 text-xs text-t3 transition hover:bg-bg-3 hover:text-t1"
+                    >
+                      {exhibit.doc_type || '影本'} ›
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-24 p-1" side="bottom" align="start">
+                    {DOC_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateExhibit(caseId, exhibit.id, { doc_type: type });
+                          setDocTypePopoverOpen(false);
+                        }}
+                        className={`flex w-full rounded px-2 py-1.5 text-xs transition hover:bg-bg-2 ${
+                          (exhibit.doc_type || '影本') === type ? 'text-ac' : 'text-t1'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
               )}
             </p>
           )}
