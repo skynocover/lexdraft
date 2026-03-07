@@ -37,3 +37,5 @@ export const COURTS = [
   '智慧財產及商業法院',
   '臺灣高雄少年及家事法院',
 ] as const;
+
+export const DEFAULT_BRIEF_LABEL = '書狀';

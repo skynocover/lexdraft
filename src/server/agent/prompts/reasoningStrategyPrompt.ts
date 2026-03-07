@@ -3,11 +3,11 @@
 import { buildCaseMetaLines, buildInstructionsBlock } from './promptHelpers';
 import {
   WRITING_CONVENTIONS,
-  getStructureGuidance,
   CLAIMS_RULES,
   SECTION_RULES,
   STRATEGY_JSON_SCHEMA,
 } from './strategyConstants';
+import { FALLBACK_GUIDANCE } from '../../lib/defaultTemplates';
 import type { ReasoningStrategyInput } from '../pipeline/types';
 
 export const REASONING_STRATEGY_SYSTEM_PROMPT = `你是一位資深台灣訴訟律師，正在為案件制定論證策略。你可以使用文字自由推理，也可以搜尋法條資料庫來補充推理所需的法律依據。
@@ -191,12 +191,12 @@ export const buildReasoningStrategyInput = (
   const caseMetaBlock = metaLines.length > 0 ? `\n[案件基本資訊]\n${metaLines.join('\n')}\n` : '';
   const instructionsBlock = buildInstructionsBlock(meta?.caseInstructions);
 
-  const structureGuidance = getStructureGuidance(input.briefType, hasTemplate);
+  const structureGuidance = hasTemplate ? '' : `\n\n${FALLBACK_GUIDANCE}`;
 
   return `[案件全貌]
 ${input.caseSummary || '（尚未整合）'}
 ${caseMetaBlock}${instructionsBlock}
-[書狀類型] ${input.briefType}
+[書狀名稱] ${input.templateTitle}
 
 [爭點清單]
 ${issueText || '（尚未分析）'}

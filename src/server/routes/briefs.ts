@@ -17,7 +17,7 @@ briefsRouter.get('/cases/:caseId/briefs', async (c) => {
     .select({
       id: briefs.id,
       case_id: briefs.case_id,
-      brief_type: briefs.brief_type,
+      template_id: briefs.template_id,
       title: briefs.title,
       version: briefs.version,
       created_at: briefs.created_at,
@@ -32,7 +32,7 @@ briefsRouter.get('/cases/:caseId/briefs', async (c) => {
 // POST /api/cases/:caseId/briefs — 建立新書狀
 briefsRouter.post('/cases/:caseId/briefs', async (c) => {
   const caseId = c.req.param('caseId');
-  const body = await c.req.json<{ brief_type: string; title: string }>();
+  const body = await c.req.json<{ template_id: string; title: string }>();
   const db = getDB(c.env.DB);
 
   const id = nanoid();
@@ -41,7 +41,7 @@ briefsRouter.post('/cases/:caseId/briefs', async (c) => {
   await db.insert(briefs).values({
     id,
     case_id: caseId,
-    brief_type: body.brief_type,
+    template_id: body.template_id,
     title: body.title,
     content_structured: JSON.stringify({ paragraphs: [] }),
     version: 1,
@@ -53,7 +53,7 @@ briefsRouter.post('/cases/:caseId/briefs', async (c) => {
     {
       id,
       case_id: caseId,
-      brief_type: body.brief_type,
+      template_id: body.template_id,
       title: body.title,
       content_structured: { paragraphs: [] },
       version: 1,
@@ -86,7 +86,7 @@ briefsRouter.put('/briefs/:id', async (c) => {
   const body = await c.req.json<{
     title?: string;
     content_structured?: unknown;
-    brief_type?: string;
+    template_id?: string;
   }>();
   const db = getDB(c.env.DB);
 
@@ -95,7 +95,7 @@ briefsRouter.put('/briefs/:id', async (c) => {
   };
 
   if (body.title !== undefined) updates.title = body.title;
-  if (body.brief_type !== undefined) updates.brief_type = body.brief_type;
+  if (body.template_id !== undefined) updates.template_id = body.template_id;
   if (body.content_structured !== undefined) {
     updates.content_structured = JSON.stringify(body.content_structured);
   }

@@ -14,6 +14,7 @@ import { useAnalysisStore } from '../stores/useAnalysisStore';
 import { useChatStore } from '../stores/useChatStore';
 import { useTabStore } from '../stores/useTabStore';
 import { api } from '../lib/api';
+import { DEFAULT_BRIEF_LABEL } from '../lib/caseConstants';
 import { Header } from '../components/layout/Header';
 import { StatusBar } from '../components/layout/StatusBar';
 import { ChatPanel } from '../components/layout/ChatPanel';
@@ -133,7 +134,7 @@ export function CaseWorkspace() {
         if (type === 'brief' && id) {
           const brief = briefs.find((b) => b.id === id);
           if (brief) {
-            openBriefTab(brief.id, brief.title || brief.brief_type);
+            openBriefTab(brief.id, brief.title || DEFAULT_BRIEF_LABEL);
             return;
           }
           toast.error('該書狀已不存在');
@@ -154,7 +155,7 @@ export function CaseWorkspace() {
 
       // fallback: 開啟第一個書狀
       if (briefs.length > 0) {
-        openBriefTab(briefs[0].id, briefs[0].title || briefs[0].brief_type);
+        openBriefTab(briefs[0].id, briefs[0].title || DEFAULT_BRIEF_LABEL);
       }
 
       // 若無檔案，顯示上傳引導

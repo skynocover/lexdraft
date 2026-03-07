@@ -8,11 +8,11 @@ export const handleWriteFullBrief: ToolHandler = async (args, caseId, db, drizzl
     return toolError('Error: missing execution context');
   }
 
-  const briefType = args.brief_type as string;
+  const templateId = (args.template_id as string) || null;
   const title = args.title as string;
 
-  if (!briefType || !title) {
-    return toolError('Error: brief_type and title are required');
+  if (!title) {
+    return toolError('Error: title is required');
   }
 
   const signal = ctx.signal || new AbortController().signal;
@@ -28,7 +28,7 @@ export const handleWriteFullBrief: ToolHandler = async (args, caseId, db, drizzl
   return runBriefPipeline(
     {
       caseId,
-      briefType,
+      templateId,
       title,
       signal,
       sendSSE: ctx.sendSSE,

@@ -3,8 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { ConfirmDialog } from './ConfirmDialog';
-import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
-import { BRIEF_TYPE_CONFIG, getBriefBadge } from '../../../lib/briefTypeConfig';
+import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
 
 const formatDate = (dateStr: string): string => {
   const d = new Date(dateStr);
@@ -14,7 +13,6 @@ const formatDate = (dateStr: string): string => {
 export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) => {
   const briefs = useBriefStore((s) => s.briefs);
   const deleteBrief = useBriefStore((s) => s.deleteBrief);
-  const updateBriefType = useBriefStore((s) => s.updateBriefType);
   const openBriefTab = useTabStore((s) => s.openBriefTab);
   const closeTab = useTabStore((s) => s.closeTab);
 
@@ -22,7 +20,6 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
     id: string;
     title: string;
   } | null>(null);
-  const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
 
   const handleDeleteBrief = async () => {
     if (!confirmDelete) return;
@@ -59,8 +56,8 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
             .map((b) => {
               const tabId = `brief:${b.id}`;
               const isActive = activeTabId === tabId;
-              const title = b.title || b.brief_type;
-              const badge = getBriefBadge(b.brief_type);
+              const title = b.title || DEFAULT_BRIEF_LABEL;
+              const badge = (b.title?.trim() || DEFAULT_BRIEF_LABEL)[0];
               return (
                 <div
                   key={b.id}
@@ -68,46 +65,19 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
                     isActive ? 'bg-ac/8' : 'hover:bg-bg-2'
                   }`}
                 >
-                  {/* Badge with Popover */}
-                  <Popover
-                    open={openPopoverId === b.id}
-                    onOpenChange={(open) => setOpenPopoverId(open ? b.id : null)}
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                      isActive ? 'bg-ac/15 text-ac' : 'bg-ac/10 text-ac'
+                    }`}
                   >
-                    <PopoverTrigger asChild>
-                      <button
-                        className={`flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm font-bold transition hover:ring-2 hover:ring-ac/25 ${
-                          isActive ? 'bg-ac/15 text-ac' : 'bg-ac/10 text-ac'
-                        }`}
-                      >
-                        {badge}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-36 p-1" side="bottom" align="start">
-                      {Object.entries(BRIEF_TYPE_CONFIG).map(([key, config]) => (
-                        <button
-                          key={key}
-                          onClick={() => {
-                            updateBriefType(b.id, key);
-                            setOpenPopoverId(null);
-                          }}
-                          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm transition hover:bg-bg-2 ${
-                            b.brief_type === key ? 'text-ac' : 'text-t1'
-                          }`}
-                        >
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ac/10 text-xs font-bold text-ac">
-                            {config.badge}
-                          </span>
-                          {config.label}
-                        </button>
-                      ))}
-                    </PopoverContent>
-                  </Popover>
+                    {badge}
+                  </div>
 
                   <button onClick={() => openBriefTab(b.id, title)} className="min-w-0 flex-1">
                     <p
                       className={`truncate text-left text-sm font-medium ${isActive ? 'text-ac' : 'text-t1'}`}
                     >
-                      {b.title || '書狀'}
+                      {b.title || DEFAULT_BRIEF_LABEL}
                     </p>
                     <p className="text-left text-xs text-t3">{formatDate(b.updated_at)}</p>
                   </button>

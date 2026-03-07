@@ -6,6 +6,7 @@ import { useAuthStore } from './useAuthStore';
 import { useBriefStore } from './useBriefStore';
 import { useRewindStore } from './useRewindStore';
 import { handleSSEEvent, type SSEContext } from './sseHandlers';
+import { DEFAULT_BRIEF_LABEL } from '../lib/caseConstants';
 import type { SSEEvent, ChatMessageRecord, ChatRequest } from '../../shared/types';
 
 export interface ChatMessage {
@@ -119,7 +120,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const paragraphs = currentBrief.content_structured?.paragraphs ?? [];
         requestBody.briefContext = {
           brief_id: currentBrief.id,
-          title: currentBrief.title || currentBrief.brief_type,
+          title: currentBrief.title || DEFAULT_BRIEF_LABEL,
           paragraphs: paragraphs.map((p) => ({
             id: p.id,
             section: p.section,

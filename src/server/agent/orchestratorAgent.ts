@@ -231,7 +231,7 @@ export const runCaseReader = async (
 export const runIssueAnalyzer = async (
   aiEnv: AIEnv,
   caseReaderOutput: CaseReaderOutput,
-  briefType: string,
+  templateTitle: string,
   signal: AbortSignal,
   caseMetadata?: {
     caseNumber: string;
@@ -258,7 +258,7 @@ export const runIssueAnalyzer = async (
       caseMetadata,
       timelineSummary: caseReaderOutput.timelineSummary,
       fileNotes: formatFileNotes(caseReaderOutput.fileNotes),
-      briefType,
+      templateTitle,
     });
 
     const { content } = await callAI(

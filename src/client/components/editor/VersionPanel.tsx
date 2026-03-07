@@ -3,6 +3,7 @@ import { ChevronRight, Eye, Undo2, Trash2, Plus } from 'lucide-react';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useTabStore } from '../../stores/useTabStore';
 import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
+import { DEFAULT_BRIEF_LABEL } from '../../lib/caseConstants';
 
 interface VersionPanelProps {
   open: boolean;
@@ -82,7 +83,7 @@ export function VersionPanel({ open, onClose }: VersionPanelProps) {
 
   const handlePreview = useCallback(
     (versionId: string, briefId: string, label: string) => {
-      const briefTitle = currentBrief?.title || '書狀';
+      const briefTitle = currentBrief?.title || DEFAULT_BRIEF_LABEL;
       openVersionPreviewTab(versionId, briefId, label, briefTitle);
     },
     [openVersionPreviewTab, currentBrief?.title],

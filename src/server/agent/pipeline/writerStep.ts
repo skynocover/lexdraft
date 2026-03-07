@@ -3,7 +3,7 @@ import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { callOpenRouterText } from '../aiClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
-import type { StrategyOutput, PipelineContext } from './types';
+import { isItemDamage, type StrategyOutput, type PipelineContext } from './types';
 import type { ContextStore } from '../contextStore';
 import type { Paragraph, TextSegment, Citation } from '../../../client/stores/useBriefStore';
 
@@ -257,7 +257,7 @@ export const writeSection = async (
   let instruction = `你是台灣資深訴訟律師。請根據提供的來源文件撰寫法律書狀段落。
 
 [書狀全局資訊]
-  書狀類型：${writerCtx.briefType}${caseMetaLines ? '\n' + caseMetaLines : ''}${instructionsLine}
+  書狀名稱：${writerCtx.templateTitle}${caseMetaLines ? '\n' + caseMetaLines : ''}${instructionsLine}
   完整大綱：
 ${outlineText}${docListText}
 
@@ -327,7 +327,7 @@ ${completedText}`;
     const isIntro = strategySection.section.includes('前言');
 
     const damagesLines = store.damages
-      .filter((d) => d.amount > 0 && !d.description?.includes('總計'))
+      .filter((d) => d.amount > 0 && isItemDamage(d))
       .map((d) => `  ${d.description || d.category}：新臺幣${d.amount.toLocaleString()}元`)
       .join('\n');
     const totalDamage = store.damages.find((d) => d.description?.includes('總計'));

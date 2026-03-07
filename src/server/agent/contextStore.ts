@@ -80,7 +80,7 @@ export class ContextStore {
     caseInstructions: '',
   };
   timelineSummary = '';
-  briefType = '';
+  templateTitle = '';
   legalIssues: LegalIssue[] = [];
   informationGaps: InformationGap[] = [];
   damages: DamageItem[] = [];
@@ -126,7 +126,7 @@ export class ContextStore {
     return {
       // 背景層
       caseSummary: this.caseSummary,
-      briefType: this.briefType,
+      templateTitle: this.templateTitle,
       fullOutline: this.sections.map((s, i) => ({
         section: s.section,
         subsection: s.subsection,
@@ -237,7 +237,7 @@ export class ContextStore {
     parties: { ...this.parties },
     caseMetadata: { ...this.caseMetadata },
     timelineSummary: this.timelineSummary,
-    briefType: this.briefType,
+    templateTitle: this.templateTitle,
     legalIssues: this.legalIssues,
     informationGaps: this.informationGaps,
     damages: this.damages,
@@ -262,7 +262,7 @@ export class ContextStore {
       caseInstructions: '',
     };
     store.timelineSummary = snap.timelineSummary ?? '';
-    store.briefType = snap.briefType ?? '';
+    store.templateTitle = snap.templateTitle ?? '';
     store.legalIssues = snap.legalIssues ?? [];
     store.informationGaps = snap.informationGaps ?? [];
     store.damages = snap.damages ?? [];
@@ -286,7 +286,7 @@ export interface ContextStoreSnapshot {
   parties: { plaintiff: string; defendant: string };
   caseMetadata: CaseMetadata;
   timelineSummary: string;
-  briefType: string;
+  templateTitle: string;
   legalIssues: LegalIssue[];
   informationGaps: InformationGap[];
   damages: DamageItem[];

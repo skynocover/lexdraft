@@ -2,13 +2,12 @@ import { useSortable, SortableContext, horizontalListSortingStrategy } from '@dn
 import { CSS } from '@dnd-kit/utilities';
 import { Columns2 } from 'lucide-react';
 import { useTabStore, type TabData } from '../../stores/useTabStore';
-import { useBriefStore } from '../../stores/useBriefStore';
-import { getBriefLabel } from '../../lib/briefTypeConfig';
+import { DEFAULT_BRIEF_LABEL } from '../../lib/caseConstants';
 
-const getTabLabel = (tabData: TabData, briefType?: string): string => {
+const getTabLabel = (tabData: TabData): string => {
   switch (tabData.type) {
     case 'brief':
-      return tabData.title || getBriefLabel(briefType ?? '');
+      return tabData.title || DEFAULT_BRIEF_LABEL;
     case 'version-preview':
       return tabData.label;
     case 'law':
@@ -50,15 +49,7 @@ const SortableTab = ({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const isBrief = tabData.type === 'brief';
-
-  const briefType = useBriefStore((s) =>
-    isBrief
-      ? s.briefs.find((b) => b.id === (tabData as { briefId: string }).briefId)?.brief_type
-      : undefined,
-  );
-
-  const label = getTabLabel(tabData, briefType);
+  const label = getTabLabel(tabData);
 
   return (
     <button

@@ -6,6 +6,7 @@ import { useBriefStore } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { useAnalysisStore } from '../../../stores/useAnalysisStore';
 import { useUIStore } from '../../../stores/useUIStore';
+import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useSelectionToolbar } from '../../../hooks/useSelectionToolbar';
 import { CitationNode } from './extensions/CitationNode';
@@ -174,7 +175,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
     }
   };
 
-  const briefTitle = currentBrief?.title || '書狀';
+  const briefTitle = currentBrief?.title || DEFAULT_BRIEF_LABEL;
 
   return (
     <div className="absolute inset-0 flex flex-col">

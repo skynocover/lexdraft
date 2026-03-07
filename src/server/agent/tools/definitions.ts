@@ -90,18 +90,16 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
       parameters: {
         type: 'object',
         properties: {
-          brief_type: {
+          template_id: {
             type: 'string',
-            enum: ['complaint', 'defense', 'preparation', 'appeal'],
-            description:
-              '書狀類型：complaint 起訴狀、defense 答辯狀、preparation 準備書狀、appeal 上訴狀',
+            description: '範本 ID，如 default-civil-complaint',
           },
           title: {
             type: 'string',
             description: '書狀標題（如「民事準備二狀」、「民事答辯狀」）',
           },
         },
-        required: ['brief_type', 'title'],
+        required: ['template_id', 'title'],
       },
     },
   },
@@ -190,18 +188,16 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
       parameters: {
         type: 'object',
         properties: {
-          brief_type: {
+          template_id: {
             type: 'string',
-            enum: ['complaint', 'defense', 'preparation', 'appeal'],
-            description:
-              '書狀類型：complaint 起訴狀、defense 答辯狀、preparation 準備書狀、appeal 上訴狀',
+            description: '範本 ID，如 default-civil-complaint',
           },
           title: {
             type: 'string',
             description: '書狀標題（如「民事準備二狀」、「民事答辯狀」）',
           },
         },
-        required: ['brief_type', 'title'],
+        required: ['template_id', 'title'],
       },
     },
   },

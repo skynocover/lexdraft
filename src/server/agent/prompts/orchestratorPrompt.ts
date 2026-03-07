@@ -199,7 +199,7 @@ export interface OrchestratorInput {
     clientRole: string;
     caseInstructions: string;
   };
-  briefType: string;
+  templateTitle: string;
 }
 
 // ── Build user message for Case Reader ──
@@ -224,7 +224,7 @@ export const buildCaseReaderInput = (input: OrchestratorInput): string => {
 
   return `請閱讀以下案件的重要文件，產出案件摘要、當事人、時間軸和重點筆記。
 
-[書狀類型] ${input.briefType}
+[書狀名稱] ${input.templateTitle}
 
 [案件基本資訊]
 ${caseMetaText}
@@ -269,7 +269,7 @@ export interface IssueAnalyzerInput {
   };
   timelineSummary: string;
   fileNotes: string;
-  briefType: string;
+  templateTitle: string;
 }
 
 export const buildIssueAnalyzerInput = (input: IssueAnalyzerInput): string => {
@@ -280,7 +280,7 @@ export const buildIssueAnalyzerInput = (input: IssueAnalyzerInput): string => {
 
   return `請根據以下案件資訊，辨識法律爭點、分類事實爭議、找出資訊缺口。
 
-[書狀類型] ${input.briefType}
+[書狀名稱] ${input.templateTitle}
 ${caseMetaBlock}${instructionsBlock}
 [當事人]
 原告：${input.parties.plaintiff}

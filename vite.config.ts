@@ -1,9 +1,9 @@
-import { defineConfig } from 'vite'
-import { cloudflare } from '@cloudflare/vite-plugin'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-import { viteStaticCopy } from 'vite-plugin-static-copy'
-import path from 'path'
+import { defineConfig } from 'vite';
+import { cloudflare } from '@cloudflare/vite-plugin';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
+import path from 'path';
 
 export default defineConfig({
   environments: {
@@ -19,7 +19,7 @@ export default defineConfig({
                 // esbuild and leaves a dynamic require.  Rewrite to the npm package.
                 build.onResolve({ filter: /^punycode\/?$/ }, () => ({
                   path: path.resolve(__dirname, 'node_modules/punycode/punycode.js'),
-                }))
+                }));
               },
             },
           ],
@@ -49,4 +49,4 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src/client'),
     },
   },
-})
+});

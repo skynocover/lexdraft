@@ -18,7 +18,6 @@ import {
 } from '../prompts/reasoningStrategyPrompt';
 import {
   WRITING_CONVENTIONS,
-  getStructureGuidance,
   CLAIMS_RULES,
   SECTION_RULES,
   STRATEGY_JSON_SCHEMA,
@@ -33,6 +32,7 @@ import {
 import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy';
 import { enrichStrategyOutput } from './enrichStrategy';
 import { templateToPrompt } from './templateHelper';
+import { FALLBACK_GUIDANCE } from '../../lib/defaultTemplates';
 import type {
   ReasoningStrategyInput,
   ReasoningStrategyOutput,
@@ -191,7 +191,7 @@ const buildJsonOutputMessage = (store: ContextStore, input: ReasoningStrategyInp
     })
     .join('\n');
 
-  return `[書狀類型] ${input.briefType}
+  return `[書狀名稱] ${input.templateTitle || '（未指定範本）'}
 
 [推理摘要]
 ${store.reasoningSummary || '（無摘要）'}
@@ -433,10 +433,10 @@ export const runReasoningStrategy = async (
     });
 
   // Helper: separate clean call for JSON output (Gemini 2.5 Flash, provider-native constrained decoding)
-  // 有 template → 注入完整 markdown 範本；無 template → 注入 briefType fallback 結構
+  // 有 template → 注入完整 markdown 範本；無 template → 注入通用 fallback 指引
   const structuringSystemPrompt = hasTemplate
     ? JSON_OUTPUT_SYSTEM_PROMPT + templateToPrompt(templateContentMd!)
-    : JSON_OUTPUT_SYSTEM_PROMPT + getStructureGuidance(input.briefType, false);
+    : JSON_OUTPUT_SYSTEM_PROMPT + `\n\n${FALLBACK_GUIDANCE}`;
 
   const callJsonOutput = (msg: string) =>
     callGeminiNative(ctx.aiEnv, structuringSystemPrompt, msg, {

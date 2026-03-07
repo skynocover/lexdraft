@@ -4,6 +4,7 @@ import { Undo2, Redo2 } from 'lucide-react';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { exportBriefToDocx } from './exportDocx';
 import type { PageInfo } from '../../../hooks/usePageInfo';
+import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
 
 const countChars = (
   paragraphs: { content_md: string; segments?: { text: string }[] }[],
@@ -84,7 +85,7 @@ export const EditorToolbar = ({
 
   const handleDownloadWord = async () => {
     if (!currentBrief?.content_structured) return;
-    const title = currentBrief.title || '書狀';
+    const title = currentBrief.title || DEFAULT_BRIEF_LABEL;
     const eMap = useBriefStore.getState().exhibitMap();
     await exportBriefToDocx(currentBrief.content_structured.paragraphs, title, eMap);
   };

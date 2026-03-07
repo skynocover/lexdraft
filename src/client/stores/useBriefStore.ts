@@ -39,7 +39,7 @@ export interface Paragraph {
 export interface Brief {
   id: string;
   case_id: string;
-  brief_type: string;
+  template_id: string | null;
   title: string | null;
   content_structured: { paragraphs: Paragraph[] } | null;
   version: number;
@@ -115,7 +115,6 @@ interface BriefState {
   ) => void;
   removeCitation: (paragraphId: string, citationId: string) => void;
   removeLawRef: (lawRefId: string) => Promise<void>;
-  updateBriefType: (briefId: string, briefType: string) => Promise<void>;
   deleteBrief: (briefId: string) => Promise<void>;
   saveBrief: () => Promise<void>;
 
@@ -424,22 +423,6 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     } catch (err) {
       console.error('removeLawRef error:', err);
       toast.error('移除法條失敗');
-    }
-  },
-
-  updateBriefType: async (briefId: string, briefType: string) => {
-    try {
-      await api.put<Brief>(`/briefs/${briefId}`, { brief_type: briefType });
-      set((s) => ({
-        briefs: s.briefs.map((b) => (b.id === briefId ? { ...b, brief_type: briefType } : b)),
-        currentBrief:
-          s.currentBrief?.id === briefId
-            ? { ...s.currentBrief, brief_type: briefType }
-            : s.currentBrief,
-      }));
-    } catch (err) {
-      console.error('updateBriefType error:', err);
-      toast.error('更新書狀類型失敗');
     }
   },
 

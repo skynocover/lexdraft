@@ -23,6 +23,7 @@ export interface ExistingExhibit {
 
 export interface FileInfo {
   id: string;
+  filename?: string | null;
   category: string | null;
   summary: string | null;
 }
@@ -106,12 +107,16 @@ export const assignExhibits = (
     const number = currentMax + 1;
     maxNumbers.set(prefix, number);
 
+    // Use filename (without extension) as exhibit description — concise and unambiguous
+    const filename = file.filename || '';
+    const baseName = filename.replace(/\.[^.]+$/, '');
+
     results.push({
       file_id: fileId,
       prefix,
       number,
       doc_type: '影本',
-      description: deriveExhibitDescription(file.summary),
+      description: baseName || deriveExhibitDescription(file.summary),
     });
   }
 

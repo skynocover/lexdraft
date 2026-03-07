@@ -3,6 +3,7 @@ import { briefs, disputes } from '../../db/schema';
 import { callClaude } from '../claudeClient';
 import { runStructuralPreCheck } from '../pipeline/structuralPreCheck';
 import { parseLLMJsonResponse } from '../toolHelpers';
+import { DEFAULT_BRIEF_LABEL } from '../../../shared/caseConstants';
 import {
   QUALITY_REVIEWER_SYSTEM_PROMPT,
   buildQualityReviewInput,
@@ -85,7 +86,7 @@ export const handleQualityReview: ToolHandler = async (_args, caseId, _db, drizz
 
   // 6b. LLM quality review
   const reviewInput = buildQualityReviewInput({
-    briefType: brief.brief_type || 'preparation',
+    templateTitle: brief.title || DEFAULT_BRIEF_LABEL,
     fullDraft,
     legalIssues: legalIssues.map((i) => ({
       id: i.id,

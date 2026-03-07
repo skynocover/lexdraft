@@ -1,3 +1,5 @@
+import { DEFAULT_BRIEF_LABEL } from '../../lib/caseConstants';
+
 const getToolLabel = (
   toolName: string,
   args: Record<string, unknown> | undefined,
@@ -30,7 +32,7 @@ const getToolLabel = (
   if (toolName === 'create_brief') {
     const title = args?.title as string | undefined;
     if (status === 'running') return `正在建立書狀...`;
-    return `已建立書狀「${title || '書狀'}」`;
+    return `已建立書狀「${title || DEFAULT_BRIEF_LABEL}」`;
   }
 
   if (toolName === 'write_brief_section') {

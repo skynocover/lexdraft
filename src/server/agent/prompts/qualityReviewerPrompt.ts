@@ -54,7 +54,7 @@ export const QUALITY_REVIEWER_SYSTEM_PROMPT = `你是法律書狀品質審查員
 // ── Build reviewer input ──
 
 export interface QualityReviewInput {
-  briefType: string;
+  templateTitle: string;
   fullDraft: string;
   legalIssues: Array<{
     id: string;
@@ -76,7 +76,7 @@ export const buildQualityReviewInput = (input: QualityReviewInput): string => {
       ? `\n[結構化前檢發現的問題]\n${input.structuralIssues.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
       : '\n[結構化前檢] 通過，無結構問題。';
 
-  return `請審查以下${input.briefType}草稿。
+  return `請審查以下${input.templateTitle}草稿。
 
 [爭點清單]
 ${issueText || '（無爭點）'}

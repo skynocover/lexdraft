@@ -18,9 +18,13 @@ import { parseJsonField, parseSummaryText, loadReadyFiles } from '../toolHelpers
 import type { ToolResult } from '../tools/types';
 import type { ContextStore } from '../contextStore';
 import type { LegalIssue, TimelineItem, DamageItem, PipelineContext } from './types';
-import { DEFAULT_TEMPLATES, autoSelectTemplate } from '../../lib/defaultTemplates';
+import { DEFAULT_TEMPLATES, getTemplateById } from '../../lib/defaultTemplates';
 import type { PipelineStepChild } from '../../../shared/types';
 import type { FileRow } from './writerStep';
+
+/** Treat DB string "null"/"undefined" as actual null */
+const sanitizeDbString = (val: string | null): string | null =>
+  val === 'null' || val === 'undefined' ? null : val;
 
 // ── Output Types ──
 
@@ -137,7 +141,9 @@ export const runCaseAnalysis = async (
     parsedSummary: parseSummaryText(f.summary),
   }));
 
-  store.briefType = ctx.briefType;
+  // Resolve template title for display
+  const resolvedTemplate = ctx.templateId ? getTemplateById(ctx.templateId) : undefined;
+  store.templateTitle = resolvedTemplate?.title || ctx.title || '';
   store.caseMetadata = {
     caseNumber: caseRow.case_number || '',
     court: caseRow.court || '',
@@ -145,25 +151,21 @@ export const runCaseAnalysis = async (
     caseInstructions: caseRow.case_instructions || '',
   };
 
-  // ── 3. Load template (if selected) ──
+  // ── 3. Load template (from ctx.templateId or case.template_id) ──
   let templateContentMd: string | null = null;
-  if (caseRow.template_id) {
+  const rawTemplateId = ctx.templateId || caseRow.template_id;
+  const effectiveTemplateId = rawTemplateId === 'auto' ? null : rawTemplateId;
+  if (effectiveTemplateId) {
     try {
-      if (caseRow.template_id === 'auto') {
-        // AI 自動選擇：根據 briefType 匹配最佳預設範本
-        const autoTpl = autoSelectTemplate(ctx.briefType);
-        templateContentMd = autoTpl.content_md;
-        console.log(
-          `[briefPipeline] Auto-selected template: ${autoTpl.title} (${autoTpl.id}) for briefType=${ctx.briefType}`,
-        );
-      } else if (caseRow.template_id.startsWith('default-')) {
-        const dt = DEFAULT_TEMPLATES.find((t) => t.id === caseRow.template_id);
-        templateContentMd = dt?.content_md ?? null;
+      const dt = getTemplateById(effectiveTemplateId);
+      if (dt) {
+        templateContentMd = dt.content_md;
       } else {
+        // Try user-created template from DB
         const tplRows = await ctx.drizzle
           .select({ content_md: templates.content_md })
           .from(templates)
-          .where(eq(templates.id, caseRow.template_id));
+          .where(eq(templates.id, effectiveTemplateId));
         templateContentMd = tplRows[0]?.content_md ?? null;
       }
     } catch (err) {
@@ -213,8 +215,8 @@ export const runCaseAnalysis = async (
       orchestratorOutput = {
         caseSummary,
         parties: {
-          plaintiff: caseRow.plaintiff || '',
-          defendant: caseRow.defendant || '',
+          plaintiff: sanitizeDbString(caseRow.plaintiff) || '',
+          defendant: sanitizeDbString(caseRow.defendant) || '',
         },
         timelineSummary: '',
         legalIssues: existingLegalIssues,
@@ -236,14 +238,17 @@ export const runCaseAnalysis = async (
           category: f.category,
           summary: f.parsedSummary,
         })),
-        existingParties: { plaintiff: caseRow.plaintiff, defendant: caseRow.defendant },
+        existingParties: {
+          plaintiff: sanitizeDbString(caseRow.plaintiff),
+          defendant: sanitizeDbString(caseRow.defendant),
+        },
         caseMetadata: {
           caseNumber: caseRow.case_number || '',
           court: caseRow.court || '',
           clientRole: caseRow.client_role || '',
           caseInstructions: caseRow.case_instructions || '',
         },
-        briefType: ctx.briefType,
+        templateTitle: store.templateTitle,
       };
 
       const orchestratorProgress: OrchestratorProgressCallback = {
@@ -310,7 +315,7 @@ export const runCaseAnalysis = async (
           issueAnalyzerOutput = await runIssueAnalyzer(
             ctx.aiEnv,
             caseReaderOutput,
-            ctx.briefType,
+            store.templateTitle,
             ctx.signal,
             store.caseMetadata,
           );
@@ -392,6 +397,18 @@ export const runCaseAnalysis = async (
           action: 'set_parties',
           data: orchestratorOutput.parties,
         });
+
+        // Persist extracted parties back to cases table
+        const { plaintiff, defendant } = orchestratorOutput.parties;
+        if (plaintiff || defendant) {
+          await ctx.drizzle
+            .update(cases)
+            .set({
+              ...(plaintiff ? { plaintiff } : {}),
+              ...(defendant ? { defendant } : {}),
+            })
+            .where(eq(cases.id, ctx.caseId));
+        }
       }
     }
 
@@ -537,7 +554,7 @@ const createBriefInDB = async (ctx: PipelineContext): Promise<string> => {
   await ctx.drizzle.insert(briefs).values({
     id: briefId,
     case_id: ctx.caseId,
-    brief_type: ctx.briefType,
+    template_id: ctx.templateId,
     title: ctx.title,
     content_structured: JSON.stringify({ paragraphs: [] }),
     version: 1,
@@ -552,7 +569,7 @@ const createBriefInDB = async (ctx: PipelineContext): Promise<string> => {
     data: {
       id: briefId,
       case_id: ctx.caseId,
-      brief_type: ctx.briefType,
+      template_id: ctx.templateId,
       title: ctx.title,
       content_structured: { paragraphs: [] },
       version: 1,

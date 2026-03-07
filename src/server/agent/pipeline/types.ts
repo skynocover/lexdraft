@@ -10,7 +10,7 @@ import type { SSEEvent } from '../../../shared/types';
 
 export interface PipelineContext {
   caseId: string;
-  briefType: string;
+  templateId: string | null;
   title: string;
   signal: AbortSignal;
   sendSSE: (event: SSEEvent) => Promise<void>;
@@ -128,7 +128,7 @@ export interface DraftSection {
 export interface WriterContext {
   // 背景層
   caseSummary: string;
-  briefType: string;
+  templateTitle: string;
   fullOutline: { section: string; subsection?: string; isCurrent: boolean }[];
   currentSectionIndex: number;
 
@@ -190,6 +190,10 @@ export interface DamageItem {
   amount: number;
 }
 
+/** Filter out "總計"/"合計" summary rows — use this everywhere damages are summed */
+export const isItemDamage = (d: DamageItem): boolean =>
+  !d.description?.includes('總計') && !d.description?.includes('合計');
+
 // ── Per-Issue Analysis (Reasoning → Structuring handoff) ──
 
 export interface PerIssueAnalysis {
@@ -230,7 +234,7 @@ export interface ReasoningStrategyOutput {
 // Step 2 input
 export interface ReasoningStrategyInput {
   caseSummary: string;
-  briefType: string;
+  templateTitle: string;
   legalIssues: LegalIssue[];
   informationGaps: InformationGap[];
   fetchedLaws: FetchedLaw[];

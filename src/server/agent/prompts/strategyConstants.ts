@@ -16,51 +16,9 @@ export const TOOL_RESULT_MAX_CHARS = 200;
 export const WRITING_CONVENTIONS = `═══ 書狀撰寫慣例 ═══
 
 段落編號使用中文數字：壹、貳、參…，子段落使用一、二、三…。
-每份書狀應包含前言（或當事人）段落與結論段落。
-
-重要：complaint、defense、appeal 書狀的「壹、訴之聲明／答辯聲明／上訴聲明」由系統自動產生，AI 段落從「貳」開始編號。preparation 沒有聲明段，AI 段落從「壹」開始。`;
-
-// 無 template 時的 fallback（key = briefType）
-export const BRIEF_TYPE_FALLBACK_STRUCTURES: Record<string, string> = {
-  complaint: `### 民事起訴狀（complaint）
-（壹、訴之聲明由系統自動產生，不要撰寫）
-貳、前言（案件背景、當事人關係）
-參、事實及理由
-  依爭點逐一展開，每個爭點一個子段落（一、二、三…）
-  每段應包含：請求權基礎 → 構成要件涵攝 → 小結論
-肆、損害賠償計算（如涉及金額請求）
-  逐項列明各項損害金額及計算依據
-伍、結論（綜上所述，請求鈞院判決如訴之聲明）`,
-  defense: `### 民事答辯狀（defense）
-（壹、答辯聲明由系統自動產生，不要撰寫）
-貳、前言（答辯立場概述）
-參、答辯理由
-  逐一針對原告主張反駁，每點一個子段落
-  對事實面：說明真實情形、反駁原告事實錯誤
-  對法律面：提出時效抗辯、過失相抵等法律主張
-肆、結論（請求駁回原告之訴，訴訟費用由原告負擔）`,
-  preparation: `### 民事準備書狀（preparation）
-壹、前言（說明本狀目的、補充或回應之事項）
-貳、對對造主張之意見
-  逐一針對對方書狀攻防回應，每點一個子段落
-參、補充論述（如有新事實、新證據或新法律主張）
-肆、結論`,
-  appeal: `### 上訴狀（appeal）
-（壹、上訴聲明由系統自動產生，不要撰寫）
-貳、前言（表明不服之判決）
-參、原判決違誤之處
-  逐一指出原判決認事用法之錯誤
-  每點應說明：原判決如何認定 → 為何有誤 → 正確應如何
-肆、上訴理由（補充事實及證據）
-伍、結論（請求廢棄原判決，改判如上訴聲明）`,
-};
-
-// Helper: 有 template 回空、無 template 回 fallback
-export const getStructureGuidance = (briefType: string, hasTemplate: boolean): string => {
-  if (hasTemplate) return '';
-  const fallback = BRIEF_TYPE_FALLBACK_STRUCTURES[briefType];
-  return fallback ? `\n═══ ${briefType} 書狀結構 ═══\n\n${fallback}` : '';
-};
+每份書狀應包含前言段落與結論段落。
+若有提供書狀範本，依照範本的段落結構與編號順序。
+已有完整法律文字的段落（如訴之聲明）不需要 AI 規劃，只為需要撰寫的段落產出 section 計畫。`;
 
 export const CLAIMS_RULES = `═══ Claims 規則 ═══
 
@@ -85,7 +43,7 @@ export const CLAIMS_RULES = `═══ Claims 規則 ═══
 export const SECTION_RULES = `═══ 段落規則 ═══
 
 - 每個段落需要有完整的論證框架（大前提—小前提—結論）
-- section：大段名稱（依書狀類型編號，如 complaint 為「貳、前言」「參、事實及理由」「伍、結論」，preparation 從壹開始）
+- section：大段名稱（依範本結構編號，如「貳、前言」「參、事實及理由」「伍、結論」）
 - subsection：子段標題（如「一、侵權行為之成立」「二、醫療費用」）。前言和結論為 null，其餘每個段落必須填寫 subsection，格式為「一、描述性標題」「二、描述性標題」，依序編號
 - legal_basis：引用的法條 ID（必須是已查到全文的法條，且必須在 relevant_law_ids 中）
 - fact_application：事實如何涵攝到法律要件
@@ -103,9 +61,9 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
 段落 ID 命名規則：前言 section_1、第一個子段落 section_2_1、第二個子段落 section_2_2、損害賠償 section_3（若有）、結論 section_last。子段落 ID 格式為 section_{大段號}_{子段號}。
 
 重要：前言和結論不需要 subsection，其餘每個段落必須填寫 subsection（格式：一、描述性標題）。
-重要：section 名稱的中文編號必須依照書狀結構慣例（complaint/defense/appeal 從貳開始，preparation 從壹開始）。
+重要：section 名稱的中文編號必須依照範本結構（若有範本則依範本段落順序）。
 
-以下為 complaint 範例（注意編號從貳開始，因為壹、訴之聲明由系統產生）：
+以下為起訴狀範例：
 
 {
   "claims": [

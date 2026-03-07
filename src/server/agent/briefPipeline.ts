@@ -1,3 +1,4 @@
+import { nanoid } from 'nanoid';
 import { toolError, toolSuccess } from './toolHelpers';
 import { ContextStore } from './contextStore';
 import type { ToolResult } from './tools/types';
@@ -6,15 +7,17 @@ import type { PipelineStepChild } from '../../shared/types';
 import { writeSection, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
 import { fetchAndCacheUncitedMentions } from '../lib/lawRefService';
 import { runLawFetch, truncateLawContent } from './pipeline/lawFetchStep';
-import { assembleHeader, assembleDeclaration, assembleFooter } from './pipeline/briefAssembler';
+import { renderTemplate } from './pipeline/templateRenderer';
+import { formatEvidenceSection } from './pipeline/evidenceFormatter';
 import {
   runReasoningStrategy,
   type ReasoningStrategyProgressCallback,
 } from './pipeline/reasoningStrategyStep';
-import type {
-  ReasoningStrategyInput,
-  ReasoningStrategyOutput,
-  PipelineContext,
+import {
+  isItemDamage,
+  type ReasoningStrategyInput,
+  type ReasoningStrategyOutput,
+  type PipelineContext,
 } from './pipeline/types';
 import type { LawRefItem } from '../lib/lawRefsJson';
 import { runCaseAnalysis } from './pipeline/caseAnalysisStep';
@@ -36,6 +39,15 @@ import {
 } from './pipeline/pipelinePersistence';
 
 export type { PipelineContext } from './pipeline/types';
+
+const makeParagraph = (idPrefix: string, section: string, contentMd: string): Paragraph => ({
+  id: `${idPrefix}-${nanoid(8)}`,
+  section,
+  subsection: '',
+  content_md: contentMd,
+  dispute_id: null,
+  citations: [],
+});
 
 export interface PipelineOptions {
   onStepComplete?: (stepName: string, data: unknown) => void | Promise<void>;
@@ -192,7 +204,7 @@ export const runBriefPipeline = async (
 
     const strategyInput: ReasoningStrategyInput = {
       caseSummary: store.caseSummary,
-      briefType: store.briefType,
+      templateTitle: store.templateTitle,
       legalIssues: store.legalIssues,
       informationGaps: store.informationGaps,
       fetchedLaws: fetchedLawsArray
@@ -263,20 +275,9 @@ export const runBriefPipeline = async (
       strategyOutput,
     });
 
-    // ═══ Step 3: Writer (sequential, uses strategy sections) ═══
+    // ═══ Step 3: Writer (three-track: Flash Lite + AI writer + Code) ═══
     currentStep = STEP_WRITER;
     await progress.startStep(STEP_WRITER);
-
-    // ── Assemble header + declaration BEFORE writer loop ──
-    const caseRowForAssembly = {
-      court: store.caseMetadata.court || null,
-      case_number: store.caseMetadata.caseNumber || null,
-      plaintiff: store.parties.plaintiff || null,
-      defendant: store.parties.defendant || null,
-      client_role: store.caseMetadata.clientRole || null,
-    };
-    const headerParagraphs = assembleHeader(ctx.briefType, caseRowForAssembly);
-    const declarationParagraphs = assembleDeclaration(ctx.briefType, store.damages);
 
     const sendParagraphSSE = async (p: Paragraph) => {
       await ctx.sendSSE({
@@ -287,10 +288,50 @@ export const runBriefPipeline = async (
       });
     };
 
-    for (const p of headerParagraphs) await sendParagraphSSE(p);
-    for (const p of declarationParagraphs) await sendParagraphSSE(p);
+    // ── Track 1: Flash Lite renders header + template sections + footer ──
+    let headerParagraph: Paragraph | null = null;
+    const templateSectionParagraphs: Paragraph[] = [];
+    let footerParagraph: Paragraph | null = null;
+    if (step0.templateContentMd) {
+      try {
+        // Filter out "總計/合計" rows when computing damages total
+        const itemDamages = store.damages.filter(isItemDamage);
+        const damagesTotal =
+          itemDamages.length > 0 ? itemDamages.reduce((sum, d) => sum + d.amount, 0) : null;
 
-    // ── AI writer loop ──
+        const rendered = await renderTemplate(
+          ctx.aiEnv,
+          step0.templateContentMd,
+          {
+            plaintiff: store.parties.plaintiff || null,
+            defendant: store.parties.defendant || null,
+            caseNumber: store.caseMetadata.caseNumber || null,
+            court: store.caseMetadata.court || null,
+            clientRole: store.caseMetadata.clientRole || null,
+            damagesTotal,
+          },
+          ctx.signal,
+        );
+
+        if (rendered.header) {
+          headerParagraph = makeParagraph('header', '', rendered.header);
+          await sendParagraphSSE(headerParagraph);
+        }
+        for (const sec of rendered.sections) {
+          const p = makeParagraph('tpl', sec.heading, sec.content);
+          templateSectionParagraphs.push(p);
+          await sendParagraphSSE(p);
+        }
+        if (rendered.footer) {
+          footerParagraph = makeParagraph('footer', '', rendered.footer);
+          // Footer SSE sent after writer loop completes
+        }
+      } catch (err) {
+        console.error('[pipeline] Flash Lite rendering failed:', err);
+      }
+    }
+
+    // ── Track 2: AI writer loop ──
     const paragraphs: Paragraph[] = [];
 
     for (let i = 0; i < store.sections.length; i++) {
@@ -329,18 +370,7 @@ export const runBriefPipeline = async (
       }
     }
 
-    // ── Assemble footer AFTER writer loop ──
-    const footerParagraphs = assembleFooter(ctx.briefType, caseRowForAssembly);
-    for (const p of footerParagraphs) await sendParagraphSSE(p);
-
     await progress.completeWriting(paragraphs.length);
-
-    const allParagraphs = [
-      ...headerParagraphs,
-      ...declarationParagraphs,
-      ...paragraphs,
-      ...footerParagraphs,
-    ];
 
     // ═══ Batch: detect uncited law mentions across all paragraphs at once ═══
     if (paragraphs.length > 0) {
@@ -361,16 +391,8 @@ export const runBriefPipeline = async (
       );
     }
 
-    await emitSnapshot('step3', {
-      store: store.serialize(),
-      paragraphs: allParagraphs,
-      qualityReport: buildQualityReport(paragraphs),
-    });
-
-    // ═══ Persist: brief content + version snapshot + cleanup + exhibits ═══
-    await persistBriefContent(ctx, step0.briefId, allParagraphs);
+    // ═══ Persist exhibits first, then format evidence section from them ═══
     await cleanupUncitedLaws(ctx, paragraphs);
-    await saveBriefVersion(ctx, step0.briefId, allParagraphs);
 
     // Auto-assign exhibit numbers for cited files
     await persistExhibits(
@@ -379,10 +401,47 @@ export const runBriefPipeline = async (
       store.caseMetadata.clientRole,
       step0.parsedFiles.map((f) => ({
         id: f.id,
+        filename: f.filename,
         category: f.category,
         summary: f.parsedSummary,
       })),
     );
+
+    // ── Evidence section (after exhibits are assigned) ──
+    let evidenceParagraph: Paragraph | null = null;
+    try {
+      const evidenceText = await formatEvidenceSection(ctx.drizzle, ctx.caseId);
+      if (evidenceText) {
+        evidenceParagraph = makeParagraph('evidence', '證據方法', evidenceText);
+        await sendParagraphSSE(evidenceParagraph);
+      }
+    } catch (err) {
+      console.error('[pipeline] Evidence formatting failed:', err);
+    }
+
+    // Send footer SSE after evidence (correct visual order)
+    if (footerParagraph) {
+      await sendParagraphSSE(footerParagraph);
+    }
+
+    // Assemble in order: header → template sections → AI content → evidence → footer
+    const allParagraphs = [
+      ...(headerParagraph ? [headerParagraph] : []),
+      ...templateSectionParagraphs,
+      ...paragraphs,
+      ...(evidenceParagraph ? [evidenceParagraph] : []),
+      ...(footerParagraph ? [footerParagraph] : []),
+    ];
+
+    await emitSnapshot('step3', {
+      store: store.serialize(),
+      paragraphs: allParagraphs,
+      qualityReport: buildQualityReport(paragraphs),
+    });
+
+    // ═══ Persist: brief content + version snapshot ═══
+    await persistBriefContent(ctx, step0.briefId, allParagraphs);
+    await saveBriefVersion(ctx, step0.briefId, allParagraphs);
 
     // Report pipeline timing
     await ctx.sendSSE({

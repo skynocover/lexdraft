@@ -70,7 +70,7 @@ export const briefs = sqliteTable('briefs', {
   case_id: text('case_id')
     .notNull()
     .references(() => cases.id),
-  brief_type: text('brief_type').notNull(), // complaint | defense | preparation | appeal
+  template_id: text('template_id'), // nullable, 記錄生成時使用的範本 ID
   title: text('title'),
   content_structured: text('content_structured'), // JSON — 唯一 source of truth
   version: integer('version').default(1),

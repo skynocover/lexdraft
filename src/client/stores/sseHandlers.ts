@@ -16,6 +16,7 @@ import {
 } from './useAnalysisStore';
 import { useTabStore } from './useTabStore';
 import { useRewindStore } from './useRewindStore';
+import { DEFAULT_BRIEF_LABEL } from '../lib/caseConstants';
 import type { SSEEvent } from '../../shared/types';
 import type { ChatMessage } from './useChatStore';
 
@@ -179,8 +180,8 @@ const handleBriefUpdate = (event: Extract<SSEEvent, { type: 'brief_update' }>) =
       const newBrief = event.data as Brief;
       briefStore.setBriefs([...briefStore.briefs, newBrief]);
       briefStore.setCurrentBrief(newBrief);
-      useTabStore.getState().openBriefTab(newBrief.id, newBrief.title || newBrief.brief_type);
-      toast.success('書狀已建立', { description: newBrief.title || newBrief.brief_type });
+      useTabStore.getState().openBriefTab(newBrief.id, newBrief.title || DEFAULT_BRIEF_LABEL);
+      toast.success('書狀已建立', { description: newBrief.title || DEFAULT_BRIEF_LABEL });
       break;
     }
     case 'add_paragraph': {
