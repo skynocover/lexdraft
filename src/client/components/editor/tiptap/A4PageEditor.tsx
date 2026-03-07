@@ -120,8 +120,17 @@ export function A4PageEditor({ content }: BriefEditorProps) {
     const editorJson = JSON.stringify(editorStructured.paragraphs.map((p) => p.id));
 
     if (storeJson !== editorJson) {
+      isInternalUpdate.current = true;
       const newDoc = contentStructuredToTiptapDoc(content);
       editor.commands.setContent(newDoc);
+      // Clear any debounce that onUpdate just queued (prevents dirty=true from external sync)
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+        debounceTimer.current = undefined;
+      }
+      requestAnimationFrame(() => {
+        isInternalUpdate.current = false;
+      });
     }
   }, [content, editor]);
 
