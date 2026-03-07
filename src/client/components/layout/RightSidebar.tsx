@@ -1,4 +1,3 @@
-import { useRef, useState } from 'react';
 import {
   Info,
   FolderOpen,
@@ -8,7 +7,6 @@ import {
   Plus,
   Search,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { useTabStore } from '../../stores/useTabStore';
 import { useUIStore, type SidebarTab, type AnalysisSubTab } from '../../stores/useUIStore';
 import { BriefsSection } from './sidebar/BriefsSection';
@@ -20,10 +18,10 @@ import { DamagesTab } from '../analysis/DamagesTab';
 import { TimelineTab } from '../analysis/TimelineTab';
 import { useAnalysisStore } from '../../stores/useAnalysisStore';
 import { useBriefStore } from '../../stores/useBriefStore';
-import { useCaseStore, type CaseFile } from '../../stores/useCaseStore';
-import { api } from '../../lib/api';
+import { useCaseStore } from '../../stores/useCaseStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { useCitedLawRefs } from '../../hooks/useCitedLawRefs';
+import { useFileUpload } from '../../hooks/useFileUpload';
 
 const SIDEBAR_TABS: { key: SidebarTab; label: string; icon: typeof FolderOpen }[] = [
   { key: 'case-info', label: '案件資訊', icon: Info },
@@ -149,33 +147,7 @@ const LawSearchButton = () => {
 /* ===================== File Upload Button ===================== */
 
 const FileUploadButton = () => {
-  const currentCase = useCaseStore((s) => s.currentCase);
-  const setFiles = useCaseStore((s) => s.setFiles);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList || !currentCase) return;
-
-    setUploading(true);
-    for (const file of Array.from(fileList)) {
-      if (file.type !== 'application/pdf') continue;
-      if (file.size > 20 * 1024 * 1024) continue;
-
-      const formData = new FormData();
-      formData.append('file', file);
-      try {
-        const newFile = await api.upload<CaseFile>(`/cases/${currentCase.id}/files`, formData);
-        setFiles([...useCaseStore.getState().files, newFile]);
-      } catch (err) {
-        console.error('Upload failed:', err);
-        toast.error(`上傳「${file.name}」失敗`);
-      }
-    }
-    setUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  const { fileInputRef, uploading, handleUpload, triggerFileSelect } = useFileUpload();
 
   return (
     <>
@@ -190,7 +162,7 @@ const FileUploadButton = () => {
       <button
         onClick={(e) => {
           e.stopPropagation();
-          fileInputRef.current?.click();
+          triggerFileSelect();
         }}
         disabled={uploading}
         className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-ac disabled:opacity-50"
