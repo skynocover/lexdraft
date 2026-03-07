@@ -6,6 +6,7 @@ import type { PipelineStepChild } from '../../shared/types';
 import { writeSection, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
 import { fetchAndCacheUncitedMentions } from '../lib/lawRefService';
 import { runLawFetch, truncateLawContent } from './pipeline/lawFetchStep';
+import { assembleHeader, assembleDeclaration, assembleFooter } from './pipeline/briefAssembler';
 import {
   runReasoningStrategy,
   type ReasoningStrategyProgressCallback,
@@ -265,6 +266,31 @@ export const runBriefPipeline = async (
     // ═══ Step 3: Writer (sequential, uses strategy sections) ═══
     currentStep = STEP_WRITER;
     await progress.startStep(STEP_WRITER);
+
+    // ── Assemble header + declaration BEFORE writer loop ──
+    const caseRowForAssembly = {
+      court: store.caseMetadata.court || null,
+      case_number: store.caseMetadata.caseNumber || null,
+      plaintiff: store.parties.plaintiff || null,
+      defendant: store.parties.defendant || null,
+      client_role: store.caseMetadata.clientRole || null,
+    };
+    const headerParagraphs = assembleHeader(ctx.briefType, caseRowForAssembly);
+    const declarationParagraphs = assembleDeclaration(ctx.briefType, store.damages);
+
+    const sendParagraphSSE = async (p: Paragraph) => {
+      await ctx.sendSSE({
+        type: 'brief_update',
+        brief_id: step0.briefId,
+        action: 'add_paragraph',
+        data: p,
+      });
+    };
+
+    for (const p of headerParagraphs) await sendParagraphSSE(p);
+    for (const p of declarationParagraphs) await sendParagraphSSE(p);
+
+    // ── AI writer loop ──
     const paragraphs: Paragraph[] = [];
 
     for (let i = 0; i < store.sections.length; i++) {
@@ -303,7 +329,18 @@ export const runBriefPipeline = async (
       }
     }
 
+    // ── Assemble footer AFTER writer loop ──
+    const footerParagraphs = assembleFooter(ctx.briefType, caseRowForAssembly);
+    for (const p of footerParagraphs) await sendParagraphSSE(p);
+
     await progress.completeWriting(paragraphs.length);
+
+    const allParagraphs = [
+      ...headerParagraphs,
+      ...declarationParagraphs,
+      ...paragraphs,
+      ...footerParagraphs,
+    ];
 
     // ═══ Batch: detect uncited law mentions across all paragraphs at once ═══
     if (paragraphs.length > 0) {
@@ -326,14 +363,14 @@ export const runBriefPipeline = async (
 
     await emitSnapshot('step3', {
       store: store.serialize(),
-      paragraphs,
+      paragraphs: allParagraphs,
       qualityReport: buildQualityReport(paragraphs),
     });
 
     // ═══ Persist: brief content + version snapshot + cleanup + exhibits ═══
-    await persistBriefContent(ctx, step0.briefId, paragraphs);
+    await persistBriefContent(ctx, step0.briefId, allParagraphs);
     await cleanupUncitedLaws(ctx, paragraphs);
-    await saveBriefVersion(ctx, step0.briefId, paragraphs);
+    await saveBriefVersion(ctx, step0.briefId, allParagraphs);
 
     // Auto-assign exhibit numbers for cited files
     await persistExhibits(
@@ -353,7 +390,7 @@ export const runBriefPipeline = async (
       totalDurationMs: Date.now() - pipelineStartTime,
     });
 
-    let resultMsg = `已完成書狀撰寫，共 ${paragraphs.length} 個段落。`;
+    let resultMsg = `已完成書狀撰寫，共 ${allParagraphs.length} 個段落。`;
     if (strategyOutput.claims.length > 0) {
       resultMsg += `\n論證策略：${ourClaimCount} 項我方主張、${theirClaimCount} 項對方主張。`;
     }
