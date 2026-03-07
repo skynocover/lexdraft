@@ -47,6 +47,9 @@ p.legal-preformatted {
   white-space: pre-wrap;
   margin: 0.15em 0;
 }
+p.legal-list {
+  text-indent: 0;
+}
 `;
 
 /** Styles injected into the preview container to make Paged.js pages look like white A4 sheets */

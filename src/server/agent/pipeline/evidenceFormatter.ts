@@ -4,19 +4,7 @@
 import { eq } from 'drizzle-orm';
 import { exhibits } from '../../db/schema';
 import type { getDB } from '../../db';
-
-const CHINESE_DIGITS = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
-
-const toChineseNumber = (n: number): string => {
-  if (n <= 0) return '';
-  if (n < 10) return CHINESE_DIGITS[n];
-  if (n < 100) {
-    const tens = Math.floor(n / 10);
-    const ones = n % 10;
-    return `${tens > 1 ? CHINESE_DIGITS[tens] : ''}十${CHINESE_DIGITS[ones]}`;
-  }
-  return String(n);
-};
+import { toChineseExhibitLabel } from '../../lib/exhibitAssign';
 
 /** 從 exhibits 表產生證據方法段落文字 */
 export const formatEvidenceSection = async (
@@ -43,7 +31,7 @@ export const formatEvidenceSection = async (
   });
 
   const lines = sorted.map((r) => {
-    const label = `${r.prefix || ''}${toChineseNumber(r.number || 0)}`;
+    const label = toChineseExhibitLabel(r.prefix || '', r.number || 0);
     const desc = r.description || '';
     const docType = r.doc_type || '影本';
     return `${label}　${desc}　　${docType}`;

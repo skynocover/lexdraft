@@ -9,6 +9,7 @@ export const LegalParagraph = Paragraph.extend({
       paragraphId: { default: null },
       disputeId: { default: null },
       preformattedSection: { default: false },
+      listParagraph: { default: false },
     };
   },
 
@@ -23,6 +24,9 @@ export const LegalParagraph = Paragraph.extend({
     const classes = [HTMLAttributes.class];
     if (HTMLAttributes.preformattedSection) {
       classes.push('legal-preformatted');
+    }
+    if (HTMLAttributes.listParagraph) {
+      classes.push('legal-list');
     }
     attrs.class = classes.filter(Boolean).join(' ');
     return ['p', attrs, 0];

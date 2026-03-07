@@ -28,6 +28,24 @@ export interface FileInfo {
   summary: string | null;
 }
 
+// ── Chinese Number Conversion (shared) ──
+
+import { toChineseExhibitLabel } from '../../shared/chineseNumber';
+export { toChineseExhibitLabel };
+
+/** Build file_id → Chinese exhibit label map */
+export const buildChineseExhibitMap = (
+  exhibitRows: { file_id: string; prefix: string | null; number: number | null }[],
+): Map<string, string> => {
+  const map = new Map<string, string>();
+  for (const e of exhibitRows) {
+    if (e.prefix && e.number != null) {
+      map.set(e.file_id, toChineseExhibitLabel(e.prefix, e.number));
+    }
+  }
+  return map;
+};
+
 // ── Prefix Matrix ──
 
 export const getExhibitPrefix = (fileCategory: string | null): string | null => {

@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { useCaseStore } from './useCaseStore';
 import { forEachCitation, mapParagraphCitations } from '../lib/citationUtils';
+import { toChineseExhibitLabel } from '../../shared/chineseNumber';
 
 // Re-export analysis types for backward compatibility
 export type { Dispute, Damage, TimelineEvent, Party } from './useAnalysisStore';
@@ -19,6 +20,7 @@ export interface Citation {
   };
   quoted_text: string;
   status: 'confirmed' | 'pending' | 'rejected';
+  exhibit_label?: string;
 }
 
 export interface TextSegment {
@@ -138,7 +140,9 @@ interface BriefState {
   updateExhibit: (caseId: string, exhibitId: string, patch: Partial<Exhibit>) => Promise<void>;
   reorderExhibits: (caseId: string, prefix: string, order: string[]) => Promise<void>;
   removeExhibit: (caseId: string, exhibitId: string) => Promise<void>;
-  exhibitMap: () => Map<string, string>; // file_id → label
+  exhibitMap: () => Map<string, string>; // file_id → label (Arabic: 甲1)
+  chineseExhibitMap: () => Map<string, string>; // file_id → label (Chinese: 甲證一)
+  syncExhibitLabels: (oldMap: Map<string, string>, newMap: Map<string, string>) => void;
 }
 
 const cloneSnapshot = (s: ContentSnapshot): ContentSnapshot => structuredClone(s);
@@ -516,6 +520,9 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   },
 
   reorderExhibits: async (caseId: string, prefix: string, order: string[]) => {
+    // Capture old Chinese exhibit map before reorder
+    const oldChineseMap = get().chineseExhibitMap();
+
     // Optimistic update
     const updated = get().exhibits.map((e) => {
       if (e.prefix !== prefix) return e;
@@ -525,6 +532,11 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       return { ...e, number: newNum, label: `${prefix}${newNum}` };
     });
     set({ exhibits: updated });
+
+    // Sync exhibit labels in brief text
+    const newChineseMap = get().chineseExhibitMap();
+    get().syncExhibitLabels(oldChineseMap, newChineseMap);
+
     try {
       const result = await api.patch<Exhibit[]>(`/cases/${caseId}/exhibits/reorder`, {
         prefix,
@@ -539,12 +551,16 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   },
 
   removeExhibit: async (caseId: string, exhibitId: string) => {
+    const oldChineseMap = get().chineseExhibitMap();
     const prev = get().exhibits;
     set({ exhibits: prev.filter((e) => e.id !== exhibitId) });
     try {
       await api.delete(`/cases/${caseId}/exhibits/${exhibitId}`);
       // Reload to get renumbered results
-      get().loadExhibits(caseId);
+      await get().loadExhibits(caseId);
+      // Sync after reload (numbers may have shifted)
+      const newChineseMap = get().chineseExhibitMap();
+      get().syncExhibitLabels(oldChineseMap, newChineseMap);
       toast.success('證物已移除');
     } catch (err) {
       console.error('removeExhibit error:', err);
@@ -559,5 +575,102 @@ export const useBriefStore = create<BriefState>((set, get) => ({
       if (e.label) map.set(e.file_id, e.label);
     }
     return map;
+  },
+
+  chineseExhibitMap: () => {
+    const map = new Map<string, string>();
+    for (const e of get().exhibits) {
+      if (e.prefix && e.number != null) {
+        map.set(e.file_id, toChineseExhibitLabel(e.prefix, e.number));
+      }
+    }
+    return map;
+  },
+
+  syncExhibitLabels: (oldMap: Map<string, string>, newMap: Map<string, string>) => {
+    const brief = get().currentBrief;
+    if (!brief?.content_structured) return;
+
+    // Find file_ids whose Chinese label changed
+    const changedFileIds = new Set<string>();
+    for (const [fileId, oldLabel] of oldMap) {
+      const newLabel = newMap.get(fileId);
+      if (newLabel && newLabel !== oldLabel) changedFileIds.add(fileId);
+    }
+    // Also handle deleted exhibits (old label exists, no new label)
+    for (const [fileId] of oldMap) {
+      if (!newMap.has(fileId)) changedFileIds.add(fileId);
+    }
+    if (changedFileIds.size === 0) return;
+
+    // Build old-label → placeholder and placeholder → new-label maps
+    const labelToPlaceholder = new Map<string, string>();
+    const placeholderToNew = new Map<string, string>();
+    for (const fileId of changedFileIds) {
+      const oldLabel = oldMap.get(fileId);
+      const newLabel = newMap.get(fileId);
+      if (!oldLabel) continue;
+      const placeholder = `\x00EXHIBIT_${fileId}\x00`;
+      labelToPlaceholder.set(oldLabel, placeholder);
+      if (newLabel) placeholderToNew.set(placeholder, newLabel);
+    }
+
+    // Swap-safe replace: old labels → placeholders → new labels
+    const replaceText = (text: string): string => {
+      let result = text;
+      for (const [oldLabel, placeholder] of labelToPlaceholder) {
+        result = result.split(oldLabel).join(placeholder);
+      }
+      for (const [placeholder, newLabel] of placeholderToNew) {
+        result = result.split(placeholder).join(newLabel);
+      }
+      // Remove placeholders for deleted exhibits (no new label)
+      for (const [, placeholder] of labelToPlaceholder) {
+        if (!placeholderToNew.has(placeholder)) {
+          result = result.split(placeholder).join('');
+        }
+      }
+      return result;
+    };
+
+    // Only process paragraphs that have affected file citations
+    const paragraphs = brief.content_structured.paragraphs.map((p) => {
+      const hasAffected = [...(p.segments ?? []), { text: '', citations: p.citations }].some(
+        (seg) =>
+          seg.citations.some(
+            (c) => c.type === 'file' && c.file_id && changedFileIds.has(c.file_id),
+          ),
+      );
+      if (!hasAffected) return p;
+
+      const newSegments = p.segments?.map((seg) => ({
+        text: replaceText(seg.text),
+        citations: seg.citations.map((c) => {
+          if (c.type === 'file' && c.file_id && changedFileIds.has(c.file_id)) {
+            const newLabel = newMap.get(c.file_id);
+            return { ...c, exhibit_label: newLabel ?? undefined };
+          }
+          return c;
+        }),
+      }));
+
+      return {
+        ...p,
+        content_md: replaceText(p.content_md),
+        segments: newSegments ?? p.segments,
+        citations: p.citations.map((c) => {
+          if (c.type === 'file' && c.file_id && changedFileIds.has(c.file_id)) {
+            const newLabel = newMap.get(c.file_id);
+            return { ...c, exhibit_label: newLabel ?? undefined };
+          }
+          return c;
+        }),
+      };
+    });
+
+    set({
+      currentBrief: { ...brief, content_structured: { paragraphs } },
+      dirty: true,
+    });
   },
 }));

@@ -10,6 +10,8 @@ import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useSelectionToolbar } from '../../../hooks/useSelectionToolbar';
 import { CitationNode } from './extensions/CitationNode';
+import { ExhibitMark } from './extensions/ExhibitMark';
+import { ExhibitMarkOverlay } from './extensions/ExhibitMarkOverlay';
 import { LegalHeading } from './extensions/LegalHeading';
 import { LegalParagraph } from './extensions/LegalParagraph';
 import { PlaceholderHighlight } from './extensions/PlaceholderHighlight';
@@ -78,6 +80,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
       LegalHeading,
       LegalParagraph,
       CitationNode,
+      ExhibitMark,
       PlaceholderHighlight,
     ],
     content: contentStructuredToTiptapDoc(content),
@@ -224,6 +227,9 @@ export function A4PageEditor({ content }: BriefEditorProps) {
           </div>
         )}
       </div>
+
+      {/* Exhibit Mark Overlay (hover popover for inline exhibit references) */}
+      <ExhibitMarkOverlay containerRef={contentRef} />
 
       {/* Selection Toolbar (inline AI) */}
       <SelectionToolbar

@@ -38,6 +38,9 @@ import {
   persistLawRefs,
   persistExhibits,
 } from './pipeline/pipelinePersistence';
+import { buildChineseExhibitMap } from '../lib/exhibitAssign';
+import { exhibits } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 export type { PipelineContext } from './pipeline/types';
 
@@ -337,6 +340,17 @@ export const runBriefPipeline = async (
       }
     }
 
+    // ── Load exhibit mapping for writer prompt injection ──
+    const exhibitRows = await ctx.drizzle
+      .select({
+        file_id: exhibits.file_id,
+        prefix: exhibits.prefix,
+        number: exhibits.number,
+      })
+      .from(exhibits)
+      .where(eq(exhibits.case_id, ctx.caseId));
+    const chineseExhibitMap = buildChineseExhibitMap(exhibitRows);
+
     // ── Track 2: AI writer loop ──
     const paragraphs: Paragraph[] = [];
 
@@ -358,6 +372,7 @@ export const runBriefPipeline = async (
           writerCtx,
           step0.fileContentMap,
           store,
+          chineseExhibitMap,
         );
 
         paragraphs.push(paragraph);

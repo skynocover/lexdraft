@@ -1,5 +1,8 @@
 export const formatAmount = (amount: number): string => `NT$ ${amount.toLocaleString()}`;
 
+/** Strip markdown headers (## ###) from cited text for display */
+export const stripMarkdownHeaders = (text: string): string => text.replace(/^#{1,3}\s+/gm, '');
+
 /** Strip emoji and other non-text symbols */
 export function cleanText(text: string): string {
   return text

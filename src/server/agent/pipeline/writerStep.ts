@@ -143,6 +143,7 @@ export const writeSection = async (
   writerCtx: ReturnType<ContextStore['getContextForSection']>,
   fileContentMap: Map<string, FileRow>,
   store: ContextStore,
+  exhibitMap?: Map<string, string>,
 ): Promise<Paragraph> => {
   const documents: ClaudeDocument[] = [];
 
@@ -248,9 +249,24 @@ export const writeSection = async (
     ? `\n  律師處理指引：${meta.caseInstructions}`
     : '';
 
+  const isContentSection = !!strategySection.dispute_id;
   const docLines: string[] = [];
-  if (fileDocNames.length > 0)
-    docLines.push(`  案件文件：${fileDocNames.map((n) => `「${n}」`).join('、')}`);
+  if (fileDocNames.length > 0) {
+    if (isContentSection && exhibitMap && exhibitMap.size > 0) {
+      // Build per-file lines with exhibit labels
+      const fileLines = documents
+        .filter((d) => d.doc_type === 'file')
+        .map((d) => {
+          const exhibitLabel = d.file_id ? exhibitMap.get(d.file_id) : undefined;
+          return exhibitLabel
+            ? `  「${d.title}」（${exhibitLabel}）`
+            : `  「${d.title}」`;
+        });
+      docLines.push(`  案件文件：\n${fileLines.join('\n')}`);
+    } else {
+      docLines.push(`  案件文件：${fileDocNames.map((n) => `「${n}」`).join('、')}`);
+    }
+  }
   if (lawDocNames.length > 0)
     docLines.push(`  法條文件：${lawDocNames.map((n) => `「${n}」`).join('、')}`);
   const docListText =
@@ -325,6 +341,13 @@ ${completedText}`;
 - 如遇不確定或需律師確認的資訊（如送達日期、當事人地址、身分證字號、具體證物編號），使用【待填：說明】標記，例如【待填：起訴狀繕本送達翌日】、【待填：原告住址】
 - 每段的論述角度和句式必須有所區分。參考[已完成段落]，避免重複使用相同的開頭句式（如不要每段都以「原告請求…悉數應予准許」開頭）、相同的法條引用模式、或相同的結尾語式
 - 每個損害項目有不同的法律依據和舉證重點，撰寫時應突出該項目的獨特論點，而非套用通用模板`;
+
+  // ── Exhibit citation rules (content sections only) ──
+  if (isContentSection && exhibitMap && exhibitMap.size > 0) {
+    instruction += `
+- 引用案件文件時，必須在文件通稱後附加證物編號，格式範例：「有鑑定意見書可稽（甲證一）」「有診斷證明書附卷可參（甲證二）」「此有薪資證明為證（甲證三）」
+- 同一段落再次引用同一文件時，可直接使用證物編號（如「甲證一」），不需重複文件通稱`;
+  }
 
   // ── Intro/conclusion: inject structured facts + scope rules ──
   if (!strategySection.dispute_id) {
@@ -422,6 +445,20 @@ ${
     dispute_id: strategySection.dispute_id || null,
     citations,
   };
+
+  // Stamp exhibit_label on file citations for reorder sync
+  if (exhibitMap && exhibitMap.size > 0) {
+    const stampExhibitLabel = (c: Citation) => {
+      if (c.type === 'file' && c.file_id) {
+        const label = exhibitMap.get(c.file_id);
+        if (label) c.exhibit_label = label;
+      }
+    };
+    for (const c of paragraph.citations) stampExhibitLabel(c);
+    for (const seg of paragraph.segments ?? []) {
+      for (const c of seg.citations) stampExhibitLabel(c);
+    }
+  }
 
   // Send paragraph SSE
   await ctx.sendSSE({

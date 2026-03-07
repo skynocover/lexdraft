@@ -11,7 +11,7 @@ import {
 } from 'docx';
 import { saveAs } from 'file-saver';
 import type { Paragraph, Citation } from '../../../stores/useBriefStore';
-import { isPreformattedSection } from '../../../../shared/sectionConstants';
+import { isPreformattedSection, isListParagraph } from '../../../../shared/sectionConstants';
 
 const FONT = 'DFKai-SB';
 const FONT_SIZE_PT = 14;
@@ -21,7 +21,8 @@ const LINE_SPACING_PT = 25;
 const LINE_SPACING_TWIPS = Math.round(LINE_SPACING_PT * 20); // 1pt = 20 twips
 const MARGIN_MM = 25;
 
-function buildCitationText(label: string, type: string): string {
+function buildCitationText(label: string, type: string, exhibitInText: boolean): string {
+  if (type === 'file' && exhibitInText) return '';
   return type === 'law' ? label : `（${label}）`;
 }
 
@@ -102,6 +103,7 @@ export async function exportBriefToDocx(
 
     // Paragraph body
     const runs: TextRun[] = [];
+    const fullText = p.segments?.map((s) => s.text).join('') ?? p.content_md;
 
     if (p.segments && p.segments.length > 0) {
       for (const seg of p.segments) {
@@ -124,9 +126,16 @@ export async function exportBriefToDocx(
           }
         }
         for (const c of seg.citations) {
+          const exhibitInText = !!(c.exhibit_label && fullText.includes(c.exhibit_label));
+          const citText = buildCitationText(
+            resolveCitationLabel(c, exhibitMap),
+            c.type,
+            exhibitInText,
+          );
+          if (!citText) continue;
           runs.push(
             new TextRun({
-              text: buildCitationText(resolveCitationLabel(c, exhibitMap), c.type),
+              text: citText,
               font: FONT,
               size: FONT_SIZE_HALF_PT,
               color: c.type === 'law' ? '6d28d9' : '1d4ed8',
@@ -145,9 +154,16 @@ export async function exportBriefToDocx(
         );
       }
       for (const c of p.citations) {
+        const exhibitInText = !!(c.exhibit_label && fullText.includes(c.exhibit_label));
+        const citText = buildCitationText(
+          resolveCitationLabel(c, exhibitMap),
+          c.type,
+          exhibitInText,
+        );
+        if (!citText) continue;
         runs.push(
           new TextRun({
-            text: buildCitationText(resolveCitationLabel(c, exhibitMap), c.type),
+            text: citText,
             font: FONT,
             size: FONT_SIZE_HALF_PT,
             color: c.type === 'law' ? '6d28d9' : '1d4ed8',
@@ -158,7 +174,10 @@ export async function exportBriefToDocx(
 
     children.push(
       new DocxParagraph({
-        indent: isPreformatted ? undefined : { firstLine: convertMillimetersToTwip(10) },
+        indent:
+          isPreformatted || isListParagraph(p.content_md)
+            ? undefined
+            : { firstLine: convertMillimetersToTwip(10) },
         spacing: { after: 60, line: LINE_SPACING_TWIPS },
         children: runs,
       }),

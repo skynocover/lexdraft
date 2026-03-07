@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { nanoid } from 'nanoid';
 import type { Paragraph, Citation, TextSegment } from '../../../stores/useBriefStore';
-import { isPreformattedSection } from '../../../../shared/sectionConstants';
+import { isPreformattedSection, isListParagraph } from '../../../../shared/sectionConstants';
 
 /**
  * Convert content_structured { paragraphs: Paragraph[] } → Tiptap JSONContent document.
@@ -114,48 +114,141 @@ function normalizeSegments(segments: TextSegment[]): TextSegment[] {
   return result;
 }
 
+/**
+ * Collect file citations that have exhibit_label, keyed by label text.
+ * Used to find exhibit labels in text and apply ExhibitMark.
+ */
+function collectExhibitCitations(p: Paragraph): Map<string, Citation> {
+  const map = new Map<string, Citation>();
+  const walk = (citations: Citation[]) => {
+    for (const c of citations) {
+      if (c.type === 'file' && c.exhibit_label && !map.has(c.exhibit_label)) {
+        map.set(c.exhibit_label, c);
+      }
+    }
+  };
+  if (p.segments && p.segments.length > 0) {
+    for (const seg of p.segments) walk(seg.citations);
+  }
+  walk(p.citations);
+  return map;
+}
+
+/**
+ * Split a text string at exhibit label occurrences.
+ * Returns an array of { text, citation? } chunks.
+ */
+function splitTextByExhibitLabels(
+  text: string,
+  exhibitMap: Map<string, Citation>,
+): Array<{ text: string; citation?: Citation }> {
+  if (exhibitMap.size === 0 || !text) return [{ text }];
+
+  // Build regex matching any exhibit label, longest first to avoid partial matches
+  const labels = [...exhibitMap.keys()].sort((a, b) => b.length - a.length);
+  const escaped = labels.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const pattern = new RegExp(`(${escaped.join('|')})`, 'g');
+
+  const chunks: Array<{ text: string; citation?: Citation }> = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      chunks.push({ text: text.slice(lastIndex, match.index) });
+    }
+    const label = match[1];
+    chunks.push({ text: label, citation: exhibitMap.get(label) });
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    chunks.push({ text: text.slice(lastIndex) });
+  }
+
+  return chunks.length > 0 ? chunks : [{ text }];
+}
+
+/**
+ * Push text nodes, splitting at exhibit labels to apply ExhibitMark.
+ * Also handles \n → hardBreak conversion.
+ */
+function pushTextWithExhibitMarks(
+  nodes: JSONContent[],
+  text: string,
+  exhibitMap: Map<string, Citation>,
+) {
+  if (!text) return;
+
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) {
+      nodes.push({ type: 'hardBreak' });
+    }
+    if (!lines[i]) continue;
+
+    const chunks = splitTextByExhibitLabels(lines[i], exhibitMap);
+    for (const chunk of chunks) {
+      if (chunk.citation) {
+        nodes.push({
+          type: 'text',
+          text: chunk.text,
+          marks: [
+            {
+              type: 'exhibitMark',
+              attrs: {
+                citationId: chunk.citation.id,
+                fileId: chunk.citation.file_id ?? null,
+                quotedText: chunk.citation.quoted_text ?? '',
+                label: chunk.citation.exhibit_label ?? chunk.text,
+                blockIndex: chunk.citation.location?.block_index ?? null,
+              },
+            },
+          ],
+        });
+      } else {
+        nodes.push({ type: 'text', text: chunk.text });
+      }
+    }
+  }
+}
+
 function buildInlineContent(
   p: Paragraph,
   startCounter: number,
 ): { nodes: JSONContent[]; nextCounter: number } {
   const nodes: JSONContent[] = [];
   let counter = startCounter;
+  const exhibitCitations = collectExhibitCitations(p);
+
+  // Build full paragraph text to check which exhibit labels actually appear inline
+  const fullText = p.segments?.map((s) => s.text).join('') ?? p.content_md;
 
   if (p.segments && p.segments.length > 0) {
     const normalized = normalizeSegments(p.segments);
     for (const seg of normalized) {
-      // Text with possible newlines → text nodes + hardBreak nodes
-      pushTextWithBreaks(nodes, seg.text);
+      // Text with possible newlines → text nodes + hardBreak nodes + exhibit marks
+      pushTextWithExhibitMarks(nodes, seg.text, exhibitCitations);
 
-      // Inline citation nodes (always after text)
+      // Inline citation nodes — skip file citations whose exhibit_label appears in text
+      // (those are rendered as ExhibitMark); keep orphan file citations as badge fallback
       for (const c of seg.citations) {
+        if (c.type === 'file' && c.exhibit_label && fullText.includes(c.exhibit_label)) continue;
         nodes.push(citationToNode(c, counter));
         counter++;
       }
     }
   } else {
     // Old format: content_md + paragraph-level citations at end
-    pushTextWithBreaks(nodes, p.content_md);
+    pushTextWithExhibitMarks(nodes, p.content_md, exhibitCitations);
     for (const c of p.citations) {
+      if (c.type === 'file' && c.exhibit_label && fullText.includes(c.exhibit_label)) continue;
       nodes.push(citationToNode(c, counter));
       counter++;
     }
   }
 
   return { nodes, nextCounter: counter };
-}
-
-function pushTextWithBreaks(nodes: JSONContent[], text: string) {
-  if (!text) return;
-  const lines = text.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    if (i > 0) {
-      nodes.push({ type: 'hardBreak' });
-    }
-    if (lines[i]) {
-      nodes.push({ type: 'text', text: lines[i] });
-    }
-  }
 }
 
 /**
@@ -207,7 +300,13 @@ const buildParagraphNodes = (
   preformattedSection: string | false = false,
 ): { nodes: JSONContent[]; nextCounter: number } => {
   const inlineContent = buildInlineContent(p, startCounter);
-  const baseAttrs = { paragraphId: p.id, disputeId: p.dispute_id, preformattedSection };
+  const listFlag = isListParagraph(p.content_md);
+  const baseAttrs = {
+    paragraphId: p.id,
+    disputeId: p.dispute_id,
+    preformattedSection,
+    listParagraph: listFlag,
+  };
 
   // Fast path: no consecutive hardBreaks → single <p>
   const hasDoubleBreak = inlineContent.nodes.some(
@@ -242,15 +341,19 @@ const buildParagraphNodes = (
     };
   }
 
-  const paragraphNodes: JSONContent[] = groups.map((group, i) => ({
-    type: 'paragraph',
-    attrs: {
-      paragraphId: i === 0 ? p.id : nanoid(),
-      disputeId: p.dispute_id,
-      preformattedSection,
-    },
-    content: group,
-  }));
+  const paragraphNodes: JSONContent[] = groups.map((group, i) => {
+    const firstText = group.find((n) => n.type === 'text')?.text ?? '';
+    return {
+      type: 'paragraph',
+      attrs: {
+        paragraphId: i === 0 ? p.id : nanoid(),
+        disputeId: p.dispute_id,
+        preformattedSection,
+        listParagraph: isListParagraph(firstText),
+      },
+      content: group,
+    };
+  });
 
   return { nodes: paragraphNodes, nextCounter: inlineContent.nextCounter };
 };
@@ -356,7 +459,23 @@ function extractSegmentsFromNode(node: JSONContent): {
     for (const child of node.content) {
       if (child.type === 'text') {
         if (currentCitations.length > 0) flush();
+        // Check for exhibitMark on this text node
+        const exhibitMark = child.marks?.find((m: { type: string }) => m.type === 'exhibitMark');
         currentText += child.text || '';
+        if (exhibitMark) {
+          const a = exhibitMark.attrs || {};
+          const c: Citation = {
+            id: a.citationId || generateId(),
+            label: a.label || child.text || '',
+            type: 'file',
+            file_id: a.fileId || undefined,
+            location: a.blockIndex != null ? { block_index: a.blockIndex } : undefined,
+            quoted_text: a.quotedText || '',
+            status: 'confirmed',
+            exhibit_label: a.label || child.text || '',
+          };
+          currentCitations.push(c);
+        }
       } else if (child.type === 'hardBreak') {
         currentText += '\n';
       } else if (child.type === 'citation') {

@@ -365,6 +365,11 @@ body {
   margin: 0.15em 0;
 }
 
+/* List-style paragraphs (一、二、三、) — no text-indent */
+.a4-editor-content p.legal-list {
+  text-indent: 0;
+}
+
 /* ---- Citation badges (inline, reduced size) ---- */
 .a4-editor-content [data-node-view-wrapper] {
   display: inline;
@@ -398,6 +403,19 @@ body {
   background: rgba(234, 179, 8, 0.1);
   color: #a16207;
   border: 1px dashed #a16207;
+}
+
+/* Exhibit Mark — inline text highlight for exhibit references (e.g. 甲證一) */
+.a4-editor-content .exhibit-mark {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  border-radius: 2px;
+  padding: 0 1px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.a4-editor-content .exhibit-mark:hover {
+  background: rgba(59, 130, 246, 0.25);
 }
 
 /* Citation popover (rendered via portal, position: fixed set in JS) */

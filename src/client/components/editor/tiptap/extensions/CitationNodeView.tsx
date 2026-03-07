@@ -6,19 +6,9 @@ import { ExternalLink } from 'lucide-react';
 import { useBriefStore } from '../../../../stores/useBriefStore';
 import { useTabStore } from '../../../../stores/useTabStore';
 import { useCaseStore } from '../../../../stores/useCaseStore';
-
-/** Get exhibit label for a file citation, or null if no exhibit assigned. */
-const useExhibitLabel = (fileId: string | null): string | null =>
-  useBriefStore((s) => {
-    if (!fileId) return null;
-    const exhibit = s.exhibits.find((e) => e.file_id === fileId);
-    return exhibit?.label ?? null;
-  });
+import { stripMarkdownHeaders } from '../../../../lib/textUtils';
 
 const POPOVER_CLOSE_DELAY = 150;
-
-/** Strip markdown headers (## ###) from cited text for display */
-const stripMarkdownHeaders = (text: string): string => text.replace(/^#{1,3}\s+/gm, '');
 
 export function CitationNodeView({ node }: NodeViewProps) {
   const [showPopover, setShowPopover] = useState(false);
@@ -99,8 +89,6 @@ export function CitationNodeView({ node }: NodeViewProps) {
   } = node.attrs;
   const isLaw = type === 'law';
   const isFile = type === 'file';
-  const exhibitLabel = useExhibitLabel(isFile ? fileId : null);
-  const displayLabel = exhibitLabel || label;
   const isPending = status === 'pending';
   const isHighlighted = citationId === highlightCitationId;
 
@@ -154,7 +142,7 @@ export function CitationNodeView({ node }: NodeViewProps) {
       onMouseLeave={handleMouseLeave}
       ref={badgeRef}
     >
-      {isLaw ? label : displayLabel}
+      {label}
       {showPopover &&
         createPortal(
           <div
@@ -186,10 +174,7 @@ export function CitationNodeView({ node }: NodeViewProps) {
               >
                 {isLaw ? '法條' : '文件'}
               </span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#111' }}>{displayLabel}</span>
-              {exhibitLabel && label !== exhibitLabel && (
-                <span style={{ fontSize: 10, color: '#6b7280' }}>{label}</span>
-              )}
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#111' }}>{label}</span>
               {rangeLabel && <span style={{ fontSize: 9, color: '#9ca3af' }}>{rangeLabel}</span>}
               {isPending && (
                 <span
