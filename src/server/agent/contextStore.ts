@@ -99,6 +99,11 @@ export class ContextStore {
   // Step 3: Writer 逐段產出
   draftSections: DraftSection[] = [];
 
+  // Cache for getContextForSection (invalidated by setStrategyOutput/setFoundLaws).
+  // NOTE: addDraftSection does NOT invalidate — safe only because the pipeline
+  // calls getContextForSection(i) exactly once per index, in ascending order.
+  private writerContextCache = new Map<number, WriterContext>();
+
   // ── Query Methods ──
 
   /** Get theirs claims that have no ours responds_to */
@@ -114,8 +119,11 @@ export class ContextStore {
     );
   };
 
-  /** Assemble complete Writer context for a specific section */
+  /** Assemble complete Writer context for a specific section (cached per index) */
   getContextForSection = (sectionIndex: number): WriterContext => {
+    const cached = this.writerContextCache.get(sectionIndex);
+    if (cached) return cached;
+
     const section = this.sections[sectionIndex];
     if (!section) {
       throw new Error(`Section index ${sectionIndex} out of range`);
@@ -123,7 +131,7 @@ export class ContextStore {
 
     const laws = resolveLawsForSection(section, this.foundLaws, this.perIssueAnalysis);
 
-    return {
+    const ctx: WriterContext = {
       // 背景層
       caseSummary: this.caseSummary,
       templateTitle: this.templateTitle,
@@ -145,6 +153,9 @@ export class ContextStore {
       // 回顧層 — full text of completed sections
       completedSections: this.draftSections.slice(0, sectionIndex),
     };
+
+    this.writerContextCache.set(sectionIndex, ctx);
+    return ctx;
   };
 
   // ── Mutation Methods (called by pipeline steps) ──
@@ -184,6 +195,7 @@ export class ContextStore {
   setStrategyOutput = (claims: Claim[], sections: StrategySection[]) => {
     this.claims = claims;
     this.sections = sections;
+    this.writerContextCache.clear();
   };
 
   /** Add a completed draft section */
@@ -210,8 +222,9 @@ export class ContextStore {
     }
   };
 
-  /** Populate foundLaws from fetchedLaws + supplementedLaws (called after Steps 1+2) */
+  /** Populate foundLaws from fetchedLaws + supplementedLaws (called after Steps 1+2). Clears writer context cache. */
   setFoundLaws = (fetchedLaws: FetchedLaw[]) => {
+    this.writerContextCache.clear();
     const allLaws = [...fetchedLaws, ...this.supplementedLaws];
     const seen = new Set<string>();
     this.foundLaws = [];

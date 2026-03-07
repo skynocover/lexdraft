@@ -168,9 +168,13 @@ export const writeSection = async (
     });
   }
 
-  // ── Build document inventory for instruction ──
-  const fileDocNames = documents.filter((d) => d.doc_type === 'file').map((d) => d.title);
-  const lawDocNames = documents.filter((d) => d.doc_type === 'law').map((d) => d.title);
+  // ── Build document inventory for instruction (single pass) ──
+  const fileDocNames: string[] = [];
+  const lawDocNames: string[] = [];
+  for (const d of documents) {
+    if (d.doc_type === 'file') fileDocNames.push(d.title);
+    else if (d.doc_type === 'law') lawDocNames.push(d.title);
+  }
 
   const sectionKey = getSectionKey(strategySection.section, strategySection.subsection);
   console.log(
@@ -433,17 +437,15 @@ ${
 // ── Cleanup: remove uncited non-manual law refs after pipeline ──
 
 export const cleanupUncitedLaws = async (ctx: PipelineContext, paragraphs: Paragraph[]) => {
-  // Collect all cited law labels from Citations API markers
+  // Collect all cited law labels from Citations API markers (paragraphs + segments in one pass)
   const citedLabels = new Set<string>();
   for (const p of paragraphs) {
     for (const c of p.citations) {
       if (c.type === 'law') citedLabels.add(c.label);
     }
-    if (p.segments) {
-      for (const seg of p.segments) {
-        for (const c of seg.citations) {
-          if (c.type === 'law') citedLabels.add(c.label);
-        }
+    for (const seg of p.segments ?? []) {
+      for (const c of seg.citations) {
+        if (c.type === 'law') citedLabels.add(c.label);
       }
     }
   }

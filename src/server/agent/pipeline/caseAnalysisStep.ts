@@ -133,6 +133,19 @@ export const runCaseAnalysis = async (
   // Set up progress children for file reads
   const readChildren: PipelineStepChild[] = [];
 
+  // Helper: push a new child or update an existing running child by label
+  const pushChild = async (label: string, status: PipelineStepChild['status']) => {
+    readChildren.push({ label, status });
+    await progress.setChildren(readChildren);
+  };
+  const completeChild = async (label: string, status: 'done' | 'error' = 'done') => {
+    const idx = readChildren.findIndex((c) => c.label === label && c.status === 'running');
+    if (idx >= 0) {
+      readChildren[idx] = { ...readChildren[idx], status };
+      await progress.setChildren(readChildren);
+    }
+  };
+
   // Parse file summaries once — reused in both branches
   const parsedFiles = readyFiles.map((f) => ({
     id: f.id,
@@ -226,8 +239,7 @@ export const runCaseAnalysis = async (
       store.seedFromOrchestrator(orchestratorOutput);
 
       // Show quick progress
-      readChildren.push({ label: '沿用既有爭點', status: 'done' });
-      await progress.setChildren([...readChildren]);
+      await pushChild('沿用既有爭點', 'done');
     } else {
       // No existing disputes — run full Case Reader + Issue Analyzer
 
@@ -252,36 +264,11 @@ export const runCaseAnalysis = async (
       };
 
       const orchestratorProgress: OrchestratorProgressCallback = {
-        onFileReadStart: async (filename) => {
-          readChildren.push({ label: `閱讀 ${filename}`, status: 'running' });
-          await progress.setChildren([...readChildren]);
-        },
-        onFileReadDone: async (filename) => {
-          const idx = readChildren.findIndex(
-            (c) => c.label === `閱讀 ${filename}` && c.status === 'running',
-          );
-          if (idx >= 0) {
-            readChildren[idx] = { ...readChildren[idx], status: 'done' };
-            await progress.setChildren([...readChildren]);
-          }
-        },
-        onCaseSummaryStart: async () => {
-          readChildren.push({ label: '案件摘要', status: 'running' });
-          await progress.setChildren([...readChildren]);
-        },
-        onCaseSummaryDone: async () => {
-          const idx = readChildren.findIndex(
-            (c) => c.label === '案件摘要' && c.status === 'running',
-          );
-          if (idx >= 0) {
-            readChildren[idx] = { ...readChildren[idx], status: 'done' };
-            await progress.setChildren([...readChildren]);
-          }
-        },
-        onIssueAnalysisStart: async () => {
-          readChildren.push({ label: '爭點分析', status: 'running' });
-          await progress.setChildren([...readChildren]);
-        },
+        onFileReadStart: (filename) => pushChild(`閱讀 ${filename}`, 'running'),
+        onFileReadDone: (filename) => completeChild(`閱讀 ${filename}`),
+        onCaseSummaryStart: () => pushChild('案件摘要', 'running'),
+        onCaseSummaryDone: () => completeChild('案件摘要'),
+        onIssueAnalysisStart: () => pushChild('爭點分析', 'running'),
       };
 
       // Shared fallback: run analyze_disputes
@@ -418,8 +405,7 @@ export const runCaseAnalysis = async (
   // ── Damages promise ──
   const damagesPromise = (async (): Promise<DamageItem[]> => {
     if (existingDamages.length > 0) {
-      readChildren.push({ label: '沿用既有金額', status: 'done' });
-      await progress.setChildren([...readChildren]);
+      await pushChild('沿用既有金額', 'done');
       return existingDamages.map((d) => ({
         category: d.category,
         description: d.description,
@@ -427,21 +413,12 @@ export const runCaseAnalysis = async (
       }));
     }
 
-    readChildren.push({ label: '分析金額', status: 'running' });
-    await progress.setChildren([...readChildren]);
+    await pushChild('分析金額', 'running');
 
     const { handleCalculateDamages } = await import('../tools/calculateDamages');
     const result = await handleCalculateDamages({}, ctx.caseId, ctx.db, ctx.drizzle, toolCtx);
 
-    // Update progress child
-    const idx = readChildren.findIndex((c) => c.label === '分析金額' && c.status === 'running');
-    if (idx >= 0) {
-      readChildren[idx] = {
-        ...readChildren[idx],
-        status: result.success ? 'done' : 'error',
-      };
-      await progress.setChildren([...readChildren]);
-    }
+    await completeChild('分析金額', result.success ? 'done' : 'error');
 
     if (!result.success) return [];
 
@@ -459,26 +436,16 @@ export const runCaseAnalysis = async (
   // ── Timeline promise ──
   const timelinePromise = (async (): Promise<TimelineItem[]> => {
     if (existingTimeline.length > 0) {
-      readChildren.push({ label: '沿用既有時間軸', status: 'done' });
-      await progress.setChildren([...readChildren]);
+      await pushChild('沿用既有時間軸', 'done');
       return existingTimeline;
     }
 
-    readChildren.push({ label: '分析時間軸', status: 'running' });
-    await progress.setChildren([...readChildren]);
+    await pushChild('分析時間軸', 'running');
 
     const { handleGenerateTimeline } = await import('../tools/generateTimeline');
     const result = await handleGenerateTimeline({}, ctx.caseId, ctx.db, ctx.drizzle, toolCtx);
 
-    // Update progress child
-    const idx = readChildren.findIndex((c) => c.label === '分析時間軸' && c.status === 'running');
-    if (idx >= 0) {
-      readChildren[idx] = {
-        ...readChildren[idx],
-        status: result.success ? 'done' : 'error',
-      };
-      await progress.setChildren([...readChildren]);
-    }
+    await completeChild('分析時間軸', result.success ? 'done' : 'error');
 
     if (!result.success) return [];
 
@@ -511,7 +478,7 @@ export const runCaseAnalysis = async (
     }
   }
   if (childrenChanged) {
-    await progress.setChildren([...readChildren]);
+    await progress.setChildren(readChildren);
   }
 
   // ── 6. Build output ──

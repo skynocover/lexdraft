@@ -444,22 +444,28 @@ export const runReasoningStrategy = async (
       responseSchema: STRATEGY_RESPONSE_SCHEMA,
     });
 
+  // Token accumulation helper
+  const tokenTotals = { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
+  const accumulateUsage = (u: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  }) => {
+    tokenTotals.input += u.input_tokens;
+    tokenTotals.output += u.output_tokens;
+    tokenTotals.cacheCreation += u.cache_creation_input_tokens ?? 0;
+    tokenTotals.cacheRead += u.cache_read_input_tokens ?? 0;
+  };
+
   try {
     // ── Reasoning: 法律推理 tool-loop ──
-    let totalCacheCreation = 0;
-    let totalCacheRead = 0;
-    let totalInput = 0;
-    let totalOutput = 0;
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const response = await callReasoning();
 
-      // Accumulate token usage
+      accumulateUsage(response.usage);
       const u = response.usage;
-      totalInput += u.input_tokens;
-      totalOutput += u.output_tokens;
-      totalCacheCreation += u.cache_creation_input_tokens ?? 0;
-      totalCacheRead += u.cache_read_input_tokens ?? 0;
       console.log(
         `[reasoning] round ${round}: input=${u.input_tokens}, output=${u.output_tokens}, cache_write=${u.cache_creation_input_tokens ?? 0}, cache_read=${u.cache_read_input_tokens ?? 0}`,
       );
@@ -576,12 +582,7 @@ export const runReasoningStrategy = async (
 
       const forceResp = await callReasoning();
 
-      // Accumulate force-finalize token usage
-      const fu = forceResp.usage;
-      totalInput += fu.input_tokens;
-      totalOutput += fu.output_tokens;
-      totalCacheCreation += fu.cache_creation_input_tokens ?? 0;
-      totalCacheRead += fu.cache_read_input_tokens ?? 0;
+      accumulateUsage(forceResp.usage);
 
       const forceToolCalls = extractToolCalls(forceResp.content);
       for (const tc of forceToolCalls) {
@@ -604,16 +605,16 @@ export const runReasoningStrategy = async (
 
     // Log cache summary
     console.log(
-      `[reasoning] TOTAL: input=${totalInput}, output=${totalOutput}, cache_write=${totalCacheCreation}, cache_read=${totalCacheRead}`,
+      `[reasoning] TOTAL: input=${tokenTotals.input}, output=${tokenTotals.output}, cache_write=${tokenTotals.cacheCreation}, cache_read=${tokenTotals.cacheRead}`,
     );
-    if (totalCacheRead > 0 && totalInput > 0) {
-      // Anthropic cache reads are 90% cheaper than uncached input tokens
+    if (tokenTotals.cacheRead > 0 && tokenTotals.input > 0) {
       const CACHE_READ_DISCOUNT = 0.9;
-      const savingsPercent = (((totalCacheRead * CACHE_READ_DISCOUNT) / totalInput) * 100).toFixed(
-        1,
-      );
+      const savingsPercent = (
+        ((tokenTotals.cacheRead * CACHE_READ_DISCOUNT) / tokenTotals.input) *
+        100
+      ).toFixed(1);
       console.log(
-        `[reasoning] CACHE SAVINGS: ${totalCacheRead} tokens read from cache (~${savingsPercent}% input cost reduction)`,
+        `[reasoning] CACHE SAVINGS: ${tokenTotals.cacheRead} tokens read from cache (~${savingsPercent}% input cost reduction)`,
       );
     }
 

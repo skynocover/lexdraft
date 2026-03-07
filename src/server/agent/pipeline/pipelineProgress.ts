@@ -19,6 +19,9 @@ export const createProgressTracker = (sendSSE: (event: SSEEvent) => Promise<void
 
   const send = () => sendSSE({ type: 'pipeline_progress', steps: structuredClone(steps) });
 
+  const calcDuration = (index: number): number | undefined =>
+    stepStartTimes[index] ? Date.now() - stepStartTimes[index]! : undefined;
+
   return {
     startStep: async (index: number) => {
       steps[index].status = 'running';
@@ -29,9 +32,7 @@ export const createProgressTracker = (sendSSE: (event: SSEEvent) => Promise<void
       steps[index].status = 'done';
       if (detail) steps[index].detail = detail;
       if (content) steps[index].content = content;
-      if (stepStartTimes[index]) {
-        steps[index].durationMs = Date.now() - stepStartTimes[index]!;
-      }
+      steps[index].durationMs = calcDuration(index);
       await send();
     },
     setStepChildren: async (index: number, children: PipelineStepChild[]) => {
@@ -54,32 +55,22 @@ export const createProgressTracker = (sendSSE: (event: SSEEvent) => Promise<void
       await send();
     },
     updateWriting: async (current: number, total: number, sectionLabel: string) => {
-      steps[STEP_WRITER] = {
-        ...steps[STEP_WRITER],
-        label: `書狀撰寫 ${current}/${total}`,
-        detail: sectionLabel,
-        status: 'running',
-      };
+      steps[STEP_WRITER].label = `書狀撰寫 ${current}/${total}`;
+      steps[STEP_WRITER].detail = sectionLabel;
+      steps[STEP_WRITER].status = 'running';
       await send();
     },
     failStep: async (index: number, errorMsg: string) => {
       steps[index].status = 'error';
       steps[index].detail = errorMsg;
-      if (stepStartTimes[index]) {
-        steps[index].durationMs = Date.now() - stepStartTimes[index]!;
-      }
+      steps[index].durationMs = calcDuration(index);
       await send();
     },
     completeWriting: async (total: number) => {
-      steps[STEP_WRITER] = {
-        ...steps[STEP_WRITER],
-        label: '書狀撰寫',
-        detail: `${total} 段完成`,
-        status: 'done',
-        durationMs: stepStartTimes[STEP_WRITER]
-          ? Date.now() - stepStartTimes[STEP_WRITER]!
-          : undefined,
-      };
+      steps[STEP_WRITER].label = '書狀撰寫';
+      steps[STEP_WRITER].detail = `${total} 段完成`;
+      steps[STEP_WRITER].status = 'done';
+      steps[STEP_WRITER].durationMs = calcDuration(STEP_WRITER);
       await send();
     },
   };

@@ -69,8 +69,6 @@ export const runCaseReader = async (
   signal: AbortSignal,
   progress?: OrchestratorProgressCallback,
 ): Promise<CaseReaderOutput> => {
-  let fileReads = 0;
-
   // Build conversation
   const messages: ChatMessage[] = [
     { role: 'system', content: CASE_READER_SYSTEM_PROMPT },
@@ -80,7 +78,7 @@ export const runCaseReader = async (
   // Tool handlers
   const readFileIds = new Set<string>();
   const handleReadFile = async (fileId: string): Promise<string> => {
-    if (fileReads >= MAX_FILE_READS) {
+    if (readFileIds.size >= MAX_FILE_READS) {
       return '已達閱讀上限（6 份），請用摘要完成分析。';
     }
 
@@ -89,7 +87,6 @@ export const runCaseReader = async (
       return `檔案已讀取過（${fileId}），請用已有資訊繼續分析。`;
     }
     readFileIds.add(fileId);
-    fileReads++;
 
     const rows = await drizzle
       .select({
@@ -278,19 +275,19 @@ export const runIssueAnalyzer = async (
 
 // ── Normalize helpers ──
 
+const normalizeEnum = <T extends string>(
+  raw: string | undefined,
+  valid: readonly T[],
+  fallback: T,
+): T => (raw && (valid as readonly string[]).includes(raw) ? (raw as T) : fallback);
+
 const VALID_ASSERTION_TYPES = ['主張', '承認', '爭執', '自認', '推定'] as const;
-const normalizeAssertionType = (raw?: string): StructuredFact['assertion_type'] => {
-  if (raw && (VALID_ASSERTION_TYPES as readonly string[]).includes(raw))
-    return raw as StructuredFact['assertion_type'];
-  return '主張';
-};
+const normalizeAssertionType = (raw?: string): StructuredFact['assertion_type'] =>
+  normalizeEnum(raw, VALID_ASSERTION_TYPES, '主張');
 
 const VALID_SOURCE_SIDES = ['我方', '對方', '中立'] as const;
-const normalizeSourceSide = (raw?: string): StructuredFact['source_side'] => {
-  if (raw && (VALID_SOURCE_SIDES as readonly string[]).includes(raw))
-    return raw as StructuredFact['source_side'];
-  return '中立';
-};
+const normalizeSourceSide = (raw?: string): StructuredFact['source_side'] =>
+  normalizeEnum(raw, VALID_SOURCE_SIDES, '中立');
 
 // ── Parse Case Reader output ──
 

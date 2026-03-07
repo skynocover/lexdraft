@@ -116,11 +116,11 @@ export const persistExhibits = async (
     await ctx.drizzle.insert(exhibits).values(rows);
   }
 
-  // Fetch all exhibits and send to frontend
-  const allExhibits = await ctx.drizzle
-    .select()
-    .from(exhibits)
-    .where(eq(exhibits.case_id, ctx.caseId));
+  // Only re-query if new exhibits were inserted; otherwise reuse existing rows
+  const allExhibits =
+    newExhibits.length > 0
+      ? await ctx.drizzle.select().from(exhibits).where(eq(exhibits.case_id, ctx.caseId))
+      : existingRows;
 
   await ctx.sendSSE({
     type: 'brief_update',

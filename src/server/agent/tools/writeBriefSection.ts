@@ -46,10 +46,10 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
     if (existing) matchedId = existing.id;
   }
 
-  const isUpdate = !!matchedId && contentStructured.paragraphs.some((p) => p.id === matchedId);
-  const existingParagraph = isUpdate
-    ? contentStructured.paragraphs.find((p) => p.id === matchedId)
+  const existingParagraph = matchedId
+    ? (contentStructured.paragraphs.find((p) => p.id === matchedId) ?? null)
     : null;
+  const isUpdate = !!existingParagraph;
 
   // 2. Load file contents for document blocks (prefer content_md for citation chunking)
   const relevantFiles = await drizzle

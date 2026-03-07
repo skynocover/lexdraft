@@ -41,9 +41,23 @@ const MODEL = 'google-ai-studio/gemini-2.5-flash';
 export const getGatewayBaseUrl = (env: AIEnv): string =>
   `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}`;
 
-function getGatewayUrl(env: AIEnv): string {
-  return `${getGatewayBaseUrl(env)}/compat/chat/completions`;
-}
+const getGatewayUrl = (env: AIEnv): string => `${getGatewayBaseUrl(env)}/compat/chat/completions`;
+
+/** Shared header builder for AI Gateway requests */
+const buildHeaders = (env: AIEnv, byokAlias?: string): Record<string, string> => ({
+  'Content-Type': 'application/json',
+  'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+  ...(byokAlias ? { 'cf-aig-byok-alias': byokAlias } : {}),
+});
+
+/** Extract usage from OpenAI-compatible response */
+const extractCompatUsage = (usage?: {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+}): { input_tokens: number; output_tokens: number } => ({
+  input_tokens: usage?.prompt_tokens || 0,
+  output_tokens: usage?.completion_tokens || 0,
+});
 
 /**
  * Sanitize messages for Gemini via AI Gateway:
@@ -76,10 +90,7 @@ export async function callAIStreaming(env: AIEnv, opts: CallAIOptions): Promise<
 
   const response = await fetch(getGatewayUrl(env), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-    },
+    headers: buildHeaders(env),
     body: JSON.stringify(body),
     signal: opts.signal,
   });
@@ -135,10 +146,7 @@ export const callAI = async (
 
   const response = await fetch(getGatewayUrl(env), {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-    },
+    headers: buildHeaders(env),
     body: JSON.stringify(body),
     signal: opts?.signal,
   });
@@ -150,12 +158,12 @@ export const callAI = async (
     choices: Array<{ message: { content: string }; finish_reason?: string }>;
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
-  const usage = {
-    input_tokens: data.usage?.prompt_tokens || 0,
-    output_tokens: data.usage?.completion_tokens || 0,
-  };
   const truncated = data.choices[0]?.finish_reason === 'length';
-  return { content: stripFFFD(data.choices[0]?.message?.content || ''), usage, truncated };
+  return {
+    content: stripFFFD(data.choices[0]?.message?.content || ''),
+    usage: extractCompatUsage(data.usage),
+    truncated,
+  };
 };
 
 // ── Gemini Native (provider-native endpoint, constrained decoding) ──
@@ -198,10 +206,7 @@ export const callGeminiNative = async (
   const bodyStr = JSON.stringify(body);
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-    },
+    headers: buildHeaders(env),
     body: bodyStr,
     signal: opts?.signal,
   });
@@ -260,11 +265,7 @@ export const callOpenRouterText = async (
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-      'cf-aig-byok-alias': OPENROUTER_BYOK_ALIAS,
-    },
+    headers: buildHeaders(env, OPENROUTER_BYOK_ALIAS),
     body: JSON.stringify({
       model: OPENROUTER_MODEL,
       messages: [
@@ -290,26 +291,14 @@ export const callOpenRouterText = async (
 
   const content = stripFFFD(data.choices[0]?.message?.content || '');
   const truncated = data.choices[0]?.finish_reason === 'length';
-  const usage = {
-    input_tokens: data.usage?.prompt_tokens || 0,
-    output_tokens: data.usage?.completion_tokens || 0,
-  };
 
-  return { content, usage, truncated };
+  return { content, usage: extractCompatUsage(data.usage), truncated };
 };
 
 // ── Retry wrapper for Gemini (AI Gateway) calls ──
 
 const fetchWithRetryGemini = (env: AIEnv, body: Record<string, unknown>) =>
-  fetchWithRetry(
-    getGatewayUrl(env),
-    {
-      'Content-Type': 'application/json',
-      'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-    },
-    body,
-    { label: 'AI Gateway' },
-  );
+  fetchWithRetry(getGatewayUrl(env), buildHeaders(env), body, { label: 'AI Gateway' });
 
 // ── Gemini Tool-Loop (non-streaming, for pipeline Reasoning phase) ──
 
@@ -372,12 +361,7 @@ export const callGeminiToolLoop = async (
     },
   }));
 
-  const usage = {
-    input_tokens: data.usage?.prompt_tokens || 0,
-    output_tokens: data.usage?.completion_tokens || 0,
-  };
-
-  return { content, toolCalls, usage };
+  return { content, toolCalls, usage: extractCompatUsage(data.usage) };
 };
 
 export type { ChatMessage, ToolCall, ToolDef, AIEnv };

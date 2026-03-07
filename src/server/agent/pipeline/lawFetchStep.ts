@@ -75,6 +75,21 @@ export const truncateLawContent = (law: FetchedLaw): FetchedLaw => {
   };
 };
 
+// ── Helpers ──
+
+const addLaw = (
+  laws: Map<string, FetchedLaw>,
+  id: string,
+  lawName: string,
+  articleNo: string,
+  content: string,
+  source: FetchedLaw['source'],
+) => {
+  if (!laws.has(id)) {
+    laws.set(id, { id, law_name: lawName, article_no: articleNo, content, source });
+  }
+};
+
 // ── Main function ──
 
 export const runLawFetch = async (
@@ -99,13 +114,7 @@ export const runLawFetch = async (
   for (const ref of input.existingLawRefs) {
     if (!ref.is_manual && ref.full_text && expandedIds.has(ref.id)) {
       cachedIds.add(ref.id);
-      laws.set(ref.id, {
-        id: ref.id,
-        law_name: ref.law_name,
-        article_no: ref.article,
-        content: ref.full_text,
-        source: 'mentioned',
-      });
+      addLaw(laws, ref.id, ref.law_name, ref.article, ref.full_text, 'mentioned');
     }
   }
 
@@ -118,27 +127,19 @@ export const runLawFetch = async (
       // Try batch lookup by _id first (fastest)
       const results = await session.batchLookupByIds(uncachedIds);
       for (const r of results) {
-        laws.set(r._id, {
-          id: r._id,
-          law_name: r.law_name,
-          article_no: r.article_no,
-          content: r.content,
-          source: 'mentioned',
-        });
+        addLaw(laws, r._id, r.law_name, r.article_no, r.content, 'mentioned');
       }
 
-      // Fallback: for IDs not found by batch, try individual search
-      for (const [id, meta] of expandedIds) {
-        if (!laws.has(id)) {
-          const searchResults = await session.search(`${meta.lawName}${meta.articleNo}`, 1);
+      // Fallback: batch search for IDs not found by batch lookup
+      const missingEntries = [...expandedIds.entries()].filter(([id]) => !laws.has(id));
+      if (missingEntries.length > 0) {
+        const fallbackResults = await Promise.all(
+          missingEntries.map(([, meta]) => session.search(`${meta.lawName}${meta.articleNo}`, 1)),
+        );
+        for (const searchResults of fallbackResults) {
           if (searchResults.length > 0) {
-            laws.set(searchResults[0]._id, {
-              id: searchResults[0]._id,
-              law_name: searchResults[0].law_name,
-              article_no: searchResults[0].article_no,
-              content: searchResults[0].content,
-              source: 'mentioned',
-            });
+            const r = searchResults[0];
+            addLaw(laws, r._id, r.law_name, r.article_no, r.content, 'mentioned');
           }
         }
       }
@@ -149,14 +150,8 @@ export const runLawFetch = async (
 
   // 4. Add user manual laws
   for (const ref of input.userAddedLaws) {
-    if (ref.is_manual && ref.full_text && !laws.has(ref.id)) {
-      laws.set(ref.id, {
-        id: ref.id,
-        law_name: ref.law_name,
-        article_no: ref.article,
-        content: ref.full_text,
-        source: 'user_manual',
-      });
+    if (ref.is_manual && ref.full_text) {
+      addLaw(laws, ref.id, ref.law_name, ref.article, ref.full_text, 'user_manual');
     }
   }
 

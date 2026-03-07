@@ -37,6 +37,10 @@ export const validateStrategyOutput = (
 ): ValidationResult => {
   const errors: string[] = [];
 
+  // Pre-compute skippable section IDs (intro/conclusion/damages)
+  const isSkippable = (sectionName: string) =>
+    SKIP_SECTION_KEYWORDS.some((k) => sectionName.includes(k));
+
   // Check section IDs are unique
   const sectionIds = new Set<string>();
   for (const section of output.sections) {
@@ -47,21 +51,15 @@ export const validateStrategyOutput = (
     sectionIds.add(section.id);
   }
 
-  // 1. Every non-intro/conclusion section has at least one claim
-  const skipKeywords = SKIP_SECTION_KEYWORDS;
+  // 1 + 1b. Non-intro/conclusion sections: must have claims and subsection
   for (const section of output.sections) {
-    const isSkippable = skipKeywords.some((k) => section.section.includes(k));
-    if (!isSkippable && section.claims.length === 0) {
+    if (isSkippable(section.section)) continue;
+    if (section.claims.length === 0) {
       errors.push(
         `段落「${section.section}${section.subsection ? ' > ' + section.subsection : ''}」沒有分配任何 claim`,
       );
     }
-  }
-
-  // 1b. Every non-intro/conclusion section must have a subsection
-  for (const section of output.sections) {
-    const isSkippable = skipKeywords.some((k) => section.section.includes(k));
-    if (!isSkippable && !section.subsection) {
+    if (!section.subsection) {
       errors.push(`段落「${section.section}」缺少 subsection，必須填寫（格式：一、描述性標題）`);
     }
   }
@@ -153,8 +151,8 @@ export const validateStrategyOutput = (
 
   // 10. Non-intro/conclusion sections must have relevant_law_ids (non-empty)
   for (const section of output.sections) {
-    const isSkippable = skipKeywords.some((k) => section.section.includes(k));
-    if (!isSkippable && (!section.relevant_law_ids || section.relevant_law_ids.length === 0)) {
+    if (isSkippable(section.section)) continue;
+    if (!section.relevant_law_ids || section.relevant_law_ids.length === 0) {
       errors.push(
         `段落「${section.section}${section.subsection ? ' > ' + section.subsection : ''}」的 relevant_law_ids 為空，必須從[爭點→法條分配表]分配法條 ID`,
       );

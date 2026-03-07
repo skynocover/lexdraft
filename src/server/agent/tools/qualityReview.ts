@@ -107,42 +107,51 @@ export const handleQualityReview: ToolHandler = async (_args, caseId, _db, drizz
   const reviewResult = parseLLMJsonResponse<ReviewResult>(reviewContent, '品質審查回傳格式不正確');
 
   // 7. Format result for chat display
-  const criticalIssues = reviewResult.issues.filter((i) => i.severity === 'critical');
-  const warningIssues = reviewResult.issues.filter((i) => i.severity === 'warning');
-
-  let resultText = reviewResult.passed
-    ? '## 品質審查結果：通過\n\n'
-    : '## 品質審查結果：未通過\n\n';
-
-  if (criticalIssues.length > 0) {
-    resultText += `### 重要問題（${criticalIssues.length} 項）\n\n`;
-    for (const issue of criticalIssues) {
-      resultText += `- **[${issue.type}]** ${issue.description}\n`;
-      if (issue.suggestion) resultText += `  建議：${issue.suggestion}\n`;
-    }
-    resultText += '\n';
-  }
-
-  if (warningIssues.length > 0) {
-    resultText += `### 建議改善（${warningIssues.length} 項）\n\n`;
-    for (const issue of warningIssues) {
-      resultText += `- **[${issue.type}]** ${issue.description}\n`;
-      if (issue.suggestion) resultText += `  建議：${issue.suggestion}\n`;
-    }
-    resultText += '\n';
-  }
-
-  if (preCheckResult.issues.length > 0) {
-    resultText += `### 結構檢查（${preCheckResult.issues.length} 項）\n\n`;
-    for (const issue of preCheckResult.issues) {
-      resultText += `- [${issue.severity}] ${issue.description}\n`;
-    }
-    resultText += '\n';
-  }
-
-  if (!criticalIssues.length && !warningIssues.length && !preCheckResult.issues.length) {
-    resultText += '未發現任何問題，書狀品質良好。\n';
-  }
-
+  const resultText = formatReviewResult(reviewResult, preCheckResult);
   return { result: resultText, success: true };
+};
+
+/** Format review + structural pre-check results into markdown */
+const formatReviewResult = (
+  review: ReviewResult,
+  preCheck: { issues: Array<{ severity: string; description: string }> },
+): string => {
+  const lines: string[] = [review.passed ? '## 品質審查結果：通過\n' : '## 品質審查結果：未通過\n'];
+
+  const formatIssueGroup = (
+    title: string,
+    issues: typeof review.issues,
+    formatter: (i: (typeof review.issues)[number]) => string,
+  ) => {
+    if (issues.length === 0) return;
+    lines.push(`### ${title}（${issues.length} 項）\n`);
+    for (const issue of issues) lines.push(formatter(issue));
+    lines.push('');
+  };
+
+  formatIssueGroup(
+    '重要問題',
+    review.issues.filter((i) => i.severity === 'critical'),
+    (i) => `- **[${i.type}]** ${i.description}${i.suggestion ? `\n  建議：${i.suggestion}` : ''}`,
+  );
+
+  formatIssueGroup(
+    '建議改善',
+    review.issues.filter((i) => i.severity === 'warning'),
+    (i) => `- **[${i.type}]** ${i.description}${i.suggestion ? `\n  建議：${i.suggestion}` : ''}`,
+  );
+
+  if (preCheck.issues.length > 0) {
+    lines.push(`### 結構檢查（${preCheck.issues.length} 項）\n`);
+    for (const issue of preCheck.issues) lines.push(`- [${issue.severity}] ${issue.description}`);
+    lines.push('');
+  }
+
+  const hasCritical = review.issues.some((i) => i.severity === 'critical');
+  const hasWarning = review.issues.some((i) => i.severity === 'warning');
+  if (!hasCritical && !hasWarning && preCheck.issues.length === 0) {
+    lines.push('未發現任何問題，書狀品質良好。');
+  }
+
+  return lines.join('\n');
 };
