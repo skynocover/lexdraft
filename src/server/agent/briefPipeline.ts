@@ -30,6 +30,7 @@ import {
   STEP_STRATEGY,
   STEP_WRITER,
 } from './pipeline/pipelineProgress';
+import { HEADER_SECTION, FOOTER_SECTION } from '../../shared/sectionConstants';
 import {
   persistClaims,
   persistBriefContent,
@@ -314,8 +315,13 @@ export const runBriefPipeline = async (
         );
 
         if (rendered.header) {
-          headerParagraph = makeParagraph('header', '', rendered.header);
-          await sendParagraphSSE(headerParagraph);
+          // Remove first line (document type name) — already shown by .a4-title
+          const headerLines = rendered.header.split('\n');
+          const headerContent = headerLines.slice(1).join('\n').trim();
+          if (headerContent) {
+            headerParagraph = makeParagraph('header', HEADER_SECTION, headerContent);
+            await sendParagraphSSE(headerParagraph);
+          }
         }
         for (const sec of rendered.sections) {
           const p = makeParagraph('tpl', sec.heading, sec.content);
@@ -323,7 +329,7 @@ export const runBriefPipeline = async (
           await sendParagraphSSE(p);
         }
         if (rendered.footer) {
-          footerParagraph = makeParagraph('footer', '', rendered.footer);
+          footerParagraph = makeParagraph('footer', FOOTER_SECTION, rendered.footer);
           // Footer SSE sent after writer loop completes
         }
       } catch (err) {

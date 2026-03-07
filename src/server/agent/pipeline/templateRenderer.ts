@@ -138,7 +138,7 @@ ${part}`;
   // Render header, fillable sections, and footer in parallel
   const results = await Promise.all([
     parsed.header.trim() ? renderPart(parsed.header) : Promise.resolve(null),
-    ...fillableSections.map((s) => renderPart(`${s.heading}\n${s.body}`)),
+    ...fillableSections.map((s) => renderPart(s.body)),
     parsed.footer.trim() ? renderPart(parsed.footer) : Promise.resolve(null),
   ]);
 

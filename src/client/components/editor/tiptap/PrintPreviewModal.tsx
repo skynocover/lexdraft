@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react';
 
 interface PrintPreviewModalProps {
-  html: string
-  title: string
-  onClose: () => void
+  html: string;
+  title: string;
+  onClose: () => void;
 }
 
 const PRINT_CSS = `
@@ -23,11 +23,11 @@ body {
   color: #1a1a1a;
 }
 h2 {
-  font-size: 16pt;
+  font-size: 14pt;
   font-weight: bold;
   break-after: avoid;
-  margin-top: 1.5em;
-  margin-bottom: 0.5em;
+  margin-top: 1em;
+  margin-bottom: 0.3em;
 }
 h3 {
   font-size: 14pt;
@@ -42,7 +42,12 @@ p {
   widows: 2;
   margin: 0.3em 0;
 }
-`
+p.legal-preformatted {
+  text-indent: 0;
+  white-space: pre-wrap;
+  margin: 0.15em 0;
+}
+`;
 
 /** Styles injected into the preview container to make Paged.js pages look like white A4 sheets */
 const PREVIEW_CONTAINER_CSS = `
@@ -57,50 +62,48 @@ const PREVIEW_CONTAINER_CSS = `
   box-shadow: 0 2px 12px rgba(0,0,0,0.3);
   margin: 0 auto;
 }
-`
+`;
 
 export function PrintPreviewModal({ html, title, onClose }: PrintPreviewModalProps) {
-  const previewRef = useRef<HTMLDivElement>(null)
-  const [loading, setLoading] = useState(true)
-  const [pageCount, setPageCount] = useState(0)
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [pageCount, setPageCount] = useState(0);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
     async function render() {
-      const pagedjs = await import('pagedjs')
-      if (cancelled || !previewRef.current) return
+      const pagedjs = await import('pagedjs');
+      if (cancelled || !previewRef.current) return;
 
-      previewRef.current.innerHTML = ''
+      previewRef.current.innerHTML = '';
 
       // Inject preview styles
-      const styleEl = document.createElement('style')
-      styleEl.textContent = PREVIEW_CONTAINER_CSS
-      previewRef.current.appendChild(styleEl)
+      const styleEl = document.createElement('style');
+      styleEl.textContent = PREVIEW_CONTAINER_CSS;
+      previewRef.current.appendChild(styleEl);
 
-      const previewer = new pagedjs.Previewer()
+      const previewer = new pagedjs.Previewer();
 
-      const fullHtml = `<h1 style="text-align:center;font-size:18pt;font-weight:bold;margin-bottom:1em;">${title}</h1>${html}`
+      const fullHtml = `<h1 style="text-align:center;font-size:18pt;font-weight:bold;margin-bottom:1em;">${title}</h1>${html}`;
 
-      const flow = await previewer.preview(
-        fullHtml,
-        [{ text: PRINT_CSS }],
-        previewRef.current,
-      )
+      const flow = await previewer.preview(fullHtml, [{ text: PRINT_CSS }], previewRef.current);
 
       if (!cancelled) {
-        setPageCount(flow.total ?? flow.pages?.length ?? 0)
-        setLoading(false)
+        setPageCount(flow.total ?? flow.pages?.length ?? 0);
+        setLoading(false);
       }
     }
 
-    render()
-    return () => { cancelled = true }
-  }, [html, title])
+    render();
+    return () => {
+      cancelled = true;
+    };
+  }, [html, title]);
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) return
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
 
     printWindow.document.write(`<!DOCTYPE html>
 <html>
@@ -112,11 +115,11 @@ export function PrintPreviewModal({ html, title, onClose }: PrintPreviewModalPro
   <h1 style="text-align:center;font-size:18pt;font-weight:bold;margin-bottom:1em;">${title}</h1>
   ${html}
 </body>
-</html>`)
-    printWindow.document.close()
-    printWindow.focus()
-    setTimeout(() => printWindow.print(), 300)
-  }
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 300);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
@@ -125,9 +128,7 @@ export function PrintPreviewModal({ html, title, onClose }: PrintPreviewModalPro
         <div className="flex items-center justify-between border-b border-bd px-4 py-3">
           <div className="flex items-center gap-3">
             <h2 className="text-sm font-semibold text-t1">列印預覽</h2>
-            {!loading && (
-              <span className="text-xs text-t3">共 {pageCount} 頁</span>
-            )}
+            {!loading && <span className="text-xs text-t3">共 {pageCount} 頁</span>}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -152,12 +153,9 @@ export function PrintPreviewModal({ html, title, onClose }: PrintPreviewModalPro
               <span className="text-sm text-t3">正在生成預覽...</span>
             </div>
           )}
-          <div
-            ref={previewRef}
-            style={{ visibility: loading ? 'hidden' : 'visible' }}
-          />
+          <div ref={previewRef} style={{ visibility: loading ? 'hidden' : 'visible' }} />
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { nanoid } from 'nanoid';
 import type { Paragraph, Citation, TextSegment } from '../../../stores/useBriefStore';
+import { isPreformattedSection } from '../../../../shared/sectionConstants';
 
 /**
  * Convert content_structured { paragraphs: Paragraph[] } → Tiptap JSONContent document.
@@ -25,8 +26,10 @@ export function contentStructuredToTiptapDoc(
   let citationCounter = 0;
 
   for (const p of content.paragraphs) {
-    // Section heading
-    if (p.section && p.section !== prevSection) {
+    const isPreformatted = isPreformattedSection(p.section);
+
+    // Section heading (skip for header/footer — they have no visible heading)
+    if (!isPreformatted && p.section && p.section !== prevSection) {
       nodes.push({
         type: 'heading',
         attrs: { level: 2, sectionName: p.section, subsectionName: null },
@@ -37,7 +40,7 @@ export function contentStructuredToTiptapDoc(
     }
 
     // Subsection heading
-    if (p.subsection && p.subsection !== prevSubsection) {
+    if (!isPreformatted && p.subsection && p.subsection !== prevSubsection) {
       nodes.push({
         type: 'heading',
         attrs: { level: 2, sectionName: null, subsectionName: p.subsection },
@@ -47,7 +50,7 @@ export function contentStructuredToTiptapDoc(
     }
 
     // Paragraph node(s) — split at \n\n boundaries into separate <p> nodes
-    const pResult = buildParagraphNodes(p, citationCounter);
+    const pResult = buildParagraphNodes(p, citationCounter, isPreformatted ? p.section : false);
     citationCounter = pResult.nextCounter;
     nodes.push(...pResult.nodes);
   }
@@ -201,8 +204,10 @@ const splitAtParagraphBoundaries = (nodes: JSONContent[]): JSONContent[][] => {
 const buildParagraphNodes = (
   p: Paragraph,
   startCounter: number,
+  preformattedSection: string | false = false,
 ): { nodes: JSONContent[]; nextCounter: number } => {
   const inlineContent = buildInlineContent(p, startCounter);
+  const baseAttrs = { paragraphId: p.id, disputeId: p.dispute_id, preformattedSection };
 
   // Fast path: no consecutive hardBreaks → single <p>
   const hasDoubleBreak = inlineContent.nodes.some(
@@ -214,7 +219,7 @@ const buildParagraphNodes = (
       nodes: [
         {
           type: 'paragraph',
-          attrs: { paragraphId: p.id, disputeId: p.dispute_id },
+          attrs: baseAttrs,
           content: inlineContent.nodes.length > 0 ? inlineContent.nodes : undefined,
         },
       ],
@@ -230,7 +235,7 @@ const buildParagraphNodes = (
       nodes: [
         {
           type: 'paragraph',
-          attrs: { paragraphId: p.id, disputeId: p.dispute_id },
+          attrs: baseAttrs,
         },
       ],
       nextCounter: inlineContent.nextCounter,
@@ -242,6 +247,7 @@ const buildParagraphNodes = (
     attrs: {
       paragraphId: i === 0 ? p.id : nanoid(),
       disputeId: p.dispute_id,
+      preformattedSection,
     },
     content: group,
   }));
@@ -303,10 +309,11 @@ export function tiptapDocToContentStructured(doc: JSONContent): {
     if (node.type === 'paragraph') {
       const { segments, citations } = extractSegmentsFromNode(node);
       const contentMd = segments.map((s) => s.text).join('');
+      const preformattedSection = node.attrs?.preformattedSection;
 
       paragraphs.push({
         id: node.attrs?.paragraphId || generateId(),
-        section: currentSection,
+        section: preformattedSection || currentSection,
         subsection: currentSubsection,
         content_md: contentMd,
         segments,

@@ -11,6 +11,7 @@ import {
 } from 'docx';
 import { saveAs } from 'file-saver';
 import type { Paragraph, Citation } from '../../../stores/useBriefStore';
+import { isPreformattedSection } from '../../../../shared/sectionConstants';
 
 const FONT = 'DFKai-SB';
 const FONT_SIZE_PT = 14;
@@ -58,8 +59,10 @@ export async function exportBriefToDocx(
   let prevSubsection = '';
 
   for (const p of paragraphs) {
-    // Section heading
-    if (p.section && p.section !== prevSection) {
+    const isPreformatted = isPreformattedSection(p.section);
+
+    // Section heading (skip for header/footer)
+    if (!isPreformatted && p.section && p.section !== prevSection) {
       children.push(
         new DocxParagraph({
           heading: HeadingLevel.HEADING_2,
@@ -78,8 +81,8 @@ export async function exportBriefToDocx(
       prevSubsection = '';
     }
 
-    // Subsection heading
-    if (p.subsection && p.subsection !== prevSubsection) {
+    // Subsection heading (skip for header/footer)
+    if (!isPreformatted && p.subsection && p.subsection !== prevSubsection) {
       children.push(
         new DocxParagraph({
           heading: HeadingLevel.HEADING_3,
@@ -103,13 +106,22 @@ export async function exportBriefToDocx(
     if (p.segments && p.segments.length > 0) {
       for (const seg of p.segments) {
         if (seg.text) {
-          runs.push(
-            new TextRun({
-              text: seg.text,
-              font: FONT,
-              size: FONT_SIZE_HALF_PT,
-            }),
-          );
+          // For preformatted, split by \n and insert line breaks
+          const lines = seg.text.split('\n');
+          for (let li = 0; li < lines.length; li++) {
+            if (li > 0) {
+              runs.push(new TextRun({ break: 1, font: FONT, size: FONT_SIZE_HALF_PT }));
+            }
+            if (lines[li]) {
+              runs.push(
+                new TextRun({
+                  text: lines[li],
+                  font: FONT,
+                  size: FONT_SIZE_HALF_PT,
+                }),
+              );
+            }
+          }
         }
         for (const c of seg.citations) {
           runs.push(
@@ -146,7 +158,7 @@ export async function exportBriefToDocx(
 
     children.push(
       new DocxParagraph({
-        indent: { firstLine: convertMillimetersToTwip(10) }, // ~2em indent
+        indent: isPreformatted ? undefined : { firstLine: convertMillimetersToTwip(10) },
         spacing: { after: 60, line: LINE_SPACING_TWIPS },
         children: runs,
       }),

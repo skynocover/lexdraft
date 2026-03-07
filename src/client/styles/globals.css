@@ -358,6 +358,13 @@ body {
   margin: 0.3em 0;
 }
 
+/* Header/footer paragraphs — preserve original indentation, no text-indent */
+.a4-editor-content p.legal-preformatted {
+  text-indent: 0;
+  white-space: pre-wrap;
+  margin: 0.15em 0;
+}
+
 /* ---- Citation badges (inline, reduced size) ---- */
 .a4-editor-content [data-node-view-wrapper] {
   display: inline;
