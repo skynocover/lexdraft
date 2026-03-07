@@ -65,6 +65,7 @@ export const resolveLawsForSection = (
 export interface CaseMetadata {
   caseNumber: string;
   court: string;
+  division: string;
   clientRole: string; // 'plaintiff' | 'defendant' | ''
   caseInstructions: string;
 }
@@ -76,6 +77,7 @@ export class ContextStore {
   caseMetadata: CaseMetadata = {
     caseNumber: '',
     court: '',
+    division: '',
     clientRole: '',
     caseInstructions: '',
   };

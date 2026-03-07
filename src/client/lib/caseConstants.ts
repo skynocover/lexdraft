@@ -1,1 +1,1 @@
-export { COURTS, DEFAULT_BRIEF_LABEL } from '../../shared/caseConstants';
+export { COURTS, DIVISIONS, DEFAULT_BRIEF_LABEL } from '../../shared/caseConstants';

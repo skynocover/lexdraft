@@ -38,4 +38,6 @@ export const COURTS = [
   '臺灣高雄少年及家事法院',
 ] as const;
 
+export const DIVISIONS = ['民事庭', '刑事庭', '簡易庭', '家事庭', '行政訴訟庭'] as const;
+
 export const DEFAULT_BRIEF_LABEL = '書狀';

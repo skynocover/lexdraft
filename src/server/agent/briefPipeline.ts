@@ -311,6 +311,7 @@ export const runBriefPipeline = async (
             defendant: store.parties.defendant || null,
             caseNumber: store.caseMetadata.caseNumber || null,
             court: store.caseMetadata.court || null,
+            division: store.caseMetadata.division || null,
             clientRole: store.caseMetadata.clientRole || null,
             damagesTotal,
           },

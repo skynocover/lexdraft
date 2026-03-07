@@ -3,7 +3,7 @@ import { useCaseStore } from '../../../stores/useCaseStore';
 import { useTemplateStore, type TemplateSummary } from '../../../stores/useTemplateStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { Loader2, ExternalLink, Plus, Sparkles } from 'lucide-react';
-import { COURTS } from '../../../lib/caseConstants';
+import { COURTS, DIVISIONS } from '../../../lib/caseConstants';
 import {
   Select,
   SelectContent,
@@ -19,6 +19,7 @@ interface FormData {
   title: string;
   case_number: string;
   court: string;
+  division: string;
   template_id: string;
   client_role: string;
   plaintiff: string;
@@ -26,6 +27,7 @@ interface FormData {
   case_instructions: string;
 }
 
+const DEFAULT_DIVISION = DIVISIONS[0];
 /** 預設值：新案件預設 AI 自動選擇 */
 const DEFAULT_TEMPLATE_ID = 'auto';
 /** 表單值：不使用範本（DB 中為 null） */
@@ -51,6 +53,7 @@ export const CaseInfoTab = () => {
     title: '',
     case_number: '',
     court: '',
+    division: DEFAULT_DIVISION,
     template_id: DEFAULT_TEMPLATE_ID,
     client_role: '',
     plaintiff: '',
@@ -73,6 +76,7 @@ export const CaseInfoTab = () => {
         title: currentCase.title || '',
         case_number: currentCase.case_number || '',
         court: currentCase.court || '',
+        division: currentCase.division || '民事庭',
         template_id: toFormTemplateId(currentCase.template_id),
         client_role: currentCase.client_role || '',
         plaintiff: currentCase.plaintiff || '',
@@ -89,6 +93,7 @@ export const CaseInfoTab = () => {
       form.title !== (currentCase.title || '') ||
       form.case_number !== (currentCase.case_number || '') ||
       form.court !== (currentCase.court || '') ||
+      form.division !== (currentCase.division || DEFAULT_DIVISION) ||
       form.template_id !== currentTemplateId ||
       form.client_role !== (currentCase.client_role || '') ||
       form.plaintiff !== (currentCase.plaintiff || '') ||
@@ -97,7 +102,7 @@ export const CaseInfoTab = () => {
     );
   }, [form, currentCase]);
 
-  // 範本分組：自訂 vs 系統預設（不再按 category 分組）
+  // 範本分組：自訂 vs 系統預設
   const { customTemplates, defaultTemplates } = useMemo(() => {
     const custom: TemplateSummary[] = [];
     const defaults: TemplateSummary[] = [];
@@ -160,6 +165,7 @@ export const CaseInfoTab = () => {
         title: form.title.trim(),
         case_number: form.case_number.trim() || null,
         court: form.court.trim() || null,
+        division: form.division.trim() || null,
         template_id: fromFormTemplateId(form.template_id),
         client_role: (form.client_role as 'plaintiff' | 'defendant') || null,
         plaintiff: form.plaintiff.trim() || null,
@@ -191,24 +197,27 @@ export const CaseInfoTab = () => {
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto p-3">
-      <div className="space-y-3">
-        {/* 案件名稱 */}
-        <div>
-          <label className="mb-1 block text-xs text-t2">
-            案件名稱 <span className="text-rd">*</span>
-          </label>
-          <input
-            value={form.title}
-            onChange={set('title')}
-            placeholder="案件名稱"
-            className={inputClass}
-          />
-        </div>
+      <div className="space-y-4">
+        {/* ── 案件資訊 ── */}
+        <div className="space-y-2.5">
+          <h3 className="text-xs font-medium text-t2">案件資訊</h3>
 
-        {/* 案號 + 法院 */}
-        <div className="grid grid-cols-2 gap-2">
+          {/* 案件名稱 */}
           <div>
-            <label className="mb-1 block text-xs text-t2">案號</label>
+            <label className="mb-1 block text-[11px] text-t3">
+              案件名稱 <span className="text-rd">*</span>
+            </label>
+            <input
+              value={form.title}
+              onChange={set('title')}
+              placeholder="案件名稱"
+              className={inputClass}
+            />
+          </div>
+
+          {/* 案號 (full width) */}
+          <div>
+            <label className="mb-1 block text-[11px] text-t3">案號</label>
             <input
               value={form.case_number}
               onChange={set('case_number')}
@@ -216,144 +225,178 @@ export const CaseInfoTab = () => {
               className={inputClass}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-t2">法院</label>
-            <select value={form.court} onChange={set('court')} className={inputClass}>
-              <option value="">請選擇</option>
-              {COURTS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
 
-        {/* 書狀範本 */}
-        <div>
-          <label className="mb-1 block text-xs text-t2">書狀範本</label>
-          <Select
-            value={form.template_id || DEFAULT_TEMPLATE_ID}
-            onValueChange={handleTemplateChange}
-          >
-            <SelectTrigger className={inputClass}>
-              <SelectValue placeholder="AI 自動選擇" />
-            </SelectTrigger>
-            <SelectContent position="popper" className="max-h-72">
-              <SelectItem value="auto">
-                <span className="flex items-center gap-1.5">
-                  <Sparkles size={12} className="text-ac" />
-                  <span>AI 自動選擇</span>
-                </span>
-              </SelectItem>
-              <SelectItem value="none">不使用範本</SelectItem>
-              <SelectSeparator />
-
-              {/* 我的範本 */}
-              {customTemplates.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel>我的範本</SelectLabel>
-                  {customTemplates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.title}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-
-              {/* 系統範本 */}
-              {defaultTemplates.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel>系統範本</SelectLabel>
-                  {defaultTemplates.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.title}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-            </SelectContent>
-          </Select>
-          <div className="mt-1 flex items-center gap-2">
-            {form.template_id === DEFAULT_TEMPLATE_ID && (
-              <p className="text-[10px] text-t3">AI 會根據書狀類型自動選擇最合適的範本</p>
-            )}
-            {showPreview && (
-              <button
-                onClick={handlePreviewTemplate}
-                className="flex items-center gap-1 text-[10px] text-ac transition hover:underline"
+          {/* 法院 + 庭別 */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-[11px] text-t3">法院</label>
+              <Select
+                value={form.court || '__none__'}
+                onValueChange={(v) => setForm((f) => ({ ...f, court: v === '__none__' ? '' : v }))}
               >
-                <span>點擊預覽</span>
-                <ExternalLink size={10} />
-              </button>
-            )}
+                <SelectTrigger className={inputClass}>
+                  <SelectValue placeholder="請選擇" />
+                </SelectTrigger>
+                <SelectContent position="popper" className="max-h-72">
+                  <SelectItem value="__none__" className="text-t3">
+                    請選擇
+                  </SelectItem>
+                  <SelectSeparator />
+                  {COURTS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] text-t3">庭別</label>
+              <Select
+                value={form.division}
+                onValueChange={(v) => setForm((f) => ({ ...f, division: v }))}
+              >
+                <SelectTrigger className={inputClass}>
+                  <SelectValue placeholder="民事庭" />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  {DIVISIONS.map((d) => (
+                    <SelectItem key={d} value={d}>
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          {/* 新增自訂範本 */}
-          <button
-            onClick={handleCreateTemplate}
-            className="mt-1.5 flex w-full items-center justify-center gap-1 rounded border border-dashed border-bd py-1.5 text-[11px] text-t3 transition hover:border-ac hover:text-ac"
-          >
-            <Plus size={12} />
-            <span>新增自訂範本</span>
-          </button>
         </div>
 
-        {/* 我方立場 */}
-        <div>
-          <label className="mb-1 block text-xs text-t2">我方立場</label>
+        {/* ── 當事人 ── */}
+        <div className="space-y-2.5">
+          <h3 className="text-xs font-medium text-t2">當事人（我方立場）</h3>
+
           <div className="flex gap-2">
             {[
-              { value: 'plaintiff', label: '原告方' },
-              { value: 'defendant', label: '被告方' },
+              {
+                value: 'plaintiff',
+                label: '原告方',
+                field: 'plaintiff' as const,
+                placeholder: '原告名稱',
+              },
+              {
+                value: 'defendant',
+                label: '被告方',
+                field: 'defendant' as const,
+                placeholder: '被告名稱',
+              },
             ].map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, client_role: opt.value }))}
-                className={`flex-1 rounded border px-2.5 py-1.5 text-xs font-medium transition ${
-                  form.client_role === opt.value
-                    ? 'border-ac bg-ac/15 text-ac'
-                    : 'border-bd text-t3 hover:border-t3 hover:text-t1'
-                }`}
-              >
-                {opt.label}
-              </button>
+              <div key={opt.value} className="flex flex-1 flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, client_role: opt.value }))}
+                  className={`w-full rounded border px-2.5 py-1.5 text-xs font-medium transition ${
+                    form.client_role === opt.value
+                      ? 'border-ac bg-ac/15 text-ac'
+                      : 'border-bd text-t3 hover:border-t3 hover:text-t1'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+                <input
+                  value={form[opt.field]}
+                  onChange={set(opt.field)}
+                  placeholder={opt.placeholder}
+                  className={inputClass}
+                />
+              </div>
             ))}
           </div>
         </div>
 
-        {/* 原告 */}
-        <div>
-          <label className="mb-1 block text-xs text-t2">原告</label>
-          <input
-            value={form.plaintiff}
-            onChange={set('plaintiff')}
-            placeholder="原告名稱"
-            className={inputClass}
-          />
-        </div>
+        {/* ── AI 設定 ── */}
+        <div className="space-y-2.5">
+          <h3 className="text-xs font-medium text-t2">AI 設定</h3>
 
-        {/* 被告 */}
-        <div>
-          <label className="mb-1 block text-xs text-t2">被告</label>
-          <input
-            value={form.defendant}
-            onChange={set('defendant')}
-            placeholder="被告名稱"
-            className={inputClass}
-          />
-        </div>
+          {/* 書狀範本 */}
+          <div>
+            <label className="mb-1 block text-[11px] text-t3">書狀範本</label>
+            <Select
+              value={form.template_id || DEFAULT_TEMPLATE_ID}
+              onValueChange={handleTemplateChange}
+            >
+              <SelectTrigger className={inputClass}>
+                <SelectValue placeholder="AI 自動選擇" />
+              </SelectTrigger>
+              <SelectContent position="popper" className="max-h-72">
+                <SelectItem value="auto">
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-ac" />
+                    <span>AI 自動選擇</span>
+                  </span>
+                </SelectItem>
+                <SelectItem value="none">不使用範本</SelectItem>
+                <SelectSeparator />
 
-        {/* AI 處理指引 */}
-        <div>
-          <label className="mb-1 block text-xs text-t2">AI 處理指引</label>
-          <textarea
-            value={form.case_instructions}
-            onChange={set('case_instructions')}
-            placeholder="例：本案重點在過失比例，請加強被告超速的論述..."
-            className={`${inputClass} min-h-24 resize-y`}
-          />
-          <p className="mt-1 text-[10px] text-t3">AI 分析案件和撰寫書狀時會參考此指引</p>
+                {/* 我的範本 */}
+                {customTemplates.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>我的範本</SelectLabel>
+                    {customTemplates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.title}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+
+                {/* 系統範本 */}
+                {defaultTemplates.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>系統範本</SelectLabel>
+                    {defaultTemplates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.title}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+              </SelectContent>
+            </Select>
+            <div className="mt-1 flex items-center gap-2">
+              {form.template_id === DEFAULT_TEMPLATE_ID && (
+                <p className="text-[10px] text-t3">AI 會根據書狀類型自動選擇最合適的範本</p>
+              )}
+              {showPreview && (
+                <button
+                  onClick={handlePreviewTemplate}
+                  className="flex items-center gap-1 text-[10px] text-ac transition hover:underline"
+                >
+                  <span>點擊預覽</span>
+                  <ExternalLink size={10} />
+                </button>
+              )}
+            </div>
+            {/* 新增自訂範本 */}
+            <button
+              onClick={handleCreateTemplate}
+              className="mt-1.5 flex w-full items-center justify-center gap-1 rounded border border-dashed border-bd py-1.5 text-[11px] text-t3 transition hover:border-ac hover:text-ac"
+            >
+              <Plus size={12} />
+              <span>新增自訂範本</span>
+            </button>
+          </div>
+
+          {/* AI 處理指引 */}
+          <div>
+            <label className="mb-1 block text-[11px] text-t3">AI 處理指引</label>
+            <textarea
+              value={form.case_instructions}
+              onChange={set('case_instructions')}
+              placeholder="例：本案重點在過失比例，請加強被告超速的論述..."
+              className={`${inputClass} min-h-24 resize-y`}
+            />
+            <p className="mt-1 text-[10px] text-t3">AI 分析案件和撰寫書狀時會參考此指引</p>
+          </div>
         </div>
       </div>
 

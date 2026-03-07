@@ -9,6 +9,7 @@ export interface CaseDataForRender {
   defendant: string | null;
   caseNumber: string | null;
   court: string | null;
+  division: string | null;
   clientRole: string | null;
   damagesTotal: number | null;
 }
@@ -104,6 +105,7 @@ const buildCaseDataBlock = (caseData: CaseDataForRender): string =>
 被告：${caseData.defendant || '（無）'}
 案號：${caseData.caseNumber || '（無）'}
 法院：${caseData.court || '（無）'}
+庭別：${caseData.division || '（無）'}
 當事人立場：${caseData.clientRole || '未指定'}
 請求金額合計：${caseData.damagesTotal ? `新臺幣${caseData.damagesTotal.toLocaleString()}元` : '（無）'}`;
 

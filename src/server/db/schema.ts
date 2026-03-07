@@ -25,6 +25,7 @@ export const cases = sqliteTable('cases', {
   case_instructions: text('case_instructions'), // 律師 AI 處理指引
   law_refs: text('law_refs'),
   timeline: text('timeline'), // JSON array of timeline events
+  division: text('division'), // 庭別 (民事庭, 刑事庭, etc.)
   template_id: text('template_id'), // nullable, 選用的書狀範本
   created_at: text('created_at'),
   updated_at: text('updated_at'),

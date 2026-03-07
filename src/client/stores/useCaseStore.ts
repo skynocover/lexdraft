@@ -10,6 +10,7 @@ export interface Case {
   defendant: string | null;
   client_role: 'plaintiff' | 'defendant' | null;
   case_instructions: string | null;
+  division: string | null;
   template_id: string | null;
   created_at: string;
   updated_at: string;

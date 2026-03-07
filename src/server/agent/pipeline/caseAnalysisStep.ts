@@ -85,6 +85,7 @@ export const runCaseAnalysis = async (
           defendant: cases.defendant,
           case_number: cases.case_number,
           court: cases.court,
+          division: cases.division,
           client_role: cases.client_role,
           case_instructions: cases.case_instructions,
           timeline: cases.timeline,
@@ -99,6 +100,7 @@ export const runCaseAnalysis = async (
               defendant: null,
               case_number: null,
               court: null,
+              division: null,
               client_role: null,
               case_instructions: null,
               timeline: null,
@@ -160,6 +162,7 @@ export const runCaseAnalysis = async (
   store.caseMetadata = {
     caseNumber: caseRow.case_number || '',
     court: caseRow.court || '',
+    division: caseRow.division || '',
     clientRole: caseRow.client_role || '',
     caseInstructions: caseRow.case_instructions || '',
   };
@@ -254,12 +257,7 @@ export const runCaseAnalysis = async (
           plaintiff: sanitizeDbString(caseRow.plaintiff),
           defendant: sanitizeDbString(caseRow.defendant),
         },
-        caseMetadata: {
-          caseNumber: caseRow.case_number || '',
-          court: caseRow.court || '',
-          clientRole: caseRow.client_role || '',
-          caseInstructions: caseRow.case_instructions || '',
-        },
+        caseMetadata: store.caseMetadata,
         templateTitle: store.templateTitle,
       };
 
