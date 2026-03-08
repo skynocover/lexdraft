@@ -1,6 +1,8 @@
 import { getDB } from '../../db';
 import { TOOL_DEFINITIONS } from './definitions';
 import type { ToolContext, ToolHandler } from './types';
+import { safeParseToolArgs } from '../../lib/validate';
+import { toolSchemaMap } from '../../schemas/tools';
 
 import { handleListFiles } from './listFiles';
 import { handleReadFile } from './readFile';
@@ -37,6 +39,18 @@ export async function executeTool(
   if (!handler) {
     return { result: `未知的工具：${toolName}`, success: false };
   }
+
+  // Validate tool arguments against Zod schema
+  const schema = toolSchemaMap[toolName];
+  if (schema) {
+    const parsed = safeParseToolArgs(toolName, args, schema);
+    if (!parsed.success) {
+      return { result: parsed.error, success: false };
+    }
+  } else {
+    return { result: `工具 ${toolName} 未註冊驗證 schema`, success: false };
+  }
+
   const drizzle = getDB(db);
   return handler(args, caseId, db, drizzle, ctx);
 }

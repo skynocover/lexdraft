@@ -5,6 +5,8 @@ import { getDB } from '../db';
 import { cases } from '../db/schema';
 import type { AppEnv } from '../types';
 import { notFound } from '../lib/errors';
+import { parseBody } from '../lib/validate';
+import { createTimelineEventSchema, updateTimelineEventSchema } from '../schemas/timeline';
 
 interface TimelineItem {
   id: string;
@@ -68,12 +70,7 @@ timelineRouter.get('/cases/:caseId/timeline', async (c) => {
 // POST /api/cases/:caseId/timeline
 timelineRouter.post('/cases/:caseId/timeline', async (c) => {
   const caseId = c.req.param('caseId');
-  const body = await c.req.json<{
-    date: string;
-    title: string;
-    description?: string;
-    is_critical?: boolean;
-  }>();
+  const body = parseBody(await c.req.json(), createTimelineEventSchema);
   const drizzle = getDB(c.env.DB);
 
   const items = await readTimeline(drizzle, caseId);
@@ -98,12 +95,7 @@ timelineRouter.post('/cases/:caseId/timeline', async (c) => {
 timelineRouter.put('/cases/:caseId/timeline/:eventId', async (c) => {
   const caseId = c.req.param('caseId');
   const eventId = c.req.param('eventId');
-  const body = await c.req.json<{
-    date?: string;
-    title?: string;
-    description?: string;
-    is_critical?: boolean;
-  }>();
+  const body = parseBody(await c.req.json(), updateTimelineEventSchema);
   const drizzle = getDB(c.env.DB);
 
   const items = await readTimeline(drizzle, caseId);

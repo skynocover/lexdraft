@@ -5,6 +5,8 @@ import { getDB } from '../db';
 import { briefs, briefVersions, disputes } from '../db/schema';
 import type { AppEnv } from '../types';
 import { notFound } from '../lib/errors';
+import { parseBody } from '../lib/validate';
+import { createBriefSchema, updateBriefSchema } from '../schemas/briefs';
 
 const briefsRouter = new Hono<AppEnv>();
 
@@ -32,7 +34,7 @@ briefsRouter.get('/cases/:caseId/briefs', async (c) => {
 // POST /api/cases/:caseId/briefs — 建立新書狀
 briefsRouter.post('/cases/:caseId/briefs', async (c) => {
   const caseId = c.req.param('caseId');
-  const body = await c.req.json<{ template_id: string; title: string }>();
+  const body = parseBody(await c.req.json(), createBriefSchema);
   const db = getDB(c.env.DB);
 
   const id = nanoid();
@@ -83,11 +85,7 @@ briefsRouter.get('/briefs/:id', async (c) => {
 // PUT /api/briefs/:id — 更新書狀
 briefsRouter.put('/briefs/:id', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{
-    title?: string;
-    content_structured?: unknown;
-    template_id?: string;
-  }>();
+  const body = parseBody(await c.req.json(), updateBriefSchema);
   const db = getDB(c.env.DB);
 
   const updates: Record<string, unknown> = {

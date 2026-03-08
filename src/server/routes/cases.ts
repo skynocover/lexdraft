@@ -15,7 +15,8 @@ import {
   messages,
 } from '../db/schema';
 import { notFound } from '../lib/errors';
-import { requireString } from '../lib/validate';
+import { parseBody } from '../lib/validate';
+import { createCaseSchema, updateCaseSchema } from '../schemas/cases';
 
 const DEFAULT_USER_ID = 'default-user';
 
@@ -45,17 +46,7 @@ casesRouter.get('/', async (c) => {
 
 // POST /api/cases — 建立案件
 casesRouter.post('/', async (c) => {
-  const body = await c.req.json<{
-    title: string;
-    case_number?: string;
-    court?: string;
-    plaintiff?: string;
-    defendant?: string;
-    client_role?: string;
-    case_instructions?: string;
-  }>();
-
-  const title = requireString(body.title, '案件名稱');
+  const body = parseBody(await c.req.json(), createCaseSchema);
 
   const db = getDB(c.env.DB);
   await ensureDefaultUser(db);
@@ -63,7 +54,7 @@ casesRouter.post('/', async (c) => {
   const newCase = {
     id: nanoid(),
     user_id: DEFAULT_USER_ID,
-    title,
+    title: body.title,
     case_number: body.case_number?.trim() || null,
     court: body.court?.trim() || null,
     plaintiff: body.plaintiff?.trim() || null,
@@ -94,16 +85,7 @@ casesRouter.get('/:id', async (c) => {
 // PUT /api/cases/:id — 更新案件
 casesRouter.put('/:id', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{
-    title?: string;
-    case_number?: string;
-    court?: string;
-    plaintiff?: string;
-    defendant?: string;
-    client_role?: string;
-    case_instructions?: string;
-    template_id?: string | null;
-  }>();
+  const body = parseBody(await c.req.json(), updateCaseSchema);
 
   const db = getDB(c.env.DB);
   const existing = await db.select().from(cases).where(eq(cases.id, id));

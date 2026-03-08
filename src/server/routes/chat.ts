@@ -3,17 +3,16 @@ import { eq, asc } from 'drizzle-orm';
 import type { AppEnv } from '../types';
 import { getDB } from '../db';
 import { messages } from '../db/schema';
-import type { ChatMessageRecord, ChatRequest } from '../../shared/types';
-import { requireString } from '../lib/validate';
+import type { ChatMessageRecord } from '../../shared/types';
+import { parseBody } from '../lib/validate';
+import { sendMessageSchema } from '../schemas/chat';
 
 const chatRouter = new Hono<AppEnv>();
 
 // POST /api/cases/:caseId/chat — Chat streaming (SSE)
 chatRouter.post('/cases/:caseId/chat', async (c) => {
   const caseId = c.req.param('caseId');
-  const body = await c.req.json<ChatRequest>();
-
-  requireString(body.message, '訊息');
+  const body = parseBody(await c.req.json(), sendMessageSchema);
 
   // Get DO stub by caseId
   const id = c.env.AGENT_DO.idFromName(caseId);

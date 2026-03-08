@@ -3,7 +3,8 @@ import type { AppEnv } from '../types';
 import { callAI } from '../agent/aiClient';
 import type { ChatMessage } from '../agent/aiClient';
 import { badRequest } from '../lib/errors';
-import { requireString } from '../lib/validate';
+import { parseBody } from '../lib/validate';
+import { inlineAISchema } from '../schemas/inlineAI';
 
 type Operation = 'condense' | 'strengthen';
 
@@ -22,12 +23,7 @@ const inlineAIRouter = new Hono<AppEnv>();
 
 // POST /inline-ai/transform — 文字轉換
 inlineAIRouter.post('/inline-ai/transform', async (c) => {
-  const body = await c.req.json<{
-    text: string;
-    operation: string;
-  }>();
-
-  requireString(body.text, '轉換文字');
+  const body = parseBody(await c.req.json(), inlineAISchema);
 
   if (!VALID_OPERATIONS.has(body.operation)) {
     throw badRequest('無效的操作類型');

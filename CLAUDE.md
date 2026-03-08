@@ -29,6 +29,7 @@ LexDraft is a legal document drafting platform for Taiwanese lawyers. Full-stack
 - **Storage**: R2 bucket (`BUCKET`) for PDF files
 - **Queue**: `FILE_QUEUE` for async PDF processing (`src/server/queue/fileProcessor.ts`) — uploads are parsed via `unpdf`, summarized by AI, and stored back
 - **Auth**: Simple Bearer token middleware (`src/server/middleware/auth.ts`), token from `AUTH_TOKEN` env var
+- **Validation**: Zod v4 schemas in `src/server/schemas/`. Route bodies 用 `parseBody()`（throw badRequest），Agent tool args 用 `safeParseToolArgs()`（回傳 toolError，不 throw）
 
 **API Routes** (`src/server/routes/`): `cases`, `files`, `chat`, `briefs`, `damages`, `law`
 
@@ -156,6 +157,9 @@ npx wrangler d1 execute lexdraft-db --local --command "PRAGMA table_info(cases)"
 - Tailwind opacity 使用整數簡寫（如 `bg-white/2`、`bg-t3/8`）而非任意值（如 `bg-white/[0.02]`、`bg-t3/[0.08]`）
 - 使用 TypeScript，不要使用 `any` 類型
 - 為每個函數定義參數和返回類型
+- 新增 API route 的 POST/PUT/PATCH 必須在 `src/server/schemas/` 定義 Zod schema 並用 `parseBody()` 驗證
+- 新增 Agent tool 必須在 `schemas/tools.ts` 加對應 schema 並註冊到 `toolSchemaMap`
+- Zod 版本是 v4 — 錯誤客製用 `{ error: '...' }` 而非 v3 的 `{ required_error: '...' }`
 - Always start by creating a detailed todo list for the current task.
 - Check the todo list before starting each step, and update it after each step.
 - 確認TODO.md 的內容 必要時可以修改 例如做完或是你認為需要加上或補充的

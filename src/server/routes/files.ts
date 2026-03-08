@@ -5,6 +5,8 @@ import type { AppEnv } from '../types';
 import { getDB } from '../db';
 import { files, exhibits } from '../db/schema';
 import { badRequest, notFound } from '../lib/errors';
+import { parseBody } from '../lib/validate';
+import { updateFileSchema } from '../schemas/files';
 import { getExhibitPrefix, getMaxExhibitNumber, renumberExhibitPrefix } from '../lib/exhibitAssign';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
@@ -112,10 +114,7 @@ filesRouter.get('/cases/:caseId/files/status', async (c) => {
 // PUT /api/files/:id — 更新檔案（手動修改分類等）
 filesRouter.put('/files/:id', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{
-    category?: string;
-    doc_date?: string;
-  }>();
+  const body = parseBody(await c.req.json(), updateFileSchema);
 
   const db = getDB(c.env.DB);
   const existing = await db.select().from(files).where(eq(files.id, id));
