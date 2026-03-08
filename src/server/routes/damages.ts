@@ -5,6 +5,8 @@ import { getDB } from '../db';
 import { damages } from '../db/schema';
 import type { AppEnv } from '../types';
 import { notFound } from '../lib/errors';
+import { parseBody } from '../lib/validate';
+import { createDamageSchema, updateDamageSchema } from '../schemas/damages';
 
 const damagesRouter = new Hono<AppEnv>();
 
@@ -26,13 +28,7 @@ damagesRouter.get('/cases/:caseId/damages', async (c) => {
 // POST /api/cases/:caseId/damages — 新增金額項目
 damagesRouter.post('/cases/:caseId/damages', async (c) => {
   const caseId = c.req.param('caseId');
-  const body = await c.req.json<{
-    category: string;
-    description?: string;
-    amount: number;
-    basis?: string;
-    dispute_id?: string;
-  }>();
+  const body = parseBody(await c.req.json(), createDamageSchema);
   const db = getDB(c.env.DB);
 
   const id = nanoid();
@@ -68,13 +64,7 @@ damagesRouter.post('/cases/:caseId/damages', async (c) => {
 // PUT /api/damages/:id — 更新金額項目
 damagesRouter.put('/damages/:id', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{
-    category?: string;
-    description?: string;
-    amount?: number;
-    basis?: string;
-    dispute_id?: string;
-  }>();
+  const body = parseBody(await c.req.json(), updateDamageSchema);
   const db = getDB(c.env.DB);
 
   const updates: Record<string, unknown> = {};

@@ -5,7 +5,8 @@ import type { AppEnv } from '../types';
 import { getDB } from '../db';
 import { templates } from '../db/schema';
 import { notFound } from '../lib/errors';
-import { requireString } from '../lib/validate';
+import { parseBody } from '../lib/validate';
+import { createTemplateSchema, updateTemplateSchema } from '../schemas/templates';
 import { DEFAULT_TEMPLATES } from '../lib/defaultTemplates';
 
 const templatesRouter = new Hono<AppEnv>();
@@ -42,11 +43,7 @@ templatesRouter.get('/templates', async (c) => {
 
 // POST /api/templates — 新增自訂範本
 templatesRouter.post('/templates', async (c) => {
-  const body = await c.req.json<{
-    title?: string;
-    content_md?: string;
-    category?: string;
-  }>();
+  const body = parseBody(await c.req.json(), createTemplateSchema);
 
   const db = getDB(c.env.DB);
 
@@ -103,17 +100,14 @@ templatesRouter.put('/templates/:id', async (c) => {
     return c.json({ error: '系統預設範本不可修改' }, 403);
   }
 
-  const body = await c.req.json<{
-    title?: string;
-    content_md?: string;
-  }>();
+  const body = parseBody(await c.req.json(), updateTemplateSchema);
 
   const db = getDB(c.env.DB);
 
   const updates: Record<string, string | null> = {
     updated_at: new Date().toISOString(),
   };
-  if (body.title !== undefined) updates.title = requireString(body.title, '範本標題');
+  if (body.title !== undefined) updates.title = body.title;
   if (body.content_md !== undefined) updates.content_md = body.content_md;
 
   await db.update(templates).set(updates).where(eq(templates.id, id));

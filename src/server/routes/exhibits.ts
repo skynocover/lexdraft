@@ -5,6 +5,12 @@ import { getDB } from '../db';
 import { exhibits, files } from '../db/schema';
 import type { AppEnv } from '../types';
 import { notFound } from '../lib/errors';
+import { parseBody } from '../lib/validate';
+import {
+  createExhibitSchema,
+  updateExhibitSchema,
+  reorderExhibitsSchema,
+} from '../schemas/exhibits';
 import {
   buildExhibitLabel,
   deriveExhibitDescription,
@@ -44,11 +50,7 @@ exhibitsRouter.get('/cases/:caseId/exhibits', async (c) => {
 // POST /api/cases/:caseId/exhibits — 手動新增
 exhibitsRouter.post('/cases/:caseId/exhibits', async (c) => {
   const caseId = c.req.param('caseId');
-  const body = await c.req.json<{
-    file_id: string;
-    prefix?: string;
-    doc_type?: string;
-  }>();
+  const body = parseBody(await c.req.json(), createExhibitSchema);
   const db = getDB(c.env.DB);
 
   // Check file exists
@@ -82,10 +84,7 @@ exhibitsRouter.post('/cases/:caseId/exhibits', async (c) => {
 // NOTE: Must be registered BEFORE /:id to avoid Hono matching "reorder" as :id
 exhibitsRouter.patch('/cases/:caseId/exhibits/reorder', async (c) => {
   const caseId = c.req.param('caseId');
-  const body = await c.req.json<{
-    prefix: string;
-    order: string[]; // exhibit id array
-  }>();
+  const body = parseBody(await c.req.json(), reorderExhibitsSchema);
   const db = getDB(c.env.DB);
 
   // Update numbers based on array order
@@ -109,12 +108,7 @@ exhibitsRouter.patch('/cases/:caseId/exhibits/reorder', async (c) => {
 // PATCH /api/cases/:caseId/exhibits/:id — 更新單一 exhibit
 exhibitsRouter.patch('/cases/:caseId/exhibits/:id', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{
-    prefix?: string;
-    number?: number;
-    doc_type?: string;
-    description?: string;
-  }>();
+  const body = parseBody(await c.req.json(), updateExhibitSchema);
   const db = getDB(c.env.DB);
 
   const updates: Record<string, unknown> = {};

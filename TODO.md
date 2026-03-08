@@ -150,14 +150,15 @@
   - 前端顯示「生成失敗，點擊重試」→ 從失敗的 step 重跑
   - 已有 `ContextStore` serialize/deserialize 基礎，實作成本不高
   - Phase 2 開始面向律師用戶，pipeline 失敗不能讓用戶束手無策
-- [ ] **Infra-1. Zod 驗證層**
-  - 為所有 API route 的 request body 加入 Zod schema 驗證
-  - Agent tool arguments 加入 runtime Zod 驗證
-  - 統一錯誤回傳格式：`{ error: string, details?: ZodError['issues'] }`
-- [ ] **Infra-2. 統一錯誤處理**
-  - AppError class + Hono global error handler
-  - AI API 呼叫：retry with exponential backoff（最多 3 次）
-  - Queue Consumer：失敗時寫回 D1（status: error + error_message）
+- [x] **Infra-1. Zod 驗證層** ✅
+  - Zod v4 schemas in `src/server/schemas/`，所有 route + 10 tool 已遷移
+  - `parseBody()` for routes, `safeParseToolArgs()` for tools (self-healing)
+  - 統一錯誤回傳格式：`{ error: string, details?: ZodIssue[] }`
+  - 刪除舊 `requireString` / `requireNumber` / `requireArray`
+- [x] **Infra-2. 統一錯誤處理**（部分完成）
+  - ~~AppError class + Hono global error handler~~ ✅ 原本就有
+  - AI API 呼叫：retry with exponential backoff — 待 Infra-0 一併處理
+  - Queue Consumer：失敗時寫回 D1 — 待補
 
 ---
 

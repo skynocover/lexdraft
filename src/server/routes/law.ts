@@ -6,19 +6,14 @@ import { searchLaw } from '../lib/lawSearch';
 import { readLawRefs, upsertManyLawRefs, removeLawRef } from '../lib/lawRefsJson';
 import type { AppEnv } from '../types';
 import { notFound } from '../lib/errors';
-import { requireString, requireArray } from '../lib/validate';
+import { parseBody } from '../lib/validate';
+import { searchLawSchema, addLawRefsSchema } from '../schemas/law';
 
 const lawRouter = new Hono<AppEnv>();
 
 // POST /api/law/search — MongoDB Atlas Search
 lawRouter.post('/law/search', async (c) => {
-  const body = await c.req.json<{
-    query: string;
-    limit?: number;
-    nature?: string;
-  }>();
-
-  requireString(body.query, '搜尋關鍵字');
+  const body = parseBody(await c.req.json(), searchLawSchema);
 
   const results = await searchLaw(c.env.MONGO_URL, {
     query: body.query,
@@ -43,16 +38,7 @@ lawRouter.get('/cases/:caseId/law-refs', async (c) => {
 // POST /api/cases/:caseId/law-refs — add law refs
 lawRouter.post('/cases/:caseId/law-refs', async (c) => {
   const caseId = c.req.param('caseId');
-  const body = await c.req.json<{
-    items: Array<{
-      id: string;
-      law_name: string;
-      article: string;
-      full_text: string;
-    }>;
-  }>();
-
-  requireArray(body.items, '法條項目');
+  const body = parseBody(await c.req.json(), addLawRefsSchema);
 
   const db = getDB(c.env.DB);
   const refs = body.items.map((item) => ({
