@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { getDocumentProxy, extractText } from 'unpdf';
 import { getDB } from '../db';
 import { files, cases } from '../db/schema';
-import { callAI, type AIEnv } from '../agent/aiClient';
+import { callAI, callGeminiNative, type AIEnv } from '../agent/aiClient';
 
 const CMAP_BASE_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/';
 
@@ -45,6 +45,16 @@ interface ClassificationResult {
   doc_date: string | null;
   summary: string;
 }
+
+const CLASSIFICATION_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    category: { type: 'STRING', enum: ['brief', 'exhibit_a', 'exhibit_b', 'court', 'other'] },
+    doc_date: { type: 'STRING', nullable: true },
+    summary: { type: 'STRING' },
+  },
+  required: ['category', 'doc_date', 'summary'],
+};
 
 const buildClassifyPrompt = (clientRole: 'plaintiff' | 'defendant'): string => {
   const ourSide = clientRole === 'plaintiff' ? 'exhibit_a' : 'exhibit_b';
@@ -112,20 +122,20 @@ const classifyWithAI = async (
 ): Promise<ClassificationResult> => {
   const truncated = text.slice(0, 8000);
 
-  const { content } = await callAI(
+  const { content } = await callGeminiNative(
     aiEnv,
-    [
-      { role: 'system', content: buildClassifyPrompt(clientRole) },
-      { role: 'user', content: `檔案名稱：${filename}\n\n文件內容（前 8000 字）：\n${truncated}` },
-    ],
+    buildClassifyPrompt(clientRole),
+    `檔案名稱：${filename}\n\n文件內容（前 8000 字）：\n${truncated}`,
     {
-      model: FLASH_LITE_MODEL,
+      model: 'gemini-2.5-flash-lite',
       maxTokens: 1024,
-      responseFormat: { type: 'json_object' },
+      responseSchema: CLASSIFICATION_SCHEMA,
+      temperature: 0,
+      thinkingBudget: 0,
     },
   );
 
-  return JSON.parse(content || '{}') as ClassificationResult;
+  return JSON.parse(content) as ClassificationResult;
 };
 
 export const processFileMessage = async (

@@ -1,27 +1,31 @@
 /**
  * Generic factory for analysis tools (disputes, damages, timeline).
  * All three follow the same flow:
- *   ctx check → loadReadyFiles → buildFileContext → callAnalysisAI
- *   → parseLLMJsonArray → preProcess → persistAndNotify → return summary
+ *   ctx check → loadReadyFiles → buildFileContext(enriched)
+ *   → callGeminiNative(responseSchema, thinkingBudget:0, temperature:0)
+ *   → JSON.parse → preProcess → persistAndNotify → return summary
  */
 import type { getDB } from '../../db';
 import {
   toolError,
   loadReadyFiles,
   buildFileContext,
-  callAnalysisAI,
-  parseLLMJsonArray,
   type FileContextOptions,
 } from '../toolHelpers';
+import { callGeminiNative } from '../aiClient';
 import type { ToolHandler, ToolContext, ToolResult } from './types';
 import type { SSEEvent } from '../../../shared/types';
 
+const ANALYSIS_SYSTEM_PROMPT = '你是專業的台灣法律分析助手。';
+
 export interface AnalysisToolConfig<TItem> {
-  /** Options passed to buildFileContext */
+  /** Options passed to buildFileContext (enriched defaults to true) */
   fileContextOptions?: FileContextOptions;
   /** Build the AI prompt, with fileContext injected */
   buildPrompt: (fileContext: string) => string;
-  /** Error label for parseLLMJsonArray failure */
+  /** Gemini responseSchema for constrained decoding (OpenAPI format) */
+  responseSchema: Record<string, unknown>;
+  /** Error label for parse failure */
   parseErrorLabel: string;
   /** Message when AI returns an empty array */
   emptyMessage: string;
@@ -63,16 +67,36 @@ export const createAnalysisTool = <TItem>(config: AnalysisToolConfig<TItem>): To
       return e as ToolResult;
     }
 
-    // 2. Build context + prompt → call AI
-    const fileContext = buildFileContext(readyFiles, config.fileContextOptions);
+    // 2. Build context + prompt → call Gemini Native with constrained decoding
+    const contextOptions: FileContextOptions = {
+      enriched: true,
+      ...config.fileContextOptions,
+    };
+    const fileContext = buildFileContext(readyFiles, contextOptions);
     const prompt = config.buildPrompt(fileContext);
-    const responseText = await callAnalysisAI(ctx.aiEnv, prompt);
 
-    // 3. Parse JSON array from response
+    let content: string;
+    try {
+      const result = await callGeminiNative(ctx.aiEnv, ANALYSIS_SYSTEM_PROMPT, prompt, {
+        maxTokens: 8192,
+        responseSchema: config.responseSchema,
+        temperature: 0,
+        thinkingBudget: 0,
+      });
+      content = result.content;
+    } catch (e) {
+      console.error(`[analysisFactory] AI call failed:`, e);
+      return toolError(config.parseErrorLabel);
+    }
+
+    // 3. Parse JSON (guaranteed valid by responseSchema)
     let items: TItem[];
     try {
-      items = parseLLMJsonArray<TItem>(responseText, config.parseErrorLabel);
+      items = JSON.parse(content) as TItem[];
     } catch {
+      console.error(
+        `[analysisFactory] JSON parse failed (first 500 chars): ${content.slice(0, 500)}`,
+      );
       return toolError(config.parseErrorLabel);
     }
 

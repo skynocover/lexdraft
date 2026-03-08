@@ -171,10 +171,13 @@ export const callAI = async (
 const GEMINI_NATIVE_MODEL = 'gemini-2.5-flash';
 
 interface GeminiNativeOptions {
+  model?: string;
   maxTokens?: number;
   responseSchema?: Record<string, unknown>;
   responseMimeType?: string;
   signal?: AbortSignal;
+  temperature?: number;
+  thinkingBudget?: number;
 }
 
 /**
@@ -191,7 +194,8 @@ export const callGeminiNative = async (
   usage: { input_tokens: number; output_tokens: number };
   truncated: boolean;
 }> => {
-  const url = `${getGatewayBaseUrl(env)}/google-ai-studio/v1beta/models/${GEMINI_NATIVE_MODEL}:generateContent`;
+  const model = opts?.model || GEMINI_NATIVE_MODEL;
+  const url = `${getGatewayBaseUrl(env)}/google-ai-studio/v1beta/models/${model}:generateContent`;
 
   const body: Record<string, unknown> = {
     contents: [{ role: 'user', parts: [{ text: userMessage }] }],
@@ -200,6 +204,10 @@ export const callGeminiNative = async (
       maxOutputTokens: opts?.maxTokens || 4096,
       responseMimeType: opts?.responseMimeType || 'application/json',
       ...(opts?.responseSchema ? { responseSchema: opts.responseSchema } : {}),
+      ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      ...(opts?.thinkingBudget !== undefined
+        ? { thinkingConfig: { thinkingBudget: opts.thinkingBudget } }
+        : {}),
     },
   };
 

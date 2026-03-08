@@ -1,10 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { getDB } from '../db';
 import { files } from '../db/schema';
-import { callAIStreaming, type AIEnv } from './aiClient';
-import { collectStreamText } from './sseParser';
 import { parseJsonField } from '../lib/jsonUtils';
-import { parseSummaryText } from '../../shared/summaryUtils';
 
 // Re-export JSON utilities for backward compatibility
 export {
@@ -67,11 +64,12 @@ export async function loadReadyFiles(db: D1Database, caseId: string): Promise<Re
 
 export interface FileContextOptions {
   includeDocDate?: boolean;
+  enriched?: boolean;
 }
 
 /**
  * Build a text context string from ready files for analysis tool prompts.
- * Summary is now a plain string (no longer JSON with sub-fields).
+ * When `enriched: true`, includes key_claims, key_amounts, key_dates from summary JSON.
  */
 export const buildFileContext = (
   readyFiles: ReadyFile[],
@@ -85,27 +83,39 @@ export const buildFileContext = (
         lines.push(`日期：${f.doc_date || '不明'}`);
       }
 
-      lines.push(`摘要：${parseSummaryText(f.summary) || '無'}`);
+      // Parse summary JSON once, reuse for both summary text and enrichment fields
+      let summaryText: string | null = null;
+      let parsedObj: Record<string, unknown> | null = null;
+
+      if (f.summary) {
+        try {
+          const parsed = JSON.parse(f.summary);
+          if (typeof parsed === 'object' && parsed !== null) {
+            summaryText = (parsed.summary as string) || null;
+            parsedObj = parsed as Record<string, unknown>;
+          } else {
+            summaryText = String(parsed);
+          }
+        } catch {
+          summaryText = f.summary;
+        }
+      }
+
+      lines.push(`摘要：${summaryText || '無'}`);
+
+      if (options.enriched && parsedObj) {
+        const keyClaims = parsedObj.key_claims as string[] | undefined;
+        const keyAmounts = parsedObj.key_amounts as number[] | undefined;
+        const keyDates = parsedObj.key_dates as string[] | undefined;
+        if (keyClaims?.length) lines.push(`主張：${keyClaims.join('；')}`);
+        if (keyAmounts?.length)
+          lines.push(
+            `金額：${keyAmounts.map((a: number) => `NT$${a.toLocaleString()}`).join('、')}`,
+          );
+        if (keyDates?.length) lines.push(`相關日期：${keyDates.join('；')}`);
+      }
 
       return lines.join('\n');
     })
     .join('\n\n');
-};
-
-// ── Analysis AI Caller ──
-
-const ANALYSIS_SYSTEM_PROMPT = '你是專業的台灣法律分析助手。';
-
-/**
- * Call AI with the standard analysis system prompt and collect full text response.
- * Used by analysis tools (disputes, damages, timeline).
- */
-export const callAnalysisAI = async (aiEnv: AIEnv, prompt: string): Promise<string> => {
-  const response = await callAIStreaming(aiEnv, {
-    messages: [
-      { role: 'system', content: ANALYSIS_SYSTEM_PROMPT },
-      { role: 'user', content: prompt },
-    ],
-  });
-  return collectStreamText(response);
 };
