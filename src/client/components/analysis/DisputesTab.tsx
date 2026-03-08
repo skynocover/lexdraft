@@ -1,8 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAnalysisStore, type ClaimGraph, type Dispute } from '../../stores/useAnalysisStore';
+import { useCaseStore } from '../../stores/useCaseStore';
 import { cleanText } from '../../lib/textUtils';
 import { FactList } from './FactList';
+import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
 
 type EvidenceStatus = 'ok' | 'warn' | 'miss';
 
@@ -142,9 +145,9 @@ export const DisputesTab = () => {
       {disputes.length > 0 && (
         <div className="flex items-center gap-3 text-xs text-t3">
           <span>{disputes.length} 個爭點</span>
-          <span className="text-gr">充分 {summary.ok}</span>
-          <span className="text-yl">不足 {summary.warn}</span>
-          <span className="text-rd">缺漏 {summary.miss}</span>
+          {summary.ok > 0 && <span className="text-gr">充分 {summary.ok}</span>}
+          {summary.warn > 0 && <span className="text-yl">不足 {summary.warn}</span>}
+          {summary.miss > 0 && <span className="text-rd">缺漏 {summary.miss}</span>}
         </div>
       )}
 
@@ -181,13 +184,22 @@ const DisputeCard = ({
   isHighlighted?: boolean;
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const savingRef = useRef(false);
   const setHighlightDisputeId = useAnalysisStore((s) => s.setHighlightDisputeId);
+  const updateDispute = useAnalysisStore((s) => s.updateDispute);
+  const removeDispute = useAnalysisStore((s) => s.removeDispute);
+  const currentCase = useCaseStore((s) => s.currentCase);
 
   const evidenceStatus = getEvidenceStatus(dispute.evidence);
   const statusStyle = STATUS_STYLE[evidenceStatus];
 
-  const ourClaims = claims.filter((c) => c.side === 'ours');
-  const theirClaims = claims.filter((c) => c.side === 'theirs');
+  const ourClaims = useMemo(() => claims.filter((c) => c.side === 'ours'), [claims]);
+  const theirClaims = useMemo(() => claims.filter((c) => c.side === 'theirs'), [claims]);
   const sortedClaims = useMemo(() => sortClaimsByThread(claims), [claims]);
 
   useEffect(() => {
@@ -200,6 +212,13 @@ const DisputeCard = ({
     }
   }, [isHighlighted, setHighlightDisputeId]);
 
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
   const handleJumpToParagraph = () => {
     const el = document.querySelector(`[data-dispute-id="${dispute.id}"]`);
     if (el) {
@@ -209,37 +228,125 @@ const DisputeCard = ({
     }
   };
 
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditTitle(dispute.title || '');
+    setEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    const trimmed = editTitle.trim();
+    if (!trimmed || !currentCase) {
+      setEditing(false);
+      savingRef.current = false;
+      return;
+    }
+    try {
+      await updateDispute(currentCase.id, dispute.id, { title: trimmed });
+    } catch {
+      toast.error('更新爭點標題失敗');
+    }
+    setEditing(false);
+    savingRef.current = false;
+  };
+
+  const handleCancelEdit = () => {
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancelEdit();
+    }
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConfirmDelete(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!currentCase) return;
+    try {
+      await removeDispute(currentCase.id, dispute.id);
+      toast.success('爭點已刪除');
+    } catch {
+      toast.error('刪除爭點失敗');
+    } finally {
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <div
       className={`rounded border bg-bg-2 transition-colors ${
         isHighlighted ? 'border-yl bg-yl/10' : 'border-bd'
       }`}
       data-dispute-card={dispute.id}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-bg-h"
-      >
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex-1 truncate text-sm font-medium text-t1">
-                {cleanText(dispute.title || '未命名爭點')}
+      <div className="px-3 py-2.5">
+        <button
+          onClick={() => !editing && setExpanded(!expanded)}
+          className="flex w-full items-center gap-2 text-left transition"
+        >
+          <span className="shrink-0 text-xs font-medium text-t2">爭點 {dispute.number}</span>
+          <span className="flex-1" />
+          {hovered && !editing && (
+            <div className="flex shrink-0 items-center gap-1">
+              <span
+                role="button"
+                onClick={handleStartEdit}
+                className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+              >
+                <Pencil className="h-3.5 w-3.5" />
               </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-72">
+              <span
+                role="button"
+                onClick={handleDeleteClick}
+                className="rounded p-1 text-t3 transition hover:bg-rd/10 hover:text-rd"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </span>
+            </div>
+          )}
+          {(!hovered || editing) && (
+            <span className="shrink-0 text-xs text-t3">
+              我方 {ourClaims.length} / 對方 {theirClaims.length}
+            </span>
+          )}
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${statusStyle.cls}`}>
+            {statusStyle.label}
+          </span>
+          <ChevronRight
+            size={14}
+            className={`shrink-0 text-t3 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+          />
+        </button>
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleSaveEdit}
+            className="mt-1 w-full rounded border border-ac/50 bg-bg-1 px-2 py-1 text-sm font-medium text-t1 outline-none focus:border-ac"
+          />
+        ) : (
+          <button onClick={() => setExpanded(!expanded)} className="mt-1 w-full text-left">
+            <p className="truncate text-sm font-medium text-t1">
               {cleanText(dispute.title || '未命名爭點')}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <span className="shrink-0 text-xs text-t3">
-          我方 {ourClaims.length} / 對方 {theirClaims.length}
-        </span>
-        <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${statusStyle.cls}`}>
-          {statusStyle.label}
-        </span>
-        <span className="shrink-0 text-xs text-t3">{expanded ? '▾' : '▸'}</span>
-      </button>
+            </p>
+          </button>
+        )}
+      </div>
 
       {expanded && (
         <div className="space-y-2 border-t border-bd px-3 py-2.5">
@@ -278,6 +385,14 @@ const DisputeCard = ({
             跳到段落 →
           </button>
         </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          message={`確定刪除「${cleanText(dispute.title || '未命名爭點')}」？相關主張也會一併刪除。`}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setConfirmDelete(false)}
+        />
       )}
     </div>
   );

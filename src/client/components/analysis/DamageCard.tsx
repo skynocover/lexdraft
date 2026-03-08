@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import type { Damage } from '../../stores/useAnalysisStore';
 import { cleanText, formatAmount } from '../../lib/textUtils';
 
@@ -53,7 +53,12 @@ export const DamageCard = ({ damage, onEdit, onDelete }: DamageCardProps) => {
           </div>
         )}
 
-        {!hovered && <span className="shrink-0 text-xs text-t3">{expanded ? '▾' : '▸'}</span>}
+        {!hovered && (
+          <ChevronRight
+            size={14}
+            className={`shrink-0 text-t3 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+          />
+        )}
       </button>
 
       {expanded && damage.basis && (

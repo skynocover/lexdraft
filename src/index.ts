@@ -8,6 +8,7 @@ import { filesRouter } from './server/routes/files';
 import { chatRouter } from './server/routes/chat';
 import { briefsRouter } from './server/routes/briefs';
 import { damagesRouter } from './server/routes/damages';
+import { disputesRouter } from './server/routes/disputes';
 import { briefVersionsRouter } from './server/routes/briefVersions';
 import { lawRouter } from './server/routes/law';
 import { timelineRouter } from './server/routes/timeline';
@@ -55,6 +56,9 @@ api.route('/', briefVersionsRouter);
 
 // 金額計算（包含 /cases/:caseId/damages 和 /damages/:id 路由）
 api.route('/', damagesRouter);
+
+// 爭點（包含 /cases/:caseId/disputes/:id PATCH/DELETE 路由）
+api.route('/', disputesRouter);
 
 // 法條搜尋（包含 /law/search 和 /cases/:caseId/law-refs 路由）
 api.route('/', lawRouter);

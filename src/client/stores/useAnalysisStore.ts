@@ -93,6 +93,10 @@ interface AnalysisState {
   ) => Promise<void>;
   removeTimelineEvent: (caseId: string, eventId: string) => Promise<void>;
 
+  // Disputes CRUD
+  updateDispute: (caseId: string, disputeId: string, updates: { title: string }) => Promise<void>;
+  removeDispute: (caseId: string, disputeId: string) => Promise<void>;
+
   // Damages CRUD
   addDamage: (caseId: string, data: DamageInput) => Promise<void>;
   updateDamage: (damageId: string, updates: Partial<DamageInput>) => Promise<void>;
@@ -157,6 +161,20 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   removeTimelineEvent: async (caseId, eventId) => {
     await api.delete(`/cases/${caseId}/timeline/${eventId}`);
     set({ timeline: get().timeline.filter((e) => e.id !== eventId) });
+  },
+
+  // Disputes CRUD
+  updateDispute: async (caseId, disputeId, updates) => {
+    const updated = await api.patch<Dispute>(`/cases/${caseId}/disputes/${disputeId}`, updates);
+    set({ disputes: get().disputes.map((d) => (d.id === disputeId ? updated : d)) });
+  },
+
+  removeDispute: async (caseId, disputeId) => {
+    await api.delete(`/cases/${caseId}/disputes/${disputeId}`);
+    set({
+      disputes: get().disputes.filter((d) => d.id !== disputeId),
+      claims: get().claims.filter((c) => c.dispute_id !== disputeId),
+    });
   },
 
   // Damages CRUD
