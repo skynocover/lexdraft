@@ -12,27 +12,38 @@ interface DisputeItem {
   law_refs: string[];
 }
 
+export const DISPUTES_SCHEMA = {
+  type: 'ARRAY',
+  items: {
+    type: 'OBJECT',
+    properties: {
+      number: { type: 'INTEGER' },
+      title: { type: 'STRING' },
+      our_position: { type: 'STRING' },
+      their_position: { type: 'STRING' },
+      evidence: { type: 'ARRAY', items: { type: 'STRING' } },
+      law_refs: { type: 'ARRAY', items: { type: 'STRING' } },
+    },
+    required: ['number', 'title', 'our_position', 'their_position', 'evidence', 'law_refs'],
+  },
+};
+
 export const handleAnalyzeDisputes = createAnalysisTool<DisputeItem>({
-  buildPrompt: (
-    fileContext,
-  ) => `你是專業的台灣法律分析助手。請根據以下案件文件摘要，分析雙方的爭點。
+  responseSchema: DISPUTES_SCHEMA,
+
+  buildPrompt: (fileContext) => `請根據以下案件文件摘要，分析雙方的爭點。
 
 ${fileContext}
 
-請以 JSON 格式回傳爭點列表，格式如下：
-[
-  {
-    "number": 1,
-    "title": "爭點標題",
-    "our_position": "我方立場",
-    "their_position": "對方立場",
-    "evidence": ["相關證據1", "相關證據2"],
-    "law_refs": ["民法第XXX條"]
-  }
-]
+請回傳爭點列表。
+- number：爭點編號（從 1 開始）
+- title：爭點標題
+- our_position：我方立場
+- their_position：對方立場
+- evidence：相關證據列表
+- law_refs：相關法條列表（如「民法第XXX條」）
 
-重要：絕對不要使用 emoji 或特殊符號（如 ✅❌🔷📄⚖️💰🔨 等），只用純中文文字和標點符號。
-只回傳 JSON 陣列，不要其他文字。`,
+重要：不要使用 emoji 或特殊符號（如 ✅❌🔷📄⚖️💰🔨 等），只用純中文文字和標點符號。`,
 
   parseErrorLabel: '無法解析爭點分析結果',
   emptyMessage: '未能識別出爭點，請確認檔案已正確處理。',
