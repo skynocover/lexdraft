@@ -109,6 +109,7 @@ interface TabState {
   ) => void;
   updateBriefTabTitle: (briefId: string, title: string) => void;
   openTemplateTab: (templateId: string, title: string) => void;
+  openTemplateTabInOtherPanel: (templateId: string, title: string) => void;
   updateTemplateTabTitle: (templateId: string, title: string) => void;
   openLawSearchTab: (initialQuery?: string, autoSearch?: boolean) => void;
   updateLawSearchTabQuery: (searchId: string, query: string) => void;
@@ -733,6 +734,11 @@ export const useTabStore = create<TabState>((set, get) => ({
       ),
     });
     syncActiveTabStore(get().tabRegistry[tabId]);
+  },
+
+  openTemplateTabInOtherPanel: (templateId, title) => {
+    const tabId = `template:${templateId}`;
+    openInOtherPanel(get, set, tabId, () => get().openTemplateTab(templateId, title));
   },
 
   updateTemplateTabTitle: (templateId, title) => {

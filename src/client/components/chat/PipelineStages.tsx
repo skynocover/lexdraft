@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Check, ChevronDown, ChevronRight, Minus, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, FileText, Minus, X } from 'lucide-react';
 import type { PipelineStep, PipelineStepChild } from '../../../shared/types';
 import { formatDuration } from '../../lib/formatDuration';
 import { StageBadge, StepChildren, ReviewContent, isEmptyResult } from './PipelineStageContent';
 import type { ReviewData } from './PipelineStageContent';
 import { cleanText } from '../../lib/textUtils';
+import { useBriefStore } from '../../stores/useBriefStore';
+import { useTemplateStore } from '../../stores/useTemplateStore';
+import { useTabStore } from '../../stores/useTabStore';
 
 // ── Content data types ──
 
@@ -88,13 +91,40 @@ const itemBadge = (type: ResearchItem['type']) => {
 
 // ── Main component ──
 
-export const PipelineStages = ({ steps }: { steps: PipelineStep[] }) => (
-  <div className="rounded-2xl border border-bd/50 bg-white/2 px-1 py-2">
-    {steps.map((step, i) => (
-      <StageCard key={i} step={step} isLast={i === steps.length - 1} />
-    ))}
-  </div>
-);
+export const PipelineStages = ({ steps }: { steps: PipelineStep[] }) => {
+  const allDone =
+    steps.length > 0 && steps.every((s) => s.status === 'done' || s.status === 'error');
+  const templateId = useBriefStore((s) => s.currentBrief?.template_id);
+  const templateTitle = useTemplateStore(
+    (s) => s.templates.find((t) => t.id === templateId)?.title ?? null,
+  );
+
+  const handleViewTemplate = () => {
+    if (templateId && templateTitle) {
+      useTabStore.getState().openTemplateTabInOtherPanel(templateId, templateTitle);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-bd/50 bg-white/2 px-1 py-2">
+      {steps.map((step, i) => (
+        <StageCard key={i} step={step} isLast={i === steps.length - 1} />
+      ))}
+      {allDone && templateId && templateTitle && (
+        <div className="mx-4 mt-1 mb-2 flex items-center gap-2.5 rounded-xl border border-ac/15 bg-ac/5 px-4 py-2.5">
+          <FileText size={14} className="shrink-0 text-ac" />
+          <span className="flex-1 text-xs text-t2">使用範本：{templateTitle}</span>
+          <button
+            onClick={handleViewTemplate}
+            className="shrink-0 rounded-md bg-ac/10 px-2.5 py-1 text-xs font-medium text-ac transition-colors hover:bg-ac/20"
+          >
+            查看
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ── Stage card ──
 
