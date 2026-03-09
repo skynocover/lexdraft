@@ -8,6 +8,7 @@ import {
   STRATEGY_JSON_SCHEMA,
 } from './strategyConstants';
 import { FALLBACK_GUIDANCE } from '../../lib/defaultTemplates';
+import { getCaseTypeGuidance } from './caseTypeKnowledge';
 import type { ReasoningStrategyInput } from '../pipeline/types';
 
 export const REASONING_STRATEGY_SYSTEM_PROMPT = `你是一位資深台灣訴訟律師，正在為案件制定論證策略。你可以使用文字自由推理，也可以搜尋法條資料庫來補充推理所需的法律依據。
@@ -193,6 +194,9 @@ export const buildReasoningStrategyInput = (
 
   const structureGuidance = hasTemplate ? '' : `\n\n${FALLBACK_GUIDANCE}`;
 
+  const caseTypeGuidance = getCaseTypeGuidance(input.caseSummary || '', meta?.clientRole);
+  const caseTypeBlock = caseTypeGuidance ? `\n\n${caseTypeGuidance}` : '';
+
   return `[案件全貌]
 ${input.caseSummary || '（尚未整合）'}
 ${caseMetaBlock}${instructionsBlock}
@@ -218,6 +222,6 @@ ${damageText}${input.damages.length > 0 ? `\n合計：NT$ ${totalDamage.toLocale
 
 [時間軸]
 ${timelineText}
-${structureGuidance}
+${caseTypeBlock}${structureGuidance}
 請開始分析。先用文字推理（請求權基礎分析、構成要件檢視、攻防預判），如果需要額外法條就用 search_law 搜尋。推理完成後呼叫 finalize_strategy，然後輸出完整 JSON。`;
 };

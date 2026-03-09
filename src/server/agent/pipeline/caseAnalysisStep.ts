@@ -345,10 +345,10 @@ export const runCaseAnalysis = async (
         for (let i = 0; i < orchestratorOutput.legalIssues.length; i += DISPUTE_BATCH_SIZE) {
           const batch = orchestratorOutput.legalIssues.slice(i, i + DISPUTE_BATCH_SIZE);
           await ctx.drizzle.insert(disputes).values(
-            batch.map((issue) => ({
+            batch.map((issue, batchIndex) => ({
               id: issue.id,
               case_id: ctx.caseId,
-              number: 0,
+              number: i + batchIndex + 1,
               title: issue.title,
               our_position: issue.our_position,
               their_position: issue.their_position,
