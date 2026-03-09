@@ -7,6 +7,7 @@ import { briefs, briefVersions, claims, exhibits } from '../../db/schema';
 import { upsertManyLawRefs } from '../../lib/lawRefsJson';
 import type { LawRefItem } from '../../lib/lawRefsJson';
 import type { Claim, PipelineContext } from './types';
+import type { ClientRole } from '../../../shared/caseConstants';
 import type { Paragraph } from '../../../client/stores/useBriefStore';
 import {
   assignExhibits,
@@ -89,7 +90,7 @@ export const saveBriefVersion = async (
 export const persistExhibits = async (
   ctx: PipelineContext,
   paragraphs: Paragraph[],
-  clientRole: string,
+  clientRole: ClientRole | '',
   files: FileInfo[],
 ): Promise<void> => {
   const role = clientRole === 'defendant' ? 'defendant' : 'plaintiff';

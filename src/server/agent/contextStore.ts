@@ -62,11 +62,15 @@ export const resolveLawsForSection = (
   return allLaws;
 };
 
+import type { ClientRole } from '../../shared/caseConstants';
+
+export type { ClientRole };
+
 export interface CaseMetadata {
   caseNumber: string;
   court: string;
   division: string;
-  clientRole: string; // 'plaintiff' | 'defendant' | ''
+  clientRole: ClientRole | '';
   caseInstructions: string;
 }
 

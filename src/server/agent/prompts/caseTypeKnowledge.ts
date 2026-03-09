@@ -5,6 +5,7 @@
 // 根據 clientRole 選擇原告或被告視角。
 // 新增案型：在 caseTypes/ 建立檔案，然後加入下方 REGISTRY。
 
+import type { ClientRole } from '../../../shared/caseConstants';
 import type { CaseTypeEntry } from './caseTypes/types';
 import { trafficAccident } from './caseTypes/trafficAccident';
 import { loanDispute } from './caseTypes/loanDispute';
@@ -36,7 +37,10 @@ const MAX_MATCHES = 2;
  * Multi-label：所有 ≥ MIN_SCORE 的案型依分數排序，取前 MAX_MATCHES 個。
  * 回傳 null 表示無對應指南（未匹配或分數不足）。
  */
-export const getCaseTypeGuidance = (caseSummary: string, clientRole?: string): string | null => {
+export const getCaseTypeGuidance = (
+  caseSummary: string,
+  clientRole?: ClientRole | '',
+): string | null => {
   const scored: { entry: CaseTypeEntry; score: number }[] = [];
 
   for (const entry of REGISTRY) {

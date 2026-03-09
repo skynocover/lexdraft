@@ -3,6 +3,7 @@
 // Uses Gemini Flash Lite for context-aware placeholder replacement.
 
 import { callOpenRouterText, type AIEnv } from '../aiClient';
+import type { ClientRole } from '../../../shared/caseConstants';
 
 export interface CaseDataForRender {
   plaintiff: string | null;
@@ -10,7 +11,7 @@ export interface CaseDataForRender {
   caseNumber: string | null;
   court: string | null;
   division: string | null;
-  clientRole: string | null;
+  clientRole: ClientRole | null;
   damagesTotal: number | null;
 }
 

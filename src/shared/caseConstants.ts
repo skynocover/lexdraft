@@ -40,4 +40,7 @@ export const COURTS = [
 
 export const DIVISIONS = ['民事庭', '刑事庭', '簡易庭', '家事庭', '行政訴訟庭'] as const;
 
+export const CLIENT_ROLES = ['plaintiff', 'defendant'] as const;
+export type ClientRole = (typeof CLIENT_ROLES)[number];
+
 export const DEFAULT_BRIEF_LABEL = '書狀';

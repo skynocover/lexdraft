@@ -9,6 +9,7 @@ import { collectStreamWithToolCalls } from './sseParser';
 import { files } from '../db/schema';
 import { getDB } from '../db';
 import type { LegalIssue, InformationGap, StructuredFact } from './pipeline/types';
+import type { CaseMetadata } from './contextStore';
 import {
   CASE_READER_SYSTEM_PROMPT,
   CASE_READER_TOOLS,
@@ -230,12 +231,7 @@ export const runIssueAnalyzer = async (
   caseReaderOutput: CaseReaderOutput,
   templateTitle: string,
   signal: AbortSignal,
-  caseMetadata?: {
-    caseNumber: string;
-    court: string;
-    clientRole: string;
-    caseInstructions: string;
-  },
+  caseMetadata?: CaseMetadata,
 ): Promise<IssueAnalyzerOutput> => {
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => timeoutController.abort(), ISSUE_ANALYZER_TIMEOUT_MS);

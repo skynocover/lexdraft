@@ -5,6 +5,7 @@ import type { Paragraph, Citation, TextSegment } from '../../../client/stores/us
 import type { getDB } from '../../db';
 import type { AIEnv } from '../aiClient';
 import type { SSEEvent } from '../../../shared/types';
+import type { CaseMetadata } from '../contextStore';
 
 // ── Pipeline Context (shared across all steps) ──
 
@@ -252,13 +253,7 @@ export interface ReasoningStrategyInput {
     article_no: string;
     content: string;
   }>;
-  caseMetadata?: {
-    caseNumber: string;
-    court: string;
-    division: string;
-    clientRole: string;
-    caseInstructions: string;
-  };
+  caseMetadata?: CaseMetadata;
 }
 
 // Re-export commonly used types

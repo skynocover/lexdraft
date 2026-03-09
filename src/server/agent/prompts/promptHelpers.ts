@@ -2,15 +2,17 @@
 // Extracted from orchestratorPrompt / strategistPrompt / writerStep to DRY up
 // the repeated clientRole label and case metadata block construction.
 
+import type { ClientRole } from '../../../shared/caseConstants';
+
 export interface CaseMetaInput {
   caseNumber?: string;
   court?: string;
-  clientRole?: string;
+  clientRole?: ClientRole | '';
   caseInstructions?: string;
 }
 
 /** Map clientRole value to display label */
-export const getClientRoleLabel = (clientRole?: string): string => {
+export const getClientRoleLabel = (clientRole?: ClientRole | ''): string => {
   if (clientRole === 'plaintiff') return '原告方';
   if (clientRole === 'defendant') return '被告方';
   return '';

@@ -163,7 +163,10 @@ export const runCaseAnalysis = async (
     caseNumber: caseRow.case_number || '',
     court: caseRow.court || '',
     division: caseRow.division || '',
-    clientRole: caseRow.client_role || '',
+    clientRole:
+      caseRow.client_role === 'plaintiff' || caseRow.client_role === 'defendant'
+        ? caseRow.client_role
+        : '',
     caseInstructions: caseRow.case_instructions || '',
   };
 

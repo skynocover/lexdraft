@@ -2,6 +2,7 @@
 // Split into Case Reader (reads files, produces summary) and Issue Analyzer (identifies legal issues).
 
 import type { ToolDef } from '../aiClient';
+import type { CaseMetadata } from '../contextStore';
 import { buildCaseMetaLines, buildInstructionsBlock } from './promptHelpers';
 
 // ── Structured FileNote type ──
@@ -193,12 +194,7 @@ export interface OrchestratorInput {
     summary: string | null;
   }>;
   existingParties: { plaintiff: string | null; defendant: string | null };
-  caseMetadata?: {
-    caseNumber: string;
-    court: string;
-    clientRole: string;
-    caseInstructions: string;
-  };
+  caseMetadata?: CaseMetadata;
   templateTitle: string;
 }
 
@@ -261,12 +257,7 @@ export const formatFileNotes = (notes: FileNote[]): string => {
 export interface IssueAnalyzerInput {
   caseSummary: string;
   parties: { plaintiff: string; defendant: string };
-  caseMetadata?: {
-    caseNumber: string;
-    court: string;
-    clientRole: string;
-    caseInstructions: string;
-  };
+  caseMetadata?: CaseMetadata;
   timelineSummary: string;
   fileNotes: string;
   templateTitle: string;
