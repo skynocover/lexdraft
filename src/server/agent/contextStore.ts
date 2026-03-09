@@ -16,7 +16,7 @@ import type {
   PerIssueAnalysis,
 } from './pipeline/types';
 import type { OrchestratorOutput } from './orchestratorAgent';
-import { parseJsonField } from '../lib/jsonUtils';
+import { mapDisputeToLegalIssue, type DisputeRow } from './toolHelpers';
 
 /**
  * 3-tier law fallback for a section:
@@ -167,25 +167,8 @@ export class ContextStore {
   // ── Mutation Methods (called by pipeline steps) ──
 
   /** Seed from existing disputes (backward compatible) */
-  seedFromDisputes = (
-    disputeList: Array<{
-      id: string;
-      title: string | null;
-      our_position: string | null;
-      their_position: string | null;
-      law_refs: string | null;
-      evidence: string | null;
-    }>,
-  ) => {
-    this.legalIssues = disputeList.map((d) => ({
-      id: d.id,
-      title: d.title || '未命名爭點',
-      our_position: d.our_position || '',
-      their_position: d.their_position || '',
-      key_evidence: parseJsonField<string[]>(d.evidence, []),
-      mentioned_laws: parseJsonField<string[]>(d.law_refs, []),
-      facts: [],
-    }));
+  seedFromDisputes = (disputeList: DisputeRow[]) => {
+    this.legalIssues = disputeList.map(mapDisputeToLegalIssue);
   };
 
   /** Seed from Orchestrator Agent output (Phase 3a) */

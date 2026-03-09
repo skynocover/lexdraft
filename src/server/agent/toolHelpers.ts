@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { getDB } from '../db';
 import { files } from '../db/schema';
 import { parseJsonField } from '../lib/jsonUtils';
+import type { LegalIssue } from './pipeline/types';
 
 // Re-export JSON utilities for backward compatibility
 export {
@@ -59,6 +60,28 @@ export async function loadReadyFiles(db: D1Database, caseId: string): Promise<Re
   }
   return readyFiles;
 }
+
+// ── Dispute Row → LegalIssue Mapper ──
+
+export interface DisputeRow {
+  id: string;
+  title: string | null;
+  our_position: string | null;
+  their_position: string | null;
+  evidence: string | null;
+  law_refs: string | null;
+}
+
+/** Map a dispute DB row to a LegalIssue object */
+export const mapDisputeToLegalIssue = (d: DisputeRow): LegalIssue => ({
+  id: d.id,
+  title: d.title || '未命名爭點',
+  our_position: d.our_position || '',
+  their_position: d.their_position || '',
+  key_evidence: parseJsonField<string[]>(d.evidence, []),
+  mentioned_laws: parseJsonField<string[]>(d.law_refs, []),
+  facts: [],
+});
 
 // ── File Context Builder ──
 

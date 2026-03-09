@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { briefs, disputes } from '../../db/schema';
 import { callClaude } from '../claudeClient';
 import { runStructuralPreCheck } from '../pipeline/structuralPreCheck';
-import { parseLLMJsonResponse } from '../toolHelpers';
+import { parseLLMJsonResponse, mapDisputeToLegalIssue } from '../toolHelpers';
 import { DEFAULT_BRIEF_LABEL } from '../../../shared/caseConstants';
 import {
   QUALITY_REVIEWER_SYSTEM_PROMPT,
@@ -50,15 +50,7 @@ export const handleQualityReview: ToolHandler = async (_args, caseId, _db, drizz
   // 3. Load disputes as legal issues
   const disputeRows = await drizzle.select().from(disputes).where(eq(disputes.case_id, caseId));
 
-  const legalIssues: LegalIssue[] = disputeRows.map((d) => ({
-    id: d.id,
-    title: d.title || '未命名爭點',
-    our_position: d.our_position || '',
-    their_position: d.their_position || '',
-    key_evidence: [],
-    mentioned_laws: [],
-    facts: [],
-  }));
+  const legalIssues: LegalIssue[] = disputeRows.map(mapDisputeToLegalIssue);
 
   // 4. Build full draft text from paragraphs
   const fullDraft = paragraphs

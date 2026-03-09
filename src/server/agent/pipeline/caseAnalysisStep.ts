@@ -14,7 +14,12 @@ import {
   type IssueAnalyzerOutput,
   type OrchestratorProgressCallback,
 } from '../orchestratorAgent';
-import { parseJsonField, parseSummaryText, loadReadyFiles } from '../toolHelpers';
+import {
+  parseJsonField,
+  parseSummaryText,
+  loadReadyFiles,
+  mapDisputeToLegalIssue,
+} from '../toolHelpers';
 import type { ToolResult } from '../tools/types';
 import type { ContextStore } from '../contextStore';
 import type { LegalIssue, TimelineItem, DamageItem, PipelineContext } from './types';
@@ -216,15 +221,7 @@ export const runCaseAnalysis = async (
         `Skipping Step 0: reusing ${existingDisputes.length} existing disputes for case ${ctx.caseId}`,
       );
 
-      const existingLegalIssues: LegalIssue[] = existingDisputes.map((d) => ({
-        id: d.id,
-        title: d.title || '未命名爭點',
-        our_position: d.our_position || '',
-        their_position: d.their_position || '',
-        key_evidence: parseJsonField<string[]>(d.evidence, []),
-        mentioned_laws: parseJsonField<string[]>(d.law_refs, []),
-        facts: [],
-      }));
+      const existingLegalIssues: LegalIssue[] = existingDisputes.map(mapDisputeToLegalIssue);
 
       // Build caseSummary from pre-parsed file summaries (no LLM call)
       const caseSummary = parsedFiles
@@ -312,15 +309,7 @@ export const runCaseAnalysis = async (
 
           const disputeList = await fallbackToAnalyzeDisputes();
           issueAnalyzerOutput = {
-            legalIssues: disputeList.map((d) => ({
-              id: d.id,
-              title: d.title || '未命名爭點',
-              our_position: d.our_position || '',
-              their_position: d.their_position || '',
-              key_evidence: parseJsonField<string[]>(d.evidence, []),
-              mentioned_laws: parseJsonField<string[]>(d.law_refs, []),
-              facts: [],
-            })),
+            legalIssues: disputeList.map(mapDisputeToLegalIssue),
             informationGaps: [],
           };
         }
