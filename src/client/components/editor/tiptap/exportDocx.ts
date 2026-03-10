@@ -16,7 +16,6 @@ import { isPreformattedSection, isListParagraph } from '../../../../shared/secti
 const FONT = 'DFKai-SB';
 const FONT_SIZE_PT = 14;
 const FONT_SIZE_HALF_PT = FONT_SIZE_PT * 2;
-const HEADING2_SIZE_HALF_PT = 16 * 2;
 const LINE_SPACING_PT = 25;
 const LINE_SPACING_TWIPS = Math.round(LINE_SPACING_PT * 20); // 1pt = 20 twips
 const MARGIN_MM = 25;
@@ -72,7 +71,7 @@ export async function exportBriefToDocx(
             new TextRun({
               text: p.section,
               font: FONT,
-              size: HEADING2_SIZE_HALF_PT,
+              size: FONT_SIZE_HALF_PT,
               bold: true,
             }),
           ],

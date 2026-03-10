@@ -1,7 +1,7 @@
-import Heading from "@tiptap/extension-heading";
+import Heading from '@tiptap/extension-heading';
 
 export const LegalHeading = Heading.extend({
-  name: "heading",
+  name: 'heading',
 
   addAttributes() {
     return {
@@ -12,13 +12,13 @@ export const LegalHeading = Heading.extend({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const level = HTMLAttributes.level || 2;
+    const level = node.attrs.level || 2;
     const attrs: Record<string, string> = {};
-    if (HTMLAttributes.sectionName) {
-      attrs["data-section-name"] = HTMLAttributes.sectionName;
+    if (node.attrs.sectionName) {
+      attrs['data-section-name'] = node.attrs.sectionName;
     }
-    if (HTMLAttributes.subsectionName) {
-      attrs["data-subsection-name"] = HTMLAttributes.subsectionName;
+    if (node.attrs.subsectionName) {
+      attrs['data-subsection-name'] = node.attrs.subsectionName;
     }
     if (HTMLAttributes.class) {
       attrs.class = HTMLAttributes.class;
