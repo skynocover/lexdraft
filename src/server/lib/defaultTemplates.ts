@@ -3,8 +3,13 @@ export interface DefaultTemplate {
   id: string;
   title: string;
   category: string;
+  /** AI 選擇範本時的使用場景提示 */
+  agentHint: string;
   content_md: string;
 }
+
+/** template_id 為 'auto' 表示讓 AI 自行判斷 */
+export const TEMPLATE_ID_AUTO = 'auto' as const;
 
 /** 6 份系統預設範本 — 每份對應一種具體書狀 */
 export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
@@ -12,6 +17,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     id: 'default-civil-complaint',
     title: '民事起訴狀（一般）',
     category: '民事訴訟',
+    agentHint: '一般民事起訴（契約請求、借貸、返還、給付等）',
     content_md: `民事起訴狀
 
 案號：【待填：案號，新案免填】
@@ -55,6 +61,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     id: 'default-civil-complaint-damages',
     title: '民事起訴狀（損害賠償）',
     category: '民事訴訟',
+    agentHint: '損害賠償起訴（車禍、侵權、醫療糾紛、人身損害、財物毀損等）',
     content_md: `民事起訴狀
 
 案號：【待填：案號，新案免填】
@@ -106,6 +113,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     id: 'default-civil-defense',
     title: '民事答辯狀',
     category: '民事訴訟',
+    agentHint: '民事答辯（被告身份回應原告起訴）',
     content_md: `民事答辯狀
 
 案號：【待填：案號】
@@ -154,6 +162,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     id: 'default-civil-preparation',
     title: '民事準備書狀',
     category: '民事訴訟',
+    agentHint: '民事準備書狀（補充攻防、回應對造）',
     content_md: `民事準備書狀
 
 案號：【待填：案號】
@@ -194,6 +203,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     id: 'default-civil-appeal',
     title: '民事上訴狀',
     category: '民事訴訟',
+    agentHint: '民事上訴（不服一審判決）',
     content_md: `民事上訴狀
 
 案號：【待填：原審案號】
@@ -243,6 +253,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     id: 'default-enforcement',
     title: '民事聲請強制執行狀',
     category: '強制執行',
+    agentHint: '聲請強制執行（有執行名義，聲請執行）',
     content_md: `民事聲請強制執行狀
 
 案號：【待填：案號，新案免填】
@@ -294,6 +305,19 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
 /** 根據 template_id 取得範本內容 */
 export const getTemplateById = (templateId: string): DefaultTemplate | undefined =>
   DEFAULT_TEMPLATES.find((t) => t.id === templateId);
+
+/** 給 tool description 用的 template ID 列表（逗號分隔） */
+export const TEMPLATE_ID_LIST = DEFAULT_TEMPLATES.map((t) => t.id).join(', ');
+
+/** 給 tool description 用的完整描述 */
+export const TEMPLATE_ID_DESCRIPTION = `範本 ID。可用值：${TEMPLATE_ID_LIST}`;
+
+/** 給 system prompt 用的範本選擇指引（含 agentHint） */
+export const TEMPLATE_SELECTION_GUIDE = [
+  '範本選擇指引（template_id 必須使用以下其中之一）：',
+  ...DEFAULT_TEMPLATES.map((t) => `- ${t.id}：${t.agentHint}`),
+  '關鍵區分：「損害賠償」案件（侵權行為、車禍、醫療過失、人身傷害、財物毀損）必須使用 default-civil-complaint-damages，不要使用 default-civil-complaint。',
+].join('\n');
 
 /** 無 template 時的通用 fallback 指引 */
 export const FALLBACK_GUIDANCE = `書狀應包含以下基本結構：

@@ -238,3 +238,131 @@
 ### 結論
 
 書狀架構、論證邏輯、事實引用已達 70 分水準。**判決引用**和**證物編號正文交叉引用**是拉到 90 分的關鍵——補上後律師工作量從「重寫」降到「微調」。
+
+---
+
+## Phase 5 — 上線前置作業
+
+> 產品上線前必須完成的工程與運維項目。依 **必做 / 強烈建議 / Nice-to-have** 分級。
+
+### 🔴 必做（不做會出事）
+
+- [ ] **L-1. 認證系統（取代 dev-token）**
+  - 現況：單一 Bearer token `dev-token-change-me`，所有用戶共用 `DEFAULT_USER_ID = 'default-user'`
+  - 目標：Email/password 登入（對應 P4-1），JWT + refresh token，多用戶隔離
+  - 關聯：P4-2 額度系統也依賴真實 user_id
+- [ ] **L-2. 環境變數安全化**
+  - 現況：`.env` 未在 `.gitignore`，含真實 credentials（Cloudflare token、MongoDB 連線字串、API key）
+  - 行動：
+    - `.env` 和 `.dev.vars` 加入 `.gitignore`
+    - 用 `wrangler secret put` 設定 production secrets
+    - 輪替所有已暴露的 credentials
+  - ⚠️ 如果 repo 曾公開過，需用 `git filter-repo` 清除歷史
+- [ ] **L-3. 錯誤追蹤（Sentry）**
+  - 現況：只有 `console.error`，production 無法看到
+  - 行動：整合 Sentry（@sentry/cloudflare），前後端都要
+  - 涵蓋：API route 錯誤、Pipeline 失敗、Queue 處理失敗、前端未捕獲異常
+- [ ] **L-4. Rate Limiting**
+  - 現況：完全沒有，任何人可無限打 API
+  - 行動：
+    - Cloudflare WAF rate limiting rules（最外層）
+    - Hono middleware 或 Durable Object per-user 計數（應用層）
+    - 至少保護：`/api/cases/:id/chat`（AI 成本高）、`/api/files`（上傳）
+- [ ] **L-5. D1 資料庫備份**
+  - 現況：無備份策略
+  - 行動：Cloudflare Dashboard 開啟 D1 Time Travel（預設 30 天），定期用 `wrangler d1 export` 備份
+
+- [ ] **L-6. Pipeline Token 用量追蹤（成本計算）**
+  - 目的：每次產生書狀記錄各 provider 的 token 消耗，算出實際成本
+  - 現況：只有 `reasoningStrategyStep.ts` 用 `console.log` 印 token，其他 11 個 AI 呼叫點有回傳 usage 但沒存
+  - 需追蹤的 AI 呼叫點（按 pipeline step）：
+    | Step | 函式 | Model | Provider |
+    |------|------|-------|----------|
+    | Step 0 Case Reader | `callAIStreaming()` | Gemini 2.5 Flash | Google AI Studio |
+    | Step 0 Issue Analyzer | `callAI()` | Gemini 2.5 Flash | Google AI Studio |
+    | Step 2 Reasoning Loop | `callClaudeToolLoop()` | Claude Haiku 4.5 | Anthropic |
+    | Step 2 JSON Structuring | `callGeminiNative()` | Gemini 2.5 Flash | Google AI Studio |
+    | Step 3 Writer (content) | `callClaudeWithCitations()` | Claude Sonnet 4.6 | Anthropic |
+    | Step 3 Writer (intro/conclusion) | `callOpenRouterText()` | Gemini 3.1 Flash Lite | OpenRouter |
+    | Template Rendering | `callOpenRouterText()` | Gemini 3.1 Flash Lite | OpenRouter |
+  - 額外追蹤（非 pipeline，per-request）：
+    | 場景 | 函式 | Model |
+    |------|------|-------|
+    | Chatbot 對話 | `callAIStreaming()` | Gemini 2.5 Flash |
+    | 檔案處理（Queue） | `callAI()` + `callGeminiNative()` | Gemini 2.5 Flash Lite |
+    | Inline AI（精簡/加強） | `callAI()` | Gemini 2.5 Flash Lite |
+    | 分析工具（爭點/損害/時間軸） | `callGeminiNative()` | Gemini 2.5 Flash |
+    | 品質審查 | `callClaude()` | Claude Haiku 4.5 |
+  - 實作方案：
+    - D1 新增 `ai_usage` 表：`id, case_id, brief_id?, step, model, provider, input_tokens, output_tokens, cache_write_tokens?, cache_read_tokens?, created_at`
+    - 每個 AI 函式回傳 usage 後寫入（或收集到 ContextStore 最後批次寫入）
+    - Claude 特別追蹤 cache tokens（影響計費：cache read 比 input 便宜 90%）
+    - 前端或 admin 頁面可查看每份書狀的成本明細
+
+### 🟡 強烈建議（上線品質保障）
+
+- [ ] **L-6. 用戶行為分析（Analytics）**
+  - 目的：了解用戶在用什麼功能、在哪卡住、轉換漏斗
+  - 建議工具：**PostHog**（開源、自架或 Cloud，支援 event tracking + session replay + funnel）
+  - 或輕量方案：**Google Analytics 4**（免費，但隱私顧慮較大）
+  - 關鍵事件追蹤：
+    | 事件 | 說明 |
+    |------|------|
+    | `case_created` | 新建案件 |
+    | `file_uploaded` | 上傳檔案 |
+    | `chat_message_sent` | 用戶發送對話 |
+    | `brief_generated` | 書狀產生完成 |
+    | `brief_exported_word` | Word 匯出 |
+    | `dispute_edited` | 手動編輯爭點 |
+    | `exhibit_reordered` | 證物重排 |
+    | `pipeline_failed` | Pipeline 失敗 |
+- [ ] **L-7. 用戶對話 Log 分析**
+  - 目的：了解用戶都在問什麼、哪些問題 AI 答不好
+  - 現況：`messages` 表已存 role + content，但沒有分析工具
+  - 行動：
+    - 定期匯出對話紀錄做分析（或接 PostHog custom event）
+    - 記錄 tool_call 使用頻率（哪些工具最常被呼叫）
+    - 記錄 pipeline 成功/失敗率 + 各 step 耗時
+    - 可考慮加 `feedback` 欄位讓用戶對書狀按 👍/👎
+- [ ] **L-8. Security Headers**
+  - 現況：無任何安全 header
+  - 行動：Hono middleware 加上：
+    - `X-Frame-Options: DENY`
+    - `X-Content-Type-Options: nosniff`
+    - `Referrer-Policy: strict-origin-when-cross-origin`
+    - `Content-Security-Policy`（根據實際資源來源配置）
+- [ ] **L-9. Health Check Endpoint**
+  - 現況：無健康檢查端點
+  - 行動：`GET /api/health` 回傳 D1 連線狀態、版本號
+  - 搭配外部 uptime monitoring（UptimeRobot / Better Uptime）
+- [ ] **L-10. Pipeline 可觀測性**
+  - 目的：上線後能追蹤 pipeline 問題
+  - 行動：
+    - 每個 step 記錄耗時（start/end timestamp）存入 D1 或 log
+    - Pipeline 完成/失敗事件帶 case_id、step、duration、error
+    - 接 Sentry performance monitoring 或自建 dashboard
+- [ ] **L-11. 前端 console 清理**
+  - 現況：32 個 `console.error` 散布各 store/component
+  - 行動：保留但改為 Sentry capture（`Sentry.captureException(err)`），production build strip console
+
+### 🟢 Nice-to-have（可上線後補）
+
+- [ ] **L-12. 用戶回饋機制**
+  - 書狀產出後的 👍/👎 + 文字回饋
+  - 全局「回報問題」按鈕（浮動按鈕 → 回饋表單）
+  - 資料存 D1 或 Google Form 簡易方案
+- [ ] **L-13. CORS 配置**
+  - 現況：同域部署不需要，但若 custom domain 與 Workers 分離則需設定
+  - 行動：加 Hono CORS middleware，限定允許 origin
+- [ ] **L-14. R2 版本控制**
+  - 開啟 R2 object versioning，防止 PDF 意外覆蓋或刪除
+- [ ] **L-15. 隱私政策 & 服務條款**
+  - 法律服務產品，用戶上傳的是案件機密文件
+  - 需要明確的資料處理聲明（資料存在哪、誰能存取、保留多久）
+  - 頁面：`/privacy`、`/terms`
+- [ ] **L-16. Onboarding 引導**
+  - 新用戶首次進入的引導流程（tooltip tour 或示範案件）
+  - 說明：上傳檔案 → AI 分析 → 產生書狀 的完整流程
+- [ ] **L-17. 資料保留政策**
+  - 定義多久後自動清理舊案件/舊對話
+  - 用戶刪除帳號時完整清除所有關聯資料（GDPR-like）

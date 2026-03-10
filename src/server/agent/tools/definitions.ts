@@ -1,4 +1,5 @@
 import type { ToolDef } from '../aiClient';
+import { TEMPLATE_ID_DESCRIPTION } from '../../lib/defaultTemplates';
 
 // Tool definitions in OpenAI function calling format
 export const TOOL_DEFINITIONS: ToolDef[] = [
@@ -92,7 +93,7 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
         properties: {
           template_id: {
             type: 'string',
-            description: '範本 ID，如 default-civil-complaint',
+            description: TEMPLATE_ID_DESCRIPTION,
           },
           title: {
             type: 'string',
@@ -190,7 +191,7 @@ export const TOOL_DEFINITIONS: ToolDef[] = [
         properties: {
           template_id: {
             type: 'string',
-            description: '範本 ID，如 default-civil-complaint',
+            description: TEMPLATE_ID_DESCRIPTION,
           },
           title: {
             type: 'string',
