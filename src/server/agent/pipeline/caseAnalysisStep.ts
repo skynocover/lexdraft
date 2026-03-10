@@ -23,7 +23,7 @@ import {
 import type { ToolResult } from '../tools/types';
 import type { ContextStore } from '../contextStore';
 import type { LegalIssue, TimelineItem, DamageItem, PipelineContext } from './types';
-import { DEFAULT_TEMPLATES, getTemplateById } from '../../lib/defaultTemplates';
+import { DEFAULT_TEMPLATES, getTemplateById, TEMPLATE_ID_AUTO } from '../../lib/defaultTemplates';
 import type { PipelineStepChild } from '../../../shared/types';
 import type { FileRow } from './writerStep';
 
@@ -178,7 +178,7 @@ export const runCaseAnalysis = async (
   // ── 3. Load template (from ctx.templateId or case.template_id) ──
   let templateContentMd: string | null = null;
   const rawTemplateId = ctx.templateId || caseRow.template_id;
-  const effectiveTemplateId = rawTemplateId === 'auto' ? null : rawTemplateId;
+  const effectiveTemplateId = rawTemplateId === TEMPLATE_ID_AUTO ? null : rawTemplateId;
   if (effectiveTemplateId) {
     try {
       const dt = getTemplateById(effectiveTemplateId);
