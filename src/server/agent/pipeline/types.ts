@@ -1,6 +1,10 @@
 // ── Pipeline Types ──
 // Shared types for the brief writing pipeline
 
+/** Human-readable label for a section, e.g. "壹、前言" or "貳、事實 > 一、事故經過" */
+export const getSectionKey = (section: string, subsection?: string) =>
+  `${section}${subsection ? ' > ' + subsection : ''}`;
+
 import type { Paragraph, Citation, TextSegment } from '../../../client/stores/useBriefStore';
 import type { getDB } from '../../db';
 import type { AIEnv } from '../aiClient';

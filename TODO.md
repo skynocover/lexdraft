@@ -28,6 +28,9 @@
   - 模板化固定文字，pipeline 自動插入訴之聲明段
   - 依案型決定起算日（侵權：起訴狀繕本送達翌日；契約：催告到達翌日等）
   - 實作：已納入 `defaultTemplates.ts` 模板文字，隨 P1-1 一併完成
+- [ ] **P1-4.5 Pipeline 程式碼簡化**
+  - [x] 整合 section 過濾邏輯（三層過濾合併為 `filterWritableSections`）
+  - [x] Writer prompt 抽出至 `writerPrompt.ts`（從 writerStep.ts 分離）
 - [ ] **P1-5. 書狀微調（prompt 層）**
   - ~~消除 meta 段落~~ ✅ 已不再出現空洞過渡句
   - 結論字數控制（目標 100-200 字，目前實際產出 349-435 字）
