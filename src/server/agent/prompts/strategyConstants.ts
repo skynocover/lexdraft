@@ -20,6 +20,7 @@ export const WRITING_CONVENTIONS = `═══ 書狀撰寫慣例 ═══
 若有提供書狀範本，依照範本的段落結構與編號順序。
 已有完整法律文字的段落（如訴之聲明）不需要 AI 規劃，只為需要撰寫的段落產出 section 計畫。`;
 
+// ── 起訴狀 Claims 規則 ──
 export const CLAIMS_RULES = `═══ Claims 規則 ═══
 
 ### Claims 提取
@@ -40,6 +41,31 @@ export const CLAIMS_RULES = `═══ Claims 規則 ═══
   - primary claim 的 responds_to 為 null
 - 每個 theirs 的 primary/rebuttal claim 應有對應的 ours rebuttal claim 來回應`;
 
+// ── 答辯狀 Claims 規則 ──
+export const DEFENSE_CLAIMS_RULES = `═══ Claims 規則（答辯狀） ═══
+
+### Claims 提取
+- theirs (primary)：原告的各項主張（從起訴狀、對方書狀、爭點中已知），assigned_section 為 null
+- ours (rebuttal)：針對原告各主張的回應，必須有 assigned_section 和 responds_to
+- ours (primary)：被告的積極抗辯（時效抗辯、過失相抵、損益相抵等），必須有 assigned_section，responds_to 為 null
+- ours (supporting)：補強同段落 rebuttal 或 primary 的附帶論述
+
+### 分類框架
+對原告每個主張，先分類再回應：
+- 「事實否認」：否認原告所主張的事實（如：否認闖紅燈）
+- 「法律爭執」：承認事實但爭執法律效果（如：承認碰撞但主張過失比例）
+- 「金額爭執」：承認責任但爭執金額（如：醫療費金額過高）
+- 「全部承認」：不爭執的部分，無需產出 rebuttal claim
+
+### 攻防配對
+- dispute_id：連結到對應爭點的真實 ID（必須使用[爭點清單]中方括號內的 ID，不要自己編造）
+- responds_to：攻防配對，填入所回應的 theirs claim ID
+  - 每個 ours rebuttal 必須有 responds_to（指向被反駁的 theirs claim）
+  - ours supporting 必須有 responds_to（指向它輔助的 claim）
+  - ours primary（積極抗辯）的 responds_to 為 null
+- 原告每個主要主張（非「全部承認」的）都必須有對應的 ours rebuttal claim`;
+
+// ── 起訴狀段落規則 ──
 export const SECTION_RULES = `═══ 段落規則 ═══
 
 - 每個段落需要有完整的論證框架（大前提—小前提—結論）
@@ -56,6 +82,38 @@ export const SECTION_RULES = `═══ 段落規則 ═══
   - 構成要件如何對應到事實
   - 預判對方可能的攻擊角度及我方回應`;
 
+// ── 答辯狀段落規則 ──
+export const DEFENSE_SECTION_RULES = `═══ 段落規則（答辯狀） ═══
+
+- 答辯狀段落結構：壹、答辯聲明 → 貳、前言 → 參、事實及理由 → 肆、結論 → 伍、證據方法
+- 答辯聲明由模板處理（已有完整法律文字），不需要 AI 規劃
+- section：大段名稱（依範本結構編號，如「貳、前言」「參、事實及理由」「肆、結論」）
+- subsection：子段標題。前言和結論為 null，事實及理由的子段必須填寫 subsection
+- 子段標題格式為「一、描述性標題」，標題應反映回應的原告主張（如「一、關於侵權行為之否認」「二、關於損害賠償金額之爭執」）
+- 每個內容段落（事實及理由的子段）必須有 dispute_id，前言和結論為 null
+- 中間段落跟著原告的主張走，逐點回應
+- 每個中間段落必須明確標示在回應原告的哪個主張
+- 如有積極抗辯（時效、過失相抵、損益相抵等），放在回應段落之後、結論之前，作為獨立子段
+- relevant_file_ids：列出本段需要引用的來源檔案 ID
+- relevant_law_ids：列出本段需要引用的法條 ID
+- legal_reasoning：本段的法律推理摘要（不超過 500 字），包含：
+  - 原告主張的弱點分析
+  - 舉證責任歸屬（哪些事實應由原告舉證）
+  - 我方反駁的核心論點`;
+
+// ── Helper: 根據 templateId 判斷是否為防禦模式 ──
+export const isDefenseTemplate = (templateId: string | null): boolean =>
+  templateId === 'default-civil-defense' || templateId === 'default-civil-preparation';
+
+// ── Helper: 根據 templateId 回傳對應的 Claims 規則 ──
+export const getClaimsRules = (templateId: string | null): string =>
+  isDefenseTemplate(templateId) ? DEFENSE_CLAIMS_RULES : CLAIMS_RULES;
+
+// ── Helper: 根據 templateId 回傳對應的段落規則 ──
+export const getSectionRules = (templateId: string | null): string =>
+  isDefenseTemplate(templateId) ? DEFENSE_SECTION_RULES : SECTION_RULES;
+
+// ── 起訴狀 JSON 範例 ──
 export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
 
 段落 ID 命名規則：前言 section_1、第一個子段落 section_2_1、第二個子段落 section_2_2、損害賠償 section_3（若有）、結論 section_last。子段落 ID 格式為 section_{大段號}_{子段號}。
@@ -180,3 +238,145 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
     }
   ]
 }`;
+
+// ── 答辯狀 JSON 範例 ──
+export const DEFENSE_JSON_SCHEMA = `═══ JSON 格式（答辯狀） ═══
+
+段落 ID 命名規則：前言 section_1、第一個子段落 section_2_1、第二個子段落 section_2_2、積極抗辯 section_2_N、結論 section_last。子段落 ID 格式為 section_{大段號}_{子段號}。
+
+重要：前言和結論不需要 subsection，其餘每個段落必須填寫 subsection（格式：一、描述性標題）。
+重要：section 名稱的中文編號必須依照範本結構（若有範本則依範本段落順序）。
+重要：答辯聲明由模板處理，不需要在 sections 中出現。
+
+以下為答辯狀範例：
+
+{
+  "claims": [
+    {
+      "id": "their_claim_tort",
+      "side": "theirs",
+      "claim_type": "primary",
+      "statement": "原告主張被告闖紅燈構成侵權行為",
+      "assigned_section": null,
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "responds_to": null
+    },
+    {
+      "id": "our_rebuttal_tort",
+      "side": "ours",
+      "claim_type": "rebuttal",
+      "statement": "否認闖紅燈，行車紀錄器顯示號誌為綠燈",
+      "assigned_section": "section_2_1",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "responds_to": "their_claim_tort"
+    },
+    {
+      "id": "their_claim_damages",
+      "side": "theirs",
+      "claim_type": "primary",
+      "statement": "原告主張醫療費用30萬元",
+      "assigned_section": null,
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "responds_to": null
+    },
+    {
+      "id": "our_rebuttal_damages",
+      "side": "ours",
+      "claim_type": "rebuttal",
+      "statement": "爭執金額，部分醫療費用與本件事故無因果關係",
+      "assigned_section": "section_2_2",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "responds_to": "their_claim_damages"
+    },
+    {
+      "id": "our_affirmative_contributory",
+      "side": "ours",
+      "claim_type": "primary",
+      "statement": "主張原告與有過失，應適用過失相抵",
+      "assigned_section": "section_2_3",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "responds_to": null
+    }
+  ],
+  "sections": [
+    {
+      "id": "section_1",
+      "section": "貳、前言",
+      "subsection": null,
+      "dispute_id": null,
+      "argumentation": {
+        "legal_basis": [],
+        "fact_application": "簡述案件背景及答辯立場",
+        "conclusion": "原告之訴為無理由，應予駁回"
+      },
+      "claims": [],
+      "relevant_file_ids": [],
+      "relevant_law_ids": [],
+      "legal_reasoning": ""
+    },
+    {
+      "id": "section_2_1",
+      "section": "參、事實及理由",
+      "subsection": "一、關於侵權行為之否認",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "argumentation": {
+        "legal_basis": ["B0000001-184"],
+        "fact_application": "原告主張被告闖紅燈，惟查行車紀錄器畫面顯示...",
+        "conclusion": "被告並無過失，原告主張侵權行為不成立"
+      },
+      "claims": ["our_rebuttal_tort"],
+      "relevant_file_ids": ["file_1"],
+      "relevant_law_ids": ["B0000001-184"],
+      "legal_reasoning": "原告依§184-1前段主張侵權，惟過失要件之舉證責任在原告..."
+    },
+    {
+      "id": "section_2_2",
+      "section": "參、事實及理由",
+      "subsection": "二、關於損害賠償金額之爭執",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "argumentation": {
+        "legal_basis": ["B0000001-193"],
+        "fact_application": "原告主張醫療費用30萬元，惟其中部分費用...",
+        "conclusion": "損害賠償金額應予核減"
+      },
+      "claims": ["our_rebuttal_damages"],
+      "relevant_file_ids": ["file_2"],
+      "relevant_law_ids": ["B0000001-193"],
+      "legal_reasoning": "原告所主張之醫療費用，其中自費項目部分與本件事故欠缺因果關係..."
+    },
+    {
+      "id": "section_2_3",
+      "section": "參、事實及理由",
+      "subsection": "三、過失相抵之主張",
+      "dispute_id": "（填入[爭點清單]中的真實 ID）",
+      "argumentation": {
+        "legal_basis": ["B0000001-217"],
+        "fact_application": "原告未繫安全帶，對損害之擴大與有過失",
+        "conclusion": "應依民法第217條減輕被告之賠償責任"
+      },
+      "claims": ["our_affirmative_contributory"],
+      "relevant_file_ids": ["file_1"],
+      "relevant_law_ids": ["B0000001-217"],
+      "legal_reasoning": "依§217過失相抵，原告未繫安全帶，對傷害擴大與有過失..."
+    },
+    {
+      "id": "section_last",
+      "section": "肆、結論",
+      "subsection": null,
+      "dispute_id": null,
+      "argumentation": {
+        "legal_basis": [],
+        "fact_application": "",
+        "conclusion": "綜上所述，原告之訴為無理由，請求鈞院駁回原告之訴"
+      },
+      "claims": [],
+      "relevant_file_ids": [],
+      "relevant_law_ids": [],
+      "legal_reasoning": ""
+    }
+  ]
+}`;
+
+// ── Helper: 根據 templateId 回傳對應的 JSON 格式範例 ──
+export const getJsonSchema = (templateId: string | null): string =>
+  isDefenseTemplate(templateId) ? DEFENSE_JSON_SCHEMA : STRATEGY_JSON_SCHEMA;

@@ -5,6 +5,30 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import type { Claim, LegalIssue, ReasoningSection } from '../../src/server/agent/pipeline/types';
 
+// ── D1 query helper ──
+
+export const d1Query = (sql: string, opts?: { maxBuffer?: number }): unknown[] => {
+  const raw = execSync(
+    `npx wrangler d1 execute lexdraft-db --local --command "${sql.replace(/"/g, '\\"')}" --json 2>/dev/null`,
+    { encoding: 'utf-8', maxBuffer: opts?.maxBuffer },
+  );
+  const parsed = JSON.parse(raw);
+  return parsed[0]?.results || [];
+};
+
+// ── Shared test types ──
+
+export interface InjectedError {
+  label: string;
+  targetParagraphId: string;
+  expectedType: string;
+  apply: (paragraphs: Array<{ id: string; content_md: string; [k: string]: unknown }>) => Array<{
+    id: string;
+    content_md: string;
+    [k: string]: unknown;
+  }>;
+}
+
 // ── CLI args ──
 
 export const parseArgs = () => {

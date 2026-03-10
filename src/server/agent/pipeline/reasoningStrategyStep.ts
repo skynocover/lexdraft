@@ -13,14 +13,11 @@ import { createLawSearchSession, type LawSearchSession } from '../../lib/lawSear
 import { upsertManyLawRefs } from '../../lib/lawRefsJson';
 import type { LawRefItem } from '../../lib/lawRefsJson';
 import {
-  REASONING_STRATEGY_SYSTEM_PROMPT,
+  buildReasoningSystemPrompt,
   buildReasoningStrategyInput,
 } from '../prompts/reasoningStrategyPrompt';
 import {
   WRITING_CONVENTIONS,
-  CLAIMS_RULES,
-  SECTION_RULES,
-  STRATEGY_JSON_SCHEMA,
   MAX_ROUNDS,
   MAX_SEARCHES,
   SOFT_TIMEOUT_MS,
@@ -28,6 +25,9 @@ import {
   JSON_OUTPUT_MAX_TOKENS,
   CLAUDE_MODEL,
   TOOL_RESULT_MAX_CHARS,
+  getClaimsRules,
+  getSectionRules,
+  getJsonSchema,
 } from '../prompts/strategyConstants';
 import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy';
 import { enrichStrategyOutput } from './enrichStrategy';
@@ -45,19 +45,20 @@ import type { ContextStore } from '../contextStore';
 
 // ── JSON Output System Prompt (separate call, clean context) ──
 
-const JSON_OUTPUT_SYSTEM_PROMPT = `你是一位資深台灣訴訟律師的策略輸出助手。你將收到律師的推理摘要、爭點清單、和可用法條，你的任務是根據這些資料輸出結構化的論證策略 JSON。
+const buildJsonOutputSystemPrompt = (templateId: string | null): string =>
+  `你是一位資深台灣訴訟律師的策略輸出助手。你將收到律師的推理摘要、爭點清單、和可用法條，你的任務是根據這些資料輸出結構化的論證策略 JSON。
 
 ${WRITING_CONVENTIONS}
 
-${CLAIMS_RULES}
+${getClaimsRules(templateId)}
 
-${SECTION_RULES}
+${getSectionRules(templateId)}
 
 ═══ 輸出規則 ═══
 
 - 只輸出 JSON，不要加 markdown code block 或其他文字
 
-${STRATEGY_JSON_SCHEMA}`;
+${getJsonSchema(templateId)}`;
 
 // ── Gemini responseSchema (OpenAPI format, constrained decoding) ──
 // Mirrors Claim, StrategySection, ArgumentationFramework, FactUsage in ./types.ts.
@@ -403,7 +404,7 @@ export const runReasoningStrategy = async (
   await progress?.onReasoningStart();
 
   const hasTemplate = !!(templateContentMd && templateContentMd.trim());
-  const systemPrompt = REASONING_STRATEGY_SYSTEM_PROMPT;
+  const systemPrompt = buildReasoningSystemPrompt(ctx.templateId);
   let userMessage = buildReasoningStrategyInput(input, hasTemplate);
 
   // 注入完整 markdown 範本到 Reasoning prompt
@@ -434,9 +435,10 @@ export const runReasoningStrategy = async (
 
   // Helper: separate clean call for JSON output (Gemini 2.5 Flash, provider-native constrained decoding)
   // 有 template → 注入完整 markdown 範本；無 template → 注入通用 fallback 指引
+  const jsonOutputBase = buildJsonOutputSystemPrompt(ctx.templateId);
   const structuringSystemPrompt = hasTemplate
-    ? JSON_OUTPUT_SYSTEM_PROMPT + templateToPrompt(templateContentMd!)
-    : JSON_OUTPUT_SYSTEM_PROMPT + `\n\n${FALLBACK_GUIDANCE}`;
+    ? jsonOutputBase + templateToPrompt(templateContentMd!)
+    : jsonOutputBase + `\n\n${FALLBACK_GUIDANCE}`;
 
   const callJsonOutput = (msg: string) =>
     callGeminiNative(ctx.aiEnv, structuringSystemPrompt, msg, {

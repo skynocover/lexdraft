@@ -14,13 +14,12 @@
  * Env: AUTH_TOKEN loaded from dist/lexdraft/.dev.vars
  */
 
-import { execSync } from 'child_process';
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { buildQualityReport } from '../../src/server/agent/pipeline/qualityReport';
 import type { Paragraph } from '../../src/client/stores/useBriefStore';
 import { createSnapshotWriter } from './snapshot-writer';
-import { parseArgs, loadDevVars } from './_helpers';
+import { parseArgs, loadDevVars, d1Query as d1QueryBase } from './_helpers';
 
 // ══════════════════════════════════════════════════════════
 //  Config
@@ -40,18 +39,8 @@ const AUTH_TOKEN = loadDevVars().AUTH_TOKEN || 'dev-token-change-me';
 //  D1 Helpers
 // ══════════════════════════════════════════════════════════
 
-interface D1Row {
-  [key: string]: unknown;
-}
-
-const d1Query = (sql: string): D1Row[] => {
-  const raw = execSync(
-    `npx wrangler d1 execute lexdraft-db --local --command "${sql.replace(/"/g, '\\"')}" --json 2>/dev/null`,
-    { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 10 },
-  );
-  const parsed = JSON.parse(raw) as { results?: D1Row[] }[];
-  return parsed[0]?.results || [];
-};
+const d1Query = (sql: string) =>
+  d1QueryBase(sql, { maxBuffer: 1024 * 1024 * 10 }) as Array<Record<string, unknown>>;
 
 // ══════════════════════════════════════════════════════════
 //  SSE Pipeline Runner

@@ -77,6 +77,26 @@
 
 ---
 
+## Phase 2.5 — 答辯狀相關延伸
+
+> 答辯狀 pipeline 完成後的 UX 強化
+
+- [ ] **P2.5-1. 多書狀工作空間**
+  - 同一案件支援多份書狀（起訴狀 + 答辯狀 + 準備書狀）
+  - Tab 切換方式，複用 `useTabStore`
+  - `useBriefStore` 改為 `activeBriefId` + `briefs[]`
+  - `briefContext` 送 active brief 的內容
+  - 未來考慮並排檢視（split view），讓律師同時對照兩份書狀
+- [ ] **P2.5-2. 書狀品質審查（Review Step）**
+  - Pipeline Step 3 完成後自動跑品質審查，標記有風險的段落
+  - Layer 1：純程式碼驗證（金額一致性、證物引用存在性、爭點覆蓋率、段落長度異常）
+  - Layer 2：Gemini Flash 單次呼叫驗證（主張 vs 證據對應、法條 vs 論證一致、事實前後矛盾）
+  - 前端段落標記（🔴 critical / ⚠️ warning），點擊展開問題描述
+  - 只標記不自動修正，律師自己決定是否修改
+  - 設計文件：`docs/design-review-step.md`
+
+---
+
 ## Phase 3 — 差異化功能
 
 > 讓產品從「能替代人工」變成「超越人工」

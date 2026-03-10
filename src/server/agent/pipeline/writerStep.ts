@@ -4,6 +4,7 @@ import { callOpenRouterText } from '../aiClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
 import { isItemDamage, type StrategyOutput, type PipelineContext } from './types';
+import { isDefenseTemplate } from '../prompts/strategyConstants';
 import type { ContextStore } from '../contextStore';
 import type { Paragraph, TextSegment, Citation } from '../../../client/stores/useBriefStore';
 
@@ -258,9 +259,7 @@ export const writeSection = async (
         .filter((d) => d.doc_type === 'file')
         .map((d) => {
           const exhibitLabel = d.file_id ? exhibitMap.get(d.file_id) : undefined;
-          return exhibitLabel
-            ? `  「${d.title}」（${exhibitLabel}）`
-            : `  「${d.title}」`;
+          return exhibitLabel ? `  「${d.title}」（${exhibitLabel}）` : `  「${d.title}」`;
         });
       docLines.push(`  案件文件：\n${fileLines.join('\n')}`);
     } else {
@@ -341,6 +340,21 @@ ${completedText}`;
 - 如遇不確定或需律師確認的資訊（如送達日期、當事人地址、身分證字號、具體證物編號），使用【待填：說明】標記，例如【待填：起訴狀繕本送達翌日】、【待填：原告住址】
 - 每段的論述角度和句式必須有所區分。參考[已完成段落]，避免重複使用相同的開頭句式（如不要每段都以「原告請求…悉數應予准許」開頭）、相同的法條引用模式、或相同的結尾語式
 - 每個損害項目有不同的法律依據和舉證重點，撰寫時應突出該項目的獨特論點，而非套用通用模板`;
+
+  // ── Defense-specific writing rules ──
+  if (isDefenseTemplate(ctx.templateId)) {
+    instruction += `
+
+[答辯狀撰寫規則]（優先於上方通用規則）
+- 本書狀為答辯狀，語氣應為防禦 + 反擊，而非主動攻擊
+- 每個內容段落應以回應原告主張為主軸，使用「原告主張…惟查…」或「原告雖稱…然查…」的反駁句式
+- 先簡述原告的主張（1-2句），再展開反駁論述
+- 反駁時應指出原告舉證的不足或矛盾，而非僅陳述我方立場
+- 善用舉證責任分配：「依民事訴訟法第277條，此部分事實應由原告負舉證責任」
+- 引用我方證據反駁時，同時指出原告證據的漏洞
+- 積極抗辯段落（過失相抵、時效等）使用主動語氣，明確主張法律效果
+- 對「自認」的事實，使用「原告於起訴狀自承」等用語`;
+  }
 
   // ── Exhibit citation rules (content sections only) ──
   if (isContentSection && exhibitMap && exhibitMap.size > 0) {
