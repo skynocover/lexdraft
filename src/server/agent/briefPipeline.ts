@@ -211,6 +211,7 @@ export const runBriefPipeline = async (
       caseSummary: store.caseSummary,
       templateTitle: store.templateTitle,
       legalIssues: store.legalIssues,
+      undisputedFacts: store.undisputedFacts,
       informationGaps: store.informationGaps,
       fetchedLaws: fetchedLawsArray
         .filter((l) => l.source !== 'user_manual')

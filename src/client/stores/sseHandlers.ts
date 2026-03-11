@@ -9,6 +9,7 @@ import {
 import {
   useAnalysisStore,
   type Dispute,
+  type SimpleFact,
   type Damage,
   type TimelineEvent,
   type Party,
@@ -224,6 +225,12 @@ const handleBriefUpdate = (event: Extract<SSEEvent, { type: 'brief_update' }>) =
         toast.success('時間軸已產生', { description: `${timeline.length} 個事件` });
       break;
     }
+    case 'set_undisputed_facts':
+      analysisStore.setUndisputedFacts(event.data as SimpleFact[]);
+      break;
+    case 'set_information_gaps':
+      analysisStore.setInformationGaps(event.data as string[]);
+      break;
     case 'set_parties':
       analysisStore.setParties(event.data as Party[]);
       break;

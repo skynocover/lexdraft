@@ -193,7 +193,6 @@ export const STRATEGY_JSON_SCHEMA = `═══ JSON 格式 ═══
       "facts_to_use": [
         {
           "fact_id": "fact_1",
-          "assertion_type": "爭執",
           "usage": "作為過失要件的核心事實論據"
         }
       ],

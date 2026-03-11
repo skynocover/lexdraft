@@ -4,6 +4,7 @@ import { getDB } from '../db';
 import { disputes, claims } from '../db/schema';
 import type { AppEnv } from '../types';
 import { badRequest, notFound } from '../lib/errors';
+import { parseJsonField } from '../lib/jsonUtils';
 
 const disputesRouter = new Hono<AppEnv>();
 
@@ -30,9 +31,8 @@ disputesRouter.patch('/cases/:caseId/disputes/:id', async (c) => {
   const updated = { ...rows[0], title: body.title.trim() };
   return c.json({
     ...updated,
-    evidence: updated.evidence ? JSON.parse(updated.evidence) : [],
-    law_refs: updated.law_refs ? JSON.parse(updated.law_refs) : [],
-    facts: updated.facts ? JSON.parse(updated.facts) : [],
+    evidence: parseJsonField<string[]>(updated.evidence, []),
+    law_refs: parseJsonField<string[]>(updated.law_refs, []),
   });
 });
 
@@ -42,16 +42,9 @@ disputesRouter.delete('/cases/:caseId/disputes/:id', async (c) => {
   const id = c.req.param('id');
   const db = getDB(c.env.DB);
 
-  const rows = await db
-    .select()
-    .from(disputes)
-    .where(and(eq(disputes.id, id), eq(disputes.case_id, caseId)));
-
-  if (!rows.length) throw notFound('爭點');
-
   // 先刪 claims（FK 約束），再刪 dispute
   await db.delete(claims).where(eq(claims.dispute_id, id));
-  await db.delete(disputes).where(eq(disputes.id, id));
+  await db.delete(disputes).where(and(eq(disputes.id, id), eq(disputes.case_id, caseId)));
 
   return c.json({ ok: true });
 });

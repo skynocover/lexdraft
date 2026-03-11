@@ -4,7 +4,6 @@
 import { ContextStore } from '../../src/server/agent/contextStore';
 import type {
   LegalIssue,
-  InformationGap,
   DamageItem,
   TimelineItem,
   Claim,
@@ -29,11 +28,12 @@ store.parties = { plaintiff: '原告張三', defendant: '被告李四' };
 store.caseMetadata = {
   caseNumber: '113年度訴字第123號',
   court: '臺灣臺北地方法院',
+  division: '民事庭',
   clientRole: 'plaintiff',
   caseInstructions: '請求損害賠償',
 };
 store.timelineSummary = '2024-01-01 發生車禍';
-store.briefType = '準備書狀';
+store.templateTitle = '準備書狀';
 
 const issue: LegalIssue = {
   id: 'issue-1',
@@ -42,27 +42,10 @@ const issue: LegalIssue = {
   their_position: '否認過失',
   key_evidence: ['ev-1', 'ev-2'],
   mentioned_laws: ['民法第184條'],
-  facts: [
-    {
-      id: 'fact-1',
-      description: '被告闖紅燈',
-      assertion_type: '主張',
-      source_side: '我方',
-      evidence: ['ev-1'],
-      disputed_by: null,
-    },
-  ],
 };
 store.legalIssues = [issue];
 
-const gap: InformationGap = {
-  id: 'gap-1',
-  severity: 'critical',
-  description: '缺少醫療收據',
-  related_issue_id: 'issue-1',
-  suggestion: '補充醫療收據',
-};
-store.informationGaps = [gap];
+store.informationGaps = ['缺少醫療收據'];
 
 const damage: DamageItem = {
   category: '醫療費用',
@@ -104,7 +87,7 @@ const section: StrategySection = {
   claims: ['claim-1'],
   relevant_file_ids: ['file-1'],
   relevant_law_ids: ['B0000001-184'],
-  facts_to_use: [{ fact_id: 'fact-1', assertion_type: '主張', usage: '直接引用' }],
+  facts_to_use: [{ fact_id: 'fact-1', usage: '直接引用' }],
   legal_reasoning: '依民法184條...',
 };
 store.sections = [section];
@@ -172,7 +155,7 @@ assert(restored.caseSummary === store.caseSummary, 'caseSummary');
 assert(deepEqual(restored.parties, store.parties), 'parties');
 assert(deepEqual(restored.caseMetadata, store.caseMetadata), 'caseMetadata');
 assert(restored.timelineSummary === store.timelineSummary, 'timelineSummary');
-assert(restored.briefType === store.briefType, 'briefType');
+assert(restored.templateTitle === store.templateTitle, 'templateTitle');
 assert(deepEqual(restored.legalIssues, store.legalIssues), 'legalIssues');
 assert(deepEqual(restored.informationGaps, store.informationGaps), 'informationGaps');
 assert(deepEqual(restored.damages, store.damages), 'damages');

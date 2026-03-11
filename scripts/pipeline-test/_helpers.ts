@@ -149,5 +149,4 @@ export const mkIssue = (overrides: Partial<LegalIssue> = {}): LegalIssue => ({
   their_position: overrides.their_position || '',
   key_evidence: overrides.key_evidence || [],
   mentioned_laws: overrides.mentioned_laws || [],
-  facts: overrides.facts || [],
 });

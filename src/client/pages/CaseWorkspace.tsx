@@ -92,10 +92,19 @@ export function CaseWorkspace() {
     // 從 ref 讀取初始 URL 參數（ref 在 render 階段就捕獲，不受 Strict Mode cleanup 影響）
     const tabParam = initialTabRef.current;
 
-    // 載入案件資料
+    // 載入案件資料 + 解析 analysis meta（undisputed_facts, information_gaps）
     api
       .get<Case>(`/cases/${caseId}`)
-      .then(setCurrentCase)
+      .then((data) => {
+        setCurrentCase(data);
+        try {
+          const { setUndisputedFacts, setInformationGaps } = useAnalysisStore.getState();
+          setUndisputedFacts(data.undisputed_facts ? JSON.parse(data.undisputed_facts) : []);
+          setInformationGaps(data.information_gaps ? JSON.parse(data.information_gaps) : []);
+        } catch {
+          /* malformed JSON — leave defaults */
+        }
+      })
       .catch((err) => {
         console.error(err);
         toast.error('載入案件資料失敗', { id: 'case-load' });

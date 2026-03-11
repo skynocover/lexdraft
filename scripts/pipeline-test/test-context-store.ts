@@ -26,16 +26,6 @@ const ISSUE: LegalIssue = {
   their_position: '原告亦有過失',
   key_evidence: ['file-1'],
   mentioned_laws: ['民法第184條'],
-  facts: [
-    {
-      id: 'fact-1',
-      description: '被告闖紅燈',
-      assertion_type: '主張',
-      source_side: '我方',
-      evidence: ['file-1'],
-      disputed_by: null,
-    },
-  ],
 };
 
 const CLAIM: Claim = {
@@ -104,7 +94,7 @@ console.log('── Empty store round-trip ──');
   const restored = ContextStore.fromSnapshot(snap);
 
   assert(restored.caseSummary === '', 'caseSummary empty');
-  assert(restored.briefType === '', 'briefType empty');
+  assert(restored.templateTitle === '', 'templateTitle empty');
   assert(restored.legalIssues.length === 0, 'legalIssues empty');
   assert(restored.claims.length === 0, 'claims empty');
   assert(restored.sections.length === 0, 'sections empty');
@@ -121,25 +111,18 @@ console.log('── Populated store round-trip ──');
 {
   const store = new ContextStore();
   store.caseSummary = '車禍損害賠償案件';
-  store.briefType = '準備書狀';
+  store.templateTitle = '準備書狀';
   store.parties = { plaintiff: '王大明', defendant: '李小華' };
   store.caseMetadata = {
     caseNumber: '113年度訴字第123號',
     court: '臺灣臺北地方法院',
+    division: '民事庭',
     clientRole: 'plaintiff',
     caseInstructions: '主張侵權行為',
   };
   store.timelineSummary = '2025年1月1日發生車禍';
   store.legalIssues = [ISSUE];
-  store.informationGaps = [
-    {
-      id: 'gap-1',
-      severity: 'critical',
-      description: '缺少醫療收據',
-      related_issue_id: 'dispute-1',
-      suggestion: '請提供',
-    },
-  ];
+  store.informationGaps = ['缺少醫療收據'];
   store.damages = [{ category: '醫療費用', description: '手術費', amount: 50000 }];
   store.timeline = [
     { id: 't1', date: '2025-01-01', title: '車禍', description: '發生車禍', is_critical: true },
@@ -157,7 +140,7 @@ console.log('── Populated store round-trip ──');
 
   // Verify all fields
   assert(restored.caseSummary === '車禍損害賠償案件', 'caseSummary');
-  assert(restored.briefType === '準備書狀', 'briefType');
+  assert(restored.templateTitle === '準備書狀', 'templateTitle');
   assert(restored.parties.plaintiff === '王大明', 'parties.plaintiff');
   assert(restored.parties.defendant === '李小華', 'parties.defendant');
   assert(restored.caseMetadata.caseNumber === '113年度訴字第123號', 'caseMetadata.caseNumber');
@@ -167,7 +150,6 @@ console.log('── Populated store round-trip ──');
 
   assert(restored.legalIssues.length === 1, 'legalIssues.length');
   assert(restored.legalIssues[0].id === 'dispute-1', 'legalIssues[0].id');
-  assert(restored.legalIssues[0].facts.length === 1, 'legalIssues[0].facts');
   assert(restored.legalIssues[0].mentioned_laws[0] === '民法第184條', 'mentioned_laws');
 
   assert(restored.informationGaps.length === 1, 'informationGaps');
@@ -204,7 +186,7 @@ console.log('── Partial snapshot (graceful defaults) ──');
   >[0];
   const restored = ContextStore.fromSnapshot(partial);
   assert(restored.caseSummary === '部分資料', 'caseSummary set');
-  assert(restored.briefType === '', 'briefType defaults to empty');
+  assert(restored.templateTitle === '', 'templateTitle defaults to empty');
   assert(restored.legalIssues.length === 0, 'legalIssues defaults to []');
   assert(restored.claims.length === 0, 'claims defaults to []');
 }
@@ -306,7 +288,7 @@ console.log('── getContextForSection ──');
 {
   const store = new ContextStore();
   store.caseSummary = '車禍案';
-  store.briefType = '準備書狀';
+  store.templateTitle = '準備書狀';
   store.claims = [CLAIM];
   store.sections = [SECTION];
   store.foundLaws = [FOUND_LAW];
@@ -314,7 +296,7 @@ console.log('── getContextForSection ──');
 
   const ctx = store.getContextForSection(0);
   assert(ctx.caseSummary === '車禍案', 'caseSummary');
-  assert(ctx.briefType === '準備書狀', 'briefType');
+  assert(ctx.templateTitle === '準備書狀', 'templateTitle');
   assert(ctx.claims.length === 1, 'filtered claims');
   assert(ctx.laws.length === 1, 'resolved laws');
   assert(ctx.fullOutline.length === 1, 'fullOutline');

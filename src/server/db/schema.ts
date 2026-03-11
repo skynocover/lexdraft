@@ -25,6 +25,8 @@ export const cases = sqliteTable('cases', {
   case_instructions: text('case_instructions'), // 律師 AI 處理指引
   law_refs: text('law_refs'),
   timeline: text('timeline'), // JSON array of timeline events
+  undisputed_facts: text('undisputed_facts'), // JSON array of {id, description}
+  information_gaps: text('information_gaps'), // JSON array of strings
   division: text('division'), // 庭別 (民事庭, 刑事庭, etc.)
   template_id: text('template_id'), // nullable, 選用的書狀範本
   created_at: text('created_at'),
@@ -104,7 +106,6 @@ export const disputes = sqliteTable('disputes', {
   their_position: text('their_position'),
   evidence: text('evidence'), // JSON array
   law_refs: text('law_refs'), // JSON array
-  facts: text('facts'), // JSON array of StructuredFact
 });
 
 // 3.5 damages — 金額計算

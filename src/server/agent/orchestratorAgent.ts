@@ -8,7 +8,7 @@ import { callAI, callAIStreaming, type AIEnv, type ChatMessage } from './aiClien
 import { collectStreamWithToolCalls } from './sseParser';
 import { files } from '../db/schema';
 import { getDB } from '../db';
-import type { LegalIssue, InformationGap, StructuredFact } from './pipeline/types';
+import type { LegalIssue, SimpleFact } from './pipeline/types';
 import type { CaseMetadata } from './contextStore';
 import {
   CASE_READER_SYSTEM_PROMPT,
@@ -40,7 +40,8 @@ export interface CaseReaderOutput {
 
 export interface IssueAnalyzerOutput {
   legalIssues: LegalIssue[];
-  informationGaps: InformationGap[];
+  undisputedFacts: SimpleFact[];
+  informationGaps: string[];
 }
 
 export interface OrchestratorOutput {
@@ -48,7 +49,8 @@ export interface OrchestratorOutput {
   parties: { plaintiff: string; defendant: string };
   timelineSummary: string;
   legalIssues: LegalIssue[];
-  informationGaps: InformationGap[];
+  undisputedFacts: SimpleFact[];
+  informationGaps: string[];
 }
 
 // ── Progress callback ──
@@ -243,7 +245,7 @@ export const runIssueAnalyzer = async (
 
   try {
     if (combinedSignal.aborted) {
-      return { legalIssues: [], informationGaps: [] };
+      return { legalIssues: [], informationGaps: [], undisputedFacts: [] };
     }
 
     const userMessage = buildIssueAnalyzerInput({
@@ -270,21 +272,7 @@ export const runIssueAnalyzer = async (
   }
 };
 
-// ── Normalize helpers ──
-
-const normalizeEnum = <T extends string>(
-  raw: string | undefined,
-  valid: readonly T[],
-  fallback: T,
-): T => (raw && (valid as readonly string[]).includes(raw) ? (raw as T) : fallback);
-
-const VALID_ASSERTION_TYPES = ['主張', '承認', '爭執', '自認', '推定'] as const;
-const normalizeAssertionType = (raw?: string): StructuredFact['assertion_type'] =>
-  normalizeEnum(raw, VALID_ASSERTION_TYPES, '主張');
-
-const VALID_SOURCE_SIDES = ['我方', '對方', '中立'] as const;
-const normalizeSourceSide = (raw?: string): StructuredFact['source_side'] =>
-  normalizeEnum(raw, VALID_SOURCE_SIDES, '中立');
+// ── (normalize helpers removed — assertion_type/source_side no longer needed) ──
 
 // ── Parse Case Reader output ──
 
@@ -347,29 +335,22 @@ const parseCaseReaderOutput = (content: string, input: OrchestratorInput): CaseR
 
 const parseIssueAnalyzerOutput = (content: string): IssueAnalyzerOutput => {
   const parsed = parseLLMJsonResponse<{
+    undisputed_facts?: Array<{ description?: string }>;
     legal_issues?: Array<{
       title?: string;
       our_position?: string;
       their_position?: string;
       key_evidence?: string[];
       mentioned_laws?: string[];
-      facts?: Array<{
-        description?: string;
-        assertion_type?: string;
-        source_side?: string;
-        evidence?: string[];
-        disputed_by_description?: string;
-      }>;
     }>;
-    information_gaps?: Array<{
-      severity?: string;
-      description?: string;
-      related_issue_index?: number;
-      suggestion?: string;
-    }>;
+    information_gaps?: string[];
   }>(content, 'Issue Analyzer Agent 回傳格式不正確');
 
-  // Generate IDs for legal issues
+  const undisputedFacts: SimpleFact[] = (parsed.undisputed_facts || []).map((f) => ({
+    id: nanoid(),
+    description: f.description || '',
+  }));
+
   const legalIssues: LegalIssue[] = (parsed.legal_issues || []).map((issue) => ({
     id: nanoid(),
     title: issue.title || '未命名爭點',
@@ -377,32 +358,13 @@ const parseIssueAnalyzerOutput = (content: string): IssueAnalyzerOutput => {
     their_position: issue.their_position || '',
     key_evidence: issue.key_evidence || [],
     mentioned_laws: issue.mentioned_laws || [],
-    facts: (issue.facts || []).map((f) => ({
-      id: nanoid(),
-      description: f.description || '',
-      assertion_type: normalizeAssertionType(f.assertion_type),
-      source_side: normalizeSourceSide(f.source_side),
-      evidence: f.evidence || [],
-      disputed_by: f.disputed_by_description || null,
-    })),
   }));
 
-  // Link information gaps to issues by index
-  const informationGaps: InformationGap[] = (parsed.information_gaps || []).map((gap) => {
-    const relatedIndex = gap.related_issue_index ?? 0;
-    const relatedIssue = legalIssues[relatedIndex];
-    return {
-      id: nanoid(),
-      severity: (gap.severity === 'critical' ? 'critical' : 'nice_to_have') as
-        | 'critical'
-        | 'nice_to_have',
-      description: gap.description || '',
-      related_issue_id: relatedIssue?.id || '',
-      suggestion: gap.suggestion || '',
-    };
-  });
+  const informationGaps: string[] = (parsed.information_gaps || []).filter(
+    (g): g is string => typeof g === 'string' && g.trim().length > 0,
+  );
 
-  return { legalIssues, informationGaps };
+  return { legalIssues, undisputedFacts, informationGaps };
 };
 
 // ── Fallback when Case Reader fails ──

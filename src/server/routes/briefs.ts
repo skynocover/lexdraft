@@ -5,6 +5,7 @@ import { getDB } from '../db';
 import { briefs, briefVersions, disputes } from '../db/schema';
 import type { AppEnv } from '../types';
 import { notFound } from '../lib/errors';
+import { parseJsonField } from '../lib/jsonUtils';
 import { parseBody } from '../lib/validate';
 import { createBriefSchema, updateBriefSchema } from '../schemas/briefs';
 
@@ -133,9 +134,8 @@ briefsRouter.get('/cases/:caseId/disputes', async (c) => {
 
   const parsed = rows.map((d) => ({
     ...d,
-    evidence: d.evidence ? JSON.parse(d.evidence) : [],
-    law_refs: d.law_refs ? JSON.parse(d.law_refs) : [],
-    facts: d.facts ? JSON.parse(d.facts) : [],
+    evidence: parseJsonField<string[]>(d.evidence, []),
+    law_refs: parseJsonField<string[]>(d.law_refs, []),
   }));
 
   return c.json(parsed);

@@ -8,7 +8,7 @@ export const getSectionKey = (section: string, subsection?: string) =>
 import type { Paragraph, Citation, TextSegment } from '../../../client/stores/useBriefStore';
 import type { getDB } from '../../db';
 import type { AIEnv } from '../aiClient';
-import type { SSEEvent } from '../../../shared/types';
+import type { SSEEvent, SimpleFact } from '../../../shared/types';
 import type { CaseMetadata } from '../contextStore';
 
 // ── Pipeline Context (shared across all steps) ──
@@ -26,16 +26,8 @@ export interface PipelineContext {
   mongoApiKey?: string;
 }
 
-// ── Structured Fact (事實爭議分類) ──
-
-export interface StructuredFact {
-  id: string;
-  description: string;
-  assertion_type: '主張' | '承認' | '爭執' | '自認' | '推定';
-  source_side: '我方' | '對方' | '中立';
-  evidence: string[];
-  disputed_by: string | null;
-}
+// Re-export SimpleFact from shared (single source of truth)
+export type { SimpleFact };
 
 // ── Legal Issue (擴展既有 Dispute 格式) ──
 
@@ -46,17 +38,6 @@ export interface LegalIssue {
   their_position: string;
   key_evidence: string[];
   mentioned_laws: string[];
-  facts: StructuredFact[];
-}
-
-// ── Information Gap ──
-
-export interface InformationGap {
-  id: string;
-  severity: 'critical' | 'nice_to_have';
-  description: string;
-  related_issue_id: string;
-  suggestion: string;
 }
 
 // ── Claim (Phase 3b — 攻防配對 + 爭點連結) ──
@@ -83,7 +64,6 @@ export interface ArgumentationFramework {
 
 export interface FactUsage {
   fact_id: string;
-  assertion_type: string;
   usage: string;
 }
 
@@ -241,7 +221,8 @@ export interface ReasoningStrategyInput {
   caseSummary: string;
   templateTitle: string;
   legalIssues: LegalIssue[];
-  informationGaps: InformationGap[];
+  undisputedFacts: SimpleFact[];
+  informationGaps: string[];
   fetchedLaws: FetchedLaw[];
   fileSummaries: Array<{
     id: string;

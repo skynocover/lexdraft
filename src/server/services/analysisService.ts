@@ -21,6 +21,7 @@ import {
   type OrchestratorProgressCallback,
   type OrchestratorOutput,
 } from '../agent/orchestratorAgent';
+import type { SimpleFact } from '../../shared/types';
 import type { LegalIssue } from '../agent/pipeline/types';
 import type { CaseMetadata } from '../agent/contextStore';
 import type { AnalysisType } from '../../shared/types';
@@ -370,6 +371,7 @@ export const runDeepDisputeAnalysis = async (
         parties: caseReaderOutput.parties,
         timelineSummary: caseReaderOutput.timelineSummary,
         legalIssues: issueAnalyzerOutput.legalIssues,
+        undisputedFacts: issueAnalyzerOutput.undisputedFacts,
         informationGaps: issueAnalyzerOutput.informationGaps,
       };
     } catch (caseReaderErr) {
@@ -385,7 +387,13 @@ export const runDeepDisputeAnalysis = async (
     // 6. Persist disputes + sync parties (parallel)
     const { plaintiff, defendant } = orchestratorOutput.parties;
     const [{ data, summary }] = await Promise.all([
-      persistDisputes(orchestratorOutput.legalIssues, caseId, drizzle),
+      persistDisputes(
+        orchestratorOutput.legalIssues,
+        orchestratorOutput.undisputedFacts,
+        orchestratorOutput.informationGaps,
+        caseId,
+        drizzle,
+      ),
       plaintiff || defendant
         ? drizzle
             .update(cases)
@@ -409,11 +417,23 @@ const DISPUTE_BATCH_SIZE = 10;
 
 const persistDisputes = async (
   issues: LegalIssue[],
+  undisputedFacts: SimpleFact[],
+  informationGaps: string[],
   caseId: string,
   drizzle: ReturnType<typeof getDB>,
 ): Promise<{ data: Record<string, unknown>[]; summary: string }> => {
   // claims: pipeline Step 2 product, do NOT delete here (claims belong to brief context)
-  await drizzle.delete(disputes).where(eq(disputes.case_id, caseId));
+  // Delete old disputes + persist case-level analysis fields in parallel (independent tables)
+  await Promise.all([
+    drizzle.delete(disputes).where(eq(disputes.case_id, caseId)),
+    drizzle
+      .update(cases)
+      .set({
+        undisputed_facts: undisputedFacts.length > 0 ? JSON.stringify(undisputedFacts) : null,
+        information_gaps: informationGaps.length > 0 ? JSON.stringify(informationGaps) : null,
+      })
+      .where(eq(cases.id, caseId)),
+  ]);
 
   // Batch insert for D1 param limit
   for (let i = 0; i < issues.length; i += DISPUTE_BATCH_SIZE) {
@@ -428,12 +448,11 @@ const persistDisputes = async (
         their_position: issue.their_position,
         evidence: issue.key_evidence.length > 0 ? JSON.stringify(issue.key_evidence) : null,
         law_refs: issue.mentioned_laws.length > 0 ? JSON.stringify(issue.mentioned_laws) : null,
-        facts: issue.facts.length > 0 ? JSON.stringify(issue.facts) : null,
       })),
     );
   }
 
-  // Return data with parsed JSON + facts for frontend
+  // Return data with parsed JSON for frontend
   const data = issues.map((issue, i) => ({
     id: issue.id,
     case_id: caseId,
@@ -443,7 +462,6 @@ const persistDisputes = async (
     their_position: issue.their_position,
     evidence: issue.key_evidence,
     law_refs: issue.mentioned_laws,
-    facts: issue.facts,
   }));
 
   const summary = `已識別 ${issues.length} 個爭點：\n${issues.map((d, i) => `${i + 1}. ${d.title}`).join('\n')}`;

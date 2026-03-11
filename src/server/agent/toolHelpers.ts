@@ -83,7 +83,6 @@ export const mapDisputeToLegalIssue = (d: DisputeRow): LegalIssue => ({
   their_position: d.their_position || '',
   key_evidence: parseJsonField<string[]>(d.evidence, []),
   mentioned_laws: parseJsonField<string[]>(d.law_refs, []),
-  facts: [],
 });
 
 // ── File Context Builder ──

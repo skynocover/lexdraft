@@ -3,7 +3,7 @@
  * Separated from toolHelpers to avoid circular dependency with analysisService.
  */
 import { toolError } from '../toolHelpers';
-import { runAnalysis } from '../../services/analysisService';
+import { runAnalysis, type DeepDisputeSuccess } from '../../services/analysisService';
 import type { ToolHandler } from './types';
 import type { AnalysisType } from '../../../shared/types';
 
@@ -34,6 +34,23 @@ export const makeAnalysisToolHandler =
       action: ANALYSIS_SSE_ACTIONS[type],
       data: result.data,
     });
+
+    // For disputes, also send undisputed_facts + information_gaps
+    if (type === 'disputes' && 'orchestratorOutput' in result) {
+      const { orchestratorOutput } = result as DeepDisputeSuccess;
+      await ctx.sendSSE({
+        type: 'brief_update',
+        brief_id: '',
+        action: 'set_undisputed_facts',
+        data: orchestratorOutput.undisputedFacts,
+      });
+      await ctx.sendSSE({
+        type: 'brief_update',
+        brief_id: '',
+        action: 'set_information_gaps',
+        data: orchestratorOutput.informationGaps,
+      });
+    }
 
     return { result: result.summary, success: true };
   };

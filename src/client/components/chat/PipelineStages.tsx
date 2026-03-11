@@ -16,7 +16,7 @@ interface CaseConfirmData {
   files: string[];
   issues: { id: string; title: string }[];
   parties?: { plaintiff: string; defendant: string };
-  gaps?: Array<{ description: string; suggestion: string }>;
+  gaps?: string[];
 }
 
 interface ResearchItem {
@@ -293,10 +293,7 @@ const CaseConfirmContent = ({ data }: { data: CaseConfirmData }) => (
         <div className="space-y-1.5">
           {data.gaps.map((gap, i) => (
             <div key={i} className="rounded-lg border border-amber-400/15 bg-amber-400/5 px-3 py-2">
-              <p className="text-xs text-t2">{cleanText(gap.description)}</p>
-              {gap.suggestion && (
-                <p className="mt-1 text-xs text-t3">{cleanText(gap.suggestion)}</p>
-              )}
+              <p className="text-xs text-t2">{cleanText(gap)}</p>
             </div>
           ))}
         </div>

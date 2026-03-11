@@ -119,10 +119,9 @@ const STRATEGY_RESPONSE_SCHEMA: Record<string, unknown> = {
               type: 'OBJECT',
               properties: {
                 fact_id: { type: 'STRING' },
-                assertion_type: { type: 'STRING' },
                 usage: { type: 'STRING' },
               },
-              required: ['fact_id', 'assertion_type', 'usage'],
+              required: ['fact_id', 'usage'],
             },
           },
           legal_reasoning: { type: 'STRING', nullable: true },
@@ -149,12 +148,7 @@ const STRATEGY_RESPONSE_SCHEMA: Record<string, unknown> = {
 const buildJsonOutputMessage = (store: ContextStore, input: ReasoningStrategyInput): string => {
   const issueText = store.legalIssues
     .map((issue) => {
-      let text = `- [${issue.id}] ${issue.title}\n  我方：${issue.our_position}\n  對方：${issue.their_position}`;
-      if (issue.facts && issue.facts.length > 0) {
-        for (const fact of issue.facts) {
-          text += `\n  事實：[${fact.id}] ${fact.description}（${fact.assertion_type}）`;
-        }
-      }
+      const text = `- [${issue.id}] ${issue.title}\n  我方：${issue.our_position}\n  對方：${issue.their_position}`;
       return text;
     })
     .join('\n');

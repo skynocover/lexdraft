@@ -142,9 +142,7 @@ const buildClaimsBlock = (writerCtx: WriterContext, store: ContextStore): string
 
 const buildFactsBlock = (writerCtx: WriterContext): string => {
   if (!writerCtx.factsToUse || writerCtx.factsToUse.length === 0) return '';
-  return writerCtx.factsToUse
-    .map((f) => `  - ${f.fact_id}（${f.assertion_type}）：${f.usage}`)
-    .join('\n');
+  return writerCtx.factsToUse.map((f) => `  - ${f.fact_id}：${f.usage}`).join('\n');
 };
 
 const buildCompletedBlock = (writerCtx: WriterContext, store: ContextStore): string => {

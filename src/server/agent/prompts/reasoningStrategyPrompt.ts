@@ -193,12 +193,6 @@ export const buildReasoningStrategyInput = (
   const issueText = input.legalIssues
     .map((issue) => {
       let text = `- [${issue.id}] ${issue.title}\n  我方：${issue.our_position}\n  對方：${issue.their_position}`;
-      if (issue.facts && issue.facts.length > 0) {
-        text += '\n  事實：';
-        for (const fact of issue.facts) {
-          text += `\n    - [${fact.id}] ${fact.description}（${fact.assertion_type}，${fact.source_side}）`;
-        }
-      }
       if (issue.mentioned_laws.length > 0) {
         text += `\n  提及法條：${issue.mentioned_laws.join('、')}`;
       }
@@ -218,11 +212,7 @@ export const buildReasoningStrategyInput = (
     .join('\n');
 
   const gapText =
-    input.informationGaps.length > 0
-      ? input.informationGaps
-          .map((g) => `- [${g.severity}] ${g.description}（相關議題：${g.related_issue_id}）`)
-          .join('\n')
-      : '無';
+    input.informationGaps.length > 0 ? input.informationGaps.map((g) => `- ${g}`).join('\n') : '無';
 
   const damageText =
     input.damages.length > 0
@@ -257,10 +247,18 @@ export const buildReasoningStrategyInput = (
   const caseTypeGuidance = getCaseTypeGuidance(input.caseSummary || '', meta?.clientRole);
   const caseTypeBlock = caseTypeGuidance ? `\n\n${caseTypeGuidance}` : '';
 
+  const undisputedText =
+    input.undisputedFacts.length > 0
+      ? input.undisputedFacts.map((f) => `- ${f.description}`).join('\n')
+      : '（無）';
+
   return `[案件全貌]
 ${input.caseSummary || '（尚未整合）'}
 ${caseMetaBlock}${instructionsBlock}
 [書狀名稱] ${input.templateTitle}
+
+[不爭執事項]
+${undisputedText}
 
 [爭點清單]
 ${issueText || '（尚未分析）'}

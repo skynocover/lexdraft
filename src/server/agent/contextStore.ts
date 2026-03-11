@@ -6,7 +6,7 @@ import type {
   Claim,
   StrategySection,
   LegalIssue,
-  InformationGap,
+  SimpleFact,
   FoundLaw,
   FetchedLaw,
   DraftSection,
@@ -88,7 +88,8 @@ export class ContextStore {
   timelineSummary = '';
   templateTitle = '';
   legalIssues: LegalIssue[] = [];
-  informationGaps: InformationGap[] = [];
+  undisputedFacts: SimpleFact[] = [];
+  informationGaps: string[] = [];
   damages: DamageItem[] = [];
   timeline: TimelineItem[] = [];
 
@@ -177,6 +178,7 @@ export class ContextStore {
     this.parties = output.parties;
     this.timelineSummary = output.timelineSummary;
     this.legalIssues = output.legalIssues;
+    this.undisputedFacts = output.undisputedFacts;
     this.informationGaps = output.informationGaps;
   };
 
@@ -241,6 +243,7 @@ export class ContextStore {
     timelineSummary: this.timelineSummary,
     templateTitle: this.templateTitle,
     legalIssues: this.legalIssues,
+    undisputedFacts: this.undisputedFacts,
     informationGaps: this.informationGaps,
     damages: this.damages,
     timeline: this.timeline,
@@ -260,12 +263,14 @@ export class ContextStore {
     store.caseMetadata = snap.caseMetadata ?? {
       caseNumber: '',
       court: '',
+      division: '',
       clientRole: '',
       caseInstructions: '',
     };
     store.timelineSummary = snap.timelineSummary ?? '';
     store.templateTitle = snap.templateTitle ?? '';
     store.legalIssues = snap.legalIssues ?? [];
+    store.undisputedFacts = snap.undisputedFacts ?? [];
     store.informationGaps = snap.informationGaps ?? [];
     store.damages = snap.damages ?? [];
     store.timeline = snap.timeline ?? [];
@@ -290,7 +295,8 @@ export interface ContextStoreSnapshot {
   timelineSummary: string;
   templateTitle: string;
   legalIssues: LegalIssue[];
-  informationGaps: InformationGap[];
+  undisputedFacts: SimpleFact[];
+  informationGaps: string[];
   damages: DamageItem[];
   timeline: TimelineItem[];
   claims: Claim[];

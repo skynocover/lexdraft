@@ -12,6 +12,8 @@ export interface Case {
   case_instructions: string | null;
   division: string | null;
   template_id: string | null;
+  undisputed_facts: string | null;
+  information_gaps: string | null;
   created_at: string;
   updated_at: string;
 }

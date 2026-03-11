@@ -1,3 +1,10 @@
+// ── Simple Fact (shared between server pipeline + client stores) ──
+
+export interface SimpleFact {
+  id: string;
+  description: string;
+}
+
 // SSE Event Protocol
 export type SSEEvent =
   | { type: 'message_start'; message_id: string; role: 'assistant' }
@@ -31,7 +38,9 @@ export type SSEEvent =
         | 'set_timeline'
         | 'set_parties'
         | 'set_claims'
-        | 'set_exhibits';
+        | 'set_exhibits'
+        | 'set_undisputed_facts'
+        | 'set_information_gaps';
       data: unknown;
     }
   | { type: 'pipeline_progress'; steps: PipelineStep[] }

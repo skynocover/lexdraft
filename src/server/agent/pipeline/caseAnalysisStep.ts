@@ -89,6 +89,8 @@ export const runCaseAnalysis = async (
           client_role: cases.client_role,
           case_instructions: cases.case_instructions,
           timeline: cases.timeline,
+          undisputed_facts: cases.undisputed_facts,
+          information_gaps: cases.information_gaps,
           template_id: cases.template_id,
         })
         .from(cases)
@@ -104,6 +106,8 @@ export const runCaseAnalysis = async (
               client_role: null,
               case_instructions: null,
               timeline: null,
+              undisputed_facts: null,
+              information_gaps: null,
               template_id: null,
             },
         ),
@@ -224,7 +228,8 @@ export const runCaseAnalysis = async (
         },
         timelineSummary: '',
         legalIssues: existingLegalIssues,
-        informationGaps: [],
+        undisputedFacts: parseJsonField(caseRow.undisputed_facts, []),
+        informationGaps: parseJsonField(caseRow.information_gaps, []),
       };
 
       store.seedFromOrchestrator(orchestratorOutput);
@@ -264,6 +269,20 @@ export const runCaseAnalysis = async (
           brief_id: '',
           action: 'set_disputes',
           data: deepResult.data,
+        });
+
+        await ctx.sendSSE({
+          type: 'brief_update',
+          brief_id: '',
+          action: 'set_undisputed_facts',
+          data: orchestratorOutput.undisputedFacts,
+        });
+
+        await ctx.sendSSE({
+          type: 'brief_update',
+          brief_id: '',
+          action: 'set_information_gaps',
+          data: orchestratorOutput.informationGaps,
         });
 
         await ctx.sendSSE({
@@ -378,11 +397,7 @@ export const runCaseAnalysis = async (
   }
 
   // ── 6. Build output ──
-  const criticalGaps = orchestratorOutput
-    ? orchestratorOutput.informationGaps
-        .filter((g) => g.severity === 'critical')
-        .map((g) => ({ description: g.description, suggestion: g.suggestion }))
-    : [];
+  const gaps = orchestratorOutput?.informationGaps ?? [];
 
   const stepDetail = `${readyFiles.length} 份檔案、${store.legalIssues.length} 個爭點、${finalDamages.length} 項金額、${finalTimeline.length} 個時間事件`;
 
@@ -394,7 +409,7 @@ export const runCaseAnalysis = async (
       title: d.title,
     })),
     parties: orchestratorOutput?.parties,
-    gaps: criticalGaps.length > 0 ? criticalGaps : undefined,
+    gaps: gaps.length > 0 ? gaps : undefined,
   };
 
   return {
