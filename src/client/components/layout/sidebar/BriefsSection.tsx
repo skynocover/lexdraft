@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
@@ -12,9 +13,27 @@ const formatDate = (dateStr: string): string => {
 
 export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) => {
   const briefs = useBriefStore((s) => s.briefs);
+  const dirtyMap = useBriefStore(
+    useShallow((s) => {
+      const m: Record<string, boolean> = {};
+      for (const [id, bs] of Object.entries(s.briefCache)) {
+        m[id] = bs.dirty;
+      }
+      return m;
+    }),
+  );
+  const activeBriefId = useBriefStore((s) => s.activeBriefId);
   const deleteBrief = useBriefStore((s) => s.deleteBrief);
   const openBriefTab = useTabStore((s) => s.openBriefTab);
   const closeTab = useTabStore((s) => s.closeTab);
+
+  const sortedBriefs = useMemo(
+    () =>
+      [...briefs].sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+      ),
+    [briefs],
+  );
 
   const [confirmDelete, setConfirmDelete] = useState<{
     id: string;
@@ -50,47 +69,50 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
         </div>
       ) : (
         <div className="space-y-1 px-3 py-2">
-          {[...briefs]
-            .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-            .map((b) => {
-              const tabId = `brief:${b.id}`;
-              const isActive = activeTabId === tabId;
-              const title = b.title || DEFAULT_BRIEF_LABEL;
-              const badge = (b.title?.trim() || DEFAULT_BRIEF_LABEL)[0];
-              return (
+          {sortedBriefs.map((b) => {
+            const tabId = `brief:${b.id}`;
+            const isActive = activeTabId === tabId;
+            const isActiveBrief = activeBriefId === b.id;
+            const isDirty = dirtyMap[b.id] ?? false;
+            const title = b.title || DEFAULT_BRIEF_LABEL;
+            const badge = (b.title?.trim() || DEFAULT_BRIEF_LABEL)[0];
+            return (
+              <div
+                key={b.id}
+                className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${
+                  isActive ? 'bg-ac/8' : isActiveBrief ? 'bg-ac/5' : 'hover:bg-bg-2'
+                }`}
+              >
                 <div
-                  key={b.id}
-                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${
-                    isActive ? 'bg-ac/8' : 'hover:bg-bg-2'
+                  className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                    isActive ? 'bg-ac/15 text-ac' : 'bg-ac/10 text-ac'
                   }`}
                 >
-                  <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                      isActive ? 'bg-ac/15 text-ac' : 'bg-ac/10 text-ac'
-                    }`}
-                  >
-                    {badge}
-                  </div>
-
-                  <button onClick={() => openBriefTab(b.id, title)} className="min-w-0 flex-1">
-                    <p
-                      className={`truncate text-left text-sm font-medium ${isActive ? 'text-ac' : 'text-t1'}`}
-                    >
-                      {b.title || DEFAULT_BRIEF_LABEL}
-                    </p>
-                    <p className="text-left text-xs text-t3">{formatDate(b.updated_at)}</p>
-                  </button>
-
-                  <button
-                    onClick={() => setConfirmDelete({ id: b.id, title })}
-                    className="shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
-                    title="刪除書狀"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {badge}
+                  {isDirty && (
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-yl" />
+                  )}
                 </div>
-              );
-            })}
+
+                <button onClick={() => openBriefTab(b.id, title)} className="min-w-0 flex-1">
+                  <p
+                    className={`truncate text-left text-sm font-medium ${isActive ? 'text-ac' : 'text-t1'}`}
+                  >
+                    {b.title || DEFAULT_BRIEF_LABEL}
+                  </p>
+                  <p className="text-left text-xs text-t3">{formatDate(b.updated_at)}</p>
+                </button>
+
+                <button
+                  onClick={() => setConfirmDelete({ id: b.id, title })}
+                  className="shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
+                  title="刪除書狀"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

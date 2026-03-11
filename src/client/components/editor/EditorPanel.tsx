@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useTabStore } from '../../stores/useTabStore';
 import { TabBar } from '../layout/TabBar';
-import { BriefEditor } from './index';
+import { A4PageEditor } from './tiptap/A4PageEditor';
 import { FileViewer } from './FileViewer';
 import { OutlinePanel } from './OutlinePanel';
 import { VersionPreviewEditor } from './VersionPreviewEditor';
@@ -22,7 +22,6 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
   const focusPanel = useTabStore((s) => s.focusPanel);
   const setFileHighlight = useTabStore((s) => s.setFileHighlight);
   const closeTab = useTabStore((s) => s.closeTab);
-  const currentBrief = useBriefStore((s) => s.currentBrief);
   const restoreVersion = useBriefStore((s) => s.restoreVersion);
 
   const [confirmRestore, setConfirmRestore] = useState<{
@@ -68,7 +67,7 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
         {activeTab?.type === 'template' ? (
           <TemplateEditor />
         ) : activeTab?.type === 'brief' ? (
-          <BriefEditor content={currentBrief?.content_structured ?? null} />
+          <A4PageEditor briefId={activeTab.briefId} />
         ) : activeTab?.type === 'file' ? (
           <FileViewer
             filename={activeTab.filename}

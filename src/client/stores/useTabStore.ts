@@ -133,10 +133,10 @@ const createMainPanel = (): Panel => ({
 const findPanelWithTab = (panels: Panel[], tabId: string): Panel | undefined =>
   panels.find((p) => p.tabIds.includes(tabId));
 
-// Sync external singleton stores when a tab becomes active.
-// Brief and template use singleton stores (currentBrief / currentTemplate),
-// so switching tabs must reload the correct data. Other tab types (file, law,
-// version, law-search) are self-contained in tabRegistry and need no sync.
+// Sync external stores when a tab becomes active.
+// Brief uses briefCache (loadBrief handles cache hit/miss + auto-saves previous dirty brief).
+// Template uses singleton store (currentTemplate).
+// Other tab types are self-contained in tabRegistry and need no sync.
 const syncActiveTabStore = (tabData: TabData | undefined): void => {
   if (!tabData) return;
   if (tabData.type === 'brief') {
@@ -809,6 +809,8 @@ export const useTabStore = create<TabState>((set, get) => ({
         URL.revokeObjectURL(tabData.pdfUrl);
       }
     }
+    // Clear brief cache when switching cases
+    useBriefStore.getState().clearBriefCache();
     set({
       tabRegistry: {},
       panels: [createMainPanel()],

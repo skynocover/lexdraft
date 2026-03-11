@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import type { BriefEditorProps } from '../types';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
+import { forEachCitation } from '../../../lib/citationUtils';
 import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useSelectionToolbar } from '../../../hooks/useSelectionToolbar';
@@ -21,14 +21,28 @@ import { EditorToolbar } from './EditorToolbar';
 import { SelectionToolbar } from './SelectionToolbar';
 import { usePageInfo } from '../../../hooks/usePageInfo';
 
-export function A4PageEditor({ content }: BriefEditorProps) {
-  const currentBrief = useBriefStore((s) => s.currentBrief);
-  const citationStats = useBriefStore((s) => s.citationStats);
-  const dirty = useBriefStore((s) => s.dirty);
-  const saving = useBriefStore((s) => s.saving);
+interface A4PageEditorProps {
+  briefId: string;
+}
+
+export function A4PageEditor({ briefId }: A4PageEditorProps) {
+  const briefState = useBriefStore((s) => s.briefCache[briefId]);
+  const brief = briefState?.brief ?? null;
+  const content = brief?.content_structured ?? null;
+  const dirty = briefState?.dirty ?? false;
+  const saving = briefState?.saving ?? false;
   const setTitle = useBriefStore((s) => s.setTitle);
 
-  const stats = citationStats();
+  const stats = useMemo(() => {
+    if (!content?.paragraphs) return { confirmed: 0, pending: 0 };
+    let confirmed = 0;
+    let pending = 0;
+    forEachCitation(content.paragraphs, (c) => {
+      if (c.status === 'confirmed') confirmed++;
+      else if (c.status === 'pending') pending++;
+    });
+    return { confirmed, pending };
+  }, [content]);
 
   const [citationReviewOpen, setCitationReviewOpen] = useState(false);
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false);
@@ -45,7 +59,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
   const isInternalUpdate = useRef(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useAutoSave();
+  useAutoSave(briefId);
 
   const editor = useEditor({
     extensions: [
@@ -72,13 +86,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
         const doc = editor.getJSON();
         const structured = tiptapDocToContentStructured(doc);
 
-        const brief = useBriefStore.getState().currentBrief;
-        if (brief) {
-          useBriefStore.setState({
-            currentBrief: { ...brief, content_structured: structured },
-            dirty: true,
-          });
-        }
+        useBriefStore.getState().updateBriefContent(briefId, structured);
 
         requestAnimationFrame(() => {
           isInternalUpdate.current = false;
@@ -130,18 +138,16 @@ export function A4PageEditor({ content }: BriefEditorProps) {
   }, [editingTitle]);
 
   const handleTitleDoubleClick = () => {
-    setTitleDraft(currentBrief?.title || '');
+    setTitleDraft(brief?.title || '');
     setEditingTitle(true);
   };
 
   const handleTitleBlur = () => {
     setEditingTitle(false);
     const newTitle = titleDraft.trim();
-    if (newTitle && newTitle !== currentBrief?.title) {
-      setTitle(newTitle);
-      if (currentBrief) {
-        useTabStore.getState().updateBriefTabTitle(currentBrief.id, newTitle);
-      }
+    if (newTitle && newTitle !== brief?.title) {
+      setTitle(newTitle, briefId);
+      useTabStore.getState().updateBriefTabTitle(briefId, newTitle);
     }
   };
 
@@ -154,13 +160,14 @@ export function A4PageEditor({ content }: BriefEditorProps) {
     }
   };
 
-  const briefTitle = currentBrief?.title || DEFAULT_BRIEF_LABEL;
+  const briefTitle = brief?.title || DEFAULT_BRIEF_LABEL;
 
   return (
     <div className="absolute inset-0 flex flex-col">
       {/* Toolbar */}
       <EditorToolbar
         editor={editor}
+        brief={brief}
         stats={stats}
         dirty={dirty}
         saving={saving}

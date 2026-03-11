@@ -112,15 +112,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const token = useAuthStore.getState().token;
 
-      // Build brief context from current brief
+      // Build brief context from active brief in cache
       const briefState = useBriefStore.getState();
-      const currentBrief = briefState.currentBrief;
+      const activeBrief = briefState.currentBrief;
       const requestBody: ChatRequest = { message };
-      if (currentBrief) {
-        const paragraphs = currentBrief.content_structured?.paragraphs ?? [];
+      if (activeBrief) {
+        const paragraphs = activeBrief.content_structured?.paragraphs ?? [];
         requestBody.briefContext = {
-          brief_id: currentBrief.id,
-          title: currentBrief.title || DEFAULT_BRIEF_LABEL,
+          brief_id: activeBrief.id,
+          title: activeBrief.title || DEFAULT_BRIEF_LABEL,
           paragraphs: paragraphs.map((p) => ({
             id: p.id,
             section: p.section,

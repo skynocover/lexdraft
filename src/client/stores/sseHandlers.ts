@@ -187,15 +187,15 @@ const handleBriefUpdate = (event: Extract<SSEEvent, { type: 'brief_update' }>) =
     }
     case 'add_paragraph': {
       const p = event.data as Paragraph;
-      if (!event.brief_id || briefStore.currentBrief?.id === event.brief_id) {
-        briefStore.addParagraph(p);
+      if (event.brief_id) {
+        briefStore.addParagraph(p, event.brief_id);
       }
       break;
     }
     case 'update_paragraph': {
       const p = event.data as Paragraph;
-      if (!event.brief_id || briefStore.currentBrief?.id === event.brief_id) {
-        briefStore.updateParagraph(p.id, p);
+      if (event.brief_id) {
+        briefStore.updateParagraph(p.id, p, event.brief_id);
       }
       break;
     }

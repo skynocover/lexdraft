@@ -23,7 +23,11 @@ chatRouter.post('/cases/:caseId/chat', async (c) => {
     new Request('https://do/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: body.message, caseId, briefContext: body.briefContext }),
+      body: JSON.stringify({
+        message: body.message,
+        caseId,
+        briefContext: body.briefContext,
+      }),
     }),
   );
 

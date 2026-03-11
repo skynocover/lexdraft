@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import type { Editor } from '@tiptap/react';
 import { Undo2, Redo2 } from 'lucide-react';
-import { useBriefStore } from '../../../stores/useBriefStore';
+import { useBriefStore, type Brief } from '../../../stores/useBriefStore';
 import { exportBriefToDocx } from './exportDocx';
 import type { PageInfo } from '../../../hooks/usePageInfo';
 import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
@@ -24,6 +24,7 @@ const countChars = (
 
 interface EditorToolbarProps {
   editor: Editor | null;
+  brief: Brief | null;
   stats: { confirmed: number; pending: number };
   dirty: boolean;
   saving: boolean;
@@ -37,6 +38,7 @@ interface EditorToolbarProps {
 
 export const EditorToolbar = ({
   editor,
+  brief,
   stats,
   dirty,
   saving,
@@ -47,8 +49,6 @@ export const EditorToolbar = ({
   onPrintPreview,
   onToggleVersionPanel,
 }: EditorToolbarProps) => {
-  const currentBrief = useBriefStore((s) => s.currentBrief);
-
   const detectBlockType = useCallback((): string => {
     if (!editor) return 'paragraph';
     if (editor.isActive('heading')) return 'heading';
@@ -79,15 +79,15 @@ export const EditorToolbar = ({
   };
 
   const charCount = useMemo(() => {
-    if (!currentBrief?.content_structured?.paragraphs) return 0;
-    return countChars(currentBrief.content_structured.paragraphs);
-  }, [currentBrief?.content_structured]);
+    if (!brief?.content_structured?.paragraphs) return 0;
+    return countChars(brief.content_structured.paragraphs);
+  }, [brief?.content_structured]);
 
   const handleDownloadWord = async () => {
-    if (!currentBrief?.content_structured) return;
-    const title = currentBrief.title || DEFAULT_BRIEF_LABEL;
+    if (!brief?.content_structured) return;
+    const title = brief.title || DEFAULT_BRIEF_LABEL;
     const eMap = useBriefStore.getState().exhibitMap();
-    await exportBriefToDocx(currentBrief.content_structured.paragraphs, title, eMap);
+    await exportBriefToDocx(brief.content_structured.paragraphs, title, eMap);
   };
 
   return (
@@ -174,7 +174,7 @@ export const EditorToolbar = ({
         >
           列印預覽
         </button>
-        {currentBrief?.content_structured && (
+        {brief?.content_structured && (
           <button
             onClick={handleDownloadWord}
             className="rounded px-3 py-1 text-xs text-t3 hover:bg-bg-3 hover:text-t1"
