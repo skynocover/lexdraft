@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { ANALYSIS_LABELS, type AnalysisType, type SimpleFact } from '../../shared/types';
@@ -100,6 +101,11 @@ interface AnalysisState {
   // Disputes CRUD
   updateDispute: (caseId: string, disputeId: string, updates: { title: string }) => Promise<void>;
   removeDispute: (caseId: string, disputeId: string) => Promise<void>;
+
+  // Undisputed Facts CRUD
+  addFact: (caseId: string, description: string) => Promise<void>;
+  updateFact: (caseId: string, factId: string, description: string) => Promise<void>;
+  removeFact: (caseId: string, factId: string) => Promise<void>;
 
   // Damages CRUD
   addDamage: (caseId: string, data: DamageInput) => Promise<void>;
@@ -213,6 +219,46 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       disputes: get().disputes.filter((d) => d.id !== disputeId),
       claims: get().claims.filter((c) => c.dispute_id !== disputeId),
     });
+  },
+
+  // Undisputed Facts CRUD
+  addFact: async (caseId, description) => {
+    const prev = get().undisputedFacts;
+    const newFact: SimpleFact = { id: nanoid(), description };
+    const updated = [...prev, newFact];
+    set({ undisputedFacts: updated });
+    try {
+      await api.put(`/cases/${caseId}/undisputed-facts`, { facts: updated });
+    } catch {
+      set({ undisputedFacts: prev });
+      toast.error('新增不爭執事項失敗');
+    }
+  },
+
+  updateFact: async (caseId, factId, description) => {
+    const prev = get().undisputedFacts;
+    const target = prev.find((f) => f.id === factId);
+    if (!target || target.description === description) return;
+    const updated = prev.map((f) => (f.id === factId ? { ...f, description } : f));
+    set({ undisputedFacts: updated });
+    try {
+      await api.put(`/cases/${caseId}/undisputed-facts`, { facts: updated });
+    } catch {
+      set({ undisputedFacts: prev });
+      toast.error('更新不爭執事項失敗');
+    }
+  },
+
+  removeFact: async (caseId, factId) => {
+    const prev = get().undisputedFacts;
+    const updated = prev.filter((f) => f.id !== factId);
+    set({ undisputedFacts: updated });
+    try {
+      await api.put(`/cases/${caseId}/undisputed-facts`, { facts: updated });
+    } catch {
+      set({ undisputedFacts: prev });
+      toast.error('刪除不爭執事項失敗');
+    }
   },
 
   // Damages CRUD

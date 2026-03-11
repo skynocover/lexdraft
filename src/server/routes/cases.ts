@@ -16,7 +16,7 @@ import {
 } from '../db/schema';
 import { notFound } from '../lib/errors';
 import { parseBody } from '../lib/validate';
-import { createCaseSchema, updateCaseSchema } from '../schemas/cases';
+import { createCaseSchema, updateCaseSchema, updateUndisputedFactsSchema } from '../schemas/cases';
 
 const DEFAULT_USER_ID = 'default-user';
 
@@ -109,6 +109,25 @@ casesRouter.put('/:id', async (c) => {
 
   const updated = await db.select().from(cases).where(eq(cases.id, id));
   return c.json(updated[0]);
+});
+
+// PUT /api/cases/:id/undisputed-facts — 更新不爭執事項
+casesRouter.put('/:id/undisputed-facts', async (c) => {
+  const id = c.req.param('id');
+  const db = getDB(c.env.DB);
+
+  const body = parseBody(await c.req.json(), updateUndisputedFactsSchema);
+  const facts = body.facts;
+
+  await db
+    .update(cases)
+    .set({
+      undisputed_facts: facts.length > 0 ? JSON.stringify(facts) : null,
+      updated_at: new Date().toISOString(),
+    })
+    .where(eq(cases.id, id));
+
+  return c.json(facts);
 });
 
 // DELETE /api/cases/:id — 刪除案件及所有關聯資料

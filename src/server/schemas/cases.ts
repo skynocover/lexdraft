@@ -12,6 +12,10 @@ export const createCaseSchema = z.object({
   division: z.string().optional(),
 });
 
+export const updateUndisputedFactsSchema = z.object({
+  facts: z.array(z.object({ id: z.string(), description: z.string() })),
+});
+
 export const updateCaseSchema = z.object({
   title: z.string().optional(),
   case_number: z.string().optional(),

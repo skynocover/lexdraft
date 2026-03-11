@@ -1,52 +1,21 @@
 import { useState, useEffect, useRef, useMemo, type FC } from 'react';
-import { ChevronRight, Pencil, Trash2, Search, AlertTriangle, X } from 'lucide-react';
+import { ChevronRight, Pencil, Trash2, Search, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAnalysisStore, type Dispute, type SimpleFact } from '../../stores/useAnalysisStore';
+import { useAnalysisStore, type Dispute } from '../../stores/useAnalysisStore';
 import { useCaseStore } from '../../stores/useCaseStore';
 import { useTabStore } from '../../stores/useTabStore';
 import { cleanText } from '../../lib/textUtils';
-import { UndisputedFactList } from './FactList';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
+import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { ReanalyzeButton } from './ReanalyzeButton';
 import { EmptyAnalyzeButton } from './EmptyAnalyzeButton';
+import { UndisputedFactsBlock } from './UndisputedFactsBlock';
 
 // ── Information Gaps Block ──
 
 const InformationGapsBlock: FC<{ gaps: string[] }> = ({ gaps }) => {
-  const [dismissed, setDismissed] = useState(false);
-  useEffect(() => setDismissed(false), [gaps]);
-  if (gaps.length === 0 || dismissed) return null;
-
-  return (
-    <div className="rounded border border-or/30 bg-or/5 px-3 py-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-or">
-          <AlertTriangle className="size-3.5" />
-          資訊缺口
-        </div>
-        <button
-          onClick={() => setDismissed(true)}
-          className="rounded p-0.5 text-t3 transition hover:bg-bg-h hover:text-t1"
-        >
-          <X className="size-3" />
-        </button>
-      </div>
-      <ul className="mt-1.5 space-y-1">
-        {gaps.map((gap, i) => (
-          <li key={i} className="text-xs leading-relaxed text-or/80">
-            • {gap}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
-// ── Undisputed Facts Block ──
-
-const UndisputedFactsBlock: FC<{ facts: SimpleFact[] }> = ({ facts }) => {
-  if (facts.length === 0) return null;
+  if (gaps.length === 0) return null;
 
   return (
     <Collapsible className="rounded border border-bd bg-bg-2 px-3 py-2.5">
@@ -55,11 +24,23 @@ const UndisputedFactsBlock: FC<{ facts: SimpleFact[] }> = ({ facts }) => {
           size={14}
           className="shrink-0 text-t3 transition-transform duration-200 [[data-state=open]>&]:rotate-90"
         />
-        <span className="text-xs font-medium text-t2">不爭執事項</span>
-        <span className="text-xs text-t3">({facts.length})</span>
+        <AlertTriangle className="size-3.5 shrink-0 text-or" />
+        <span className="text-xs font-medium text-t2">資訊缺口</span>
+        <span className="text-xs text-t3">({gaps.length})</span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 pl-5">
-        <UndisputedFactList facts={facts} />
+      <CollapsibleContent className="mt-2 space-y-1 pl-5">
+        {gaps.map((gap, i) => (
+          <Tooltip key={i}>
+            <TooltipTrigger asChild>
+              <div className="rounded bg-bg-1 px-2.5 py-1.5">
+                <p className="line-clamp-2 text-sm text-or/80">{gap}</p>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-72">
+              {gap}
+            </TooltipContent>
+          </Tooltip>
+        ))}
       </CollapsibleContent>
     </Collapsible>
   );
@@ -71,6 +52,7 @@ export const DisputesTab = () => {
   const disputes = useAnalysisStore((s) => s.disputes);
   const undisputedFacts = useAnalysisStore((s) => s.undisputedFacts);
   const informationGaps = useAnalysisStore((s) => s.informationGaps);
+  const caseId = useCaseStore((s) => s.currentCase?.id);
   const files = useCaseStore((s) => s.files);
   const fileByName = useMemo(() => new Map(files.map((f) => [f.filename, f])), [files]);
 
@@ -93,11 +75,12 @@ export const DisputesTab = () => {
       </div>
 
       <InformationGapsBlock gaps={informationGaps} />
-      <UndisputedFactsBlock facts={undisputedFacts} />
 
       {disputes.map((d) => (
         <DisputeCard key={d.id} dispute={d} fileByName={fileByName} />
       ))}
+
+      {caseId && <UndisputedFactsBlock facts={undisputedFacts} caseId={caseId} />}
     </div>
   );
 };
@@ -119,7 +102,7 @@ const DisputeCard: FC<DisputeCardProps> = ({ dispute, fileByName }) => {
   const savingRef = useRef(false);
   const updateDispute = useAnalysisStore((s) => s.updateDispute);
   const removeDispute = useAnalysisStore((s) => s.removeDispute);
-  const currentCase = useCaseStore((s) => s.currentCase);
+  const caseId = useCaseStore((s) => s.currentCase?.id);
   const openFileTab = useTabStore((s) => s.openFileTab);
   const openLawSearchTab = useTabStore((s) => s.openLawSearchTab);
 
@@ -143,13 +126,13 @@ const DisputeCard: FC<DisputeCardProps> = ({ dispute, fileByName }) => {
     if (savingRef.current) return;
     savingRef.current = true;
     const trimmed = editTitle.trim();
-    if (!trimmed || !currentCase) {
+    if (!trimmed || !caseId) {
       setEditing(false);
       savingRef.current = false;
       return;
     }
     try {
-      await updateDispute(currentCase.id, dispute.id, { title: trimmed });
+      await updateDispute(caseId, dispute.id, { title: trimmed });
     } catch {
       toast.error('更新爭點標題失敗');
     }
@@ -177,9 +160,9 @@ const DisputeCard: FC<DisputeCardProps> = ({ dispute, fileByName }) => {
   };
 
   const handleConfirmDelete = async () => {
-    if (!currentCase) return;
+    if (!caseId) return;
     try {
-      await removeDispute(currentCase.id, dispute.id);
+      await removeDispute(caseId, dispute.id);
       toast.success('爭點已刪除');
     } catch {
       toast.error('刪除爭點失敗');
