@@ -198,12 +198,12 @@ export function A4PageEditor({ content }: BriefEditorProps) {
 
             {/* Tiptap Editor Content */}
             <EditorContent editor={editor} />
+
+            {/* Exhibit Mark Overlay (hover popover for inline exhibit references) */}
+            <ExhibitMarkOverlay containerRef={contentRef} />
           </div>
         )}
       </div>
-
-      {/* Exhibit Mark Overlay (hover popover for inline exhibit references) */}
-      <ExhibitMarkOverlay containerRef={contentRef} />
 
       {/* Selection Toolbar (inline AI) */}
       <SelectionToolbar
