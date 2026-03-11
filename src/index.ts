@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 export { AgentDO } from './server/durable-objects/AgentDO';
 import type { AppEnv } from './server/types';
 import { authMiddleware } from './server/middleware/auth';
+import { securityHeadersMiddleware } from './server/middleware/securityHeaders';
 import { casesRouter } from './server/routes/cases';
 import { filesRouter } from './server/routes/files';
 import { chatRouter } from './server/routes/chat';
@@ -18,6 +19,9 @@ import { exhibitsRouter } from './server/routes/exhibits';
 import { processFileMessage } from './server/queue/fileProcessor';
 
 const app = new Hono<AppEnv>();
+
+// === 安全 Headers（全域） ===
+app.use('*', securityHeadersMiddleware);
 
 // === 全域錯誤處理 ===
 app.onError((err, c) => {
