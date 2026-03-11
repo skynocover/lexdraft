@@ -31,7 +31,6 @@ export interface Damage {
   description: string | null;
   amount: number;
   basis: string | null;
-  dispute_id: string | null;
   created_at: string;
 }
 
@@ -60,9 +59,7 @@ export interface ClaimGraph {
 }
 
 type TimelineInput = Omit<TimelineEvent, 'id'>;
-type DamageInput = Omit<Damage, 'id' | 'case_id' | 'created_at' | 'dispute_id'> & {
-  dispute_id?: string | null;
-};
+type DamageInput = Omit<Damage, 'id' | 'case_id' | 'created_at'>;
 
 export type { AnalysisType };
 

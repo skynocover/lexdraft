@@ -412,10 +412,7 @@ const persistDisputes = async (
   caseId: string,
   drizzle: ReturnType<typeof getDB>,
 ): Promise<{ data: Record<string, unknown>[]; summary: string }> => {
-  // Clear FK references before deleting disputes (must be sequential — nullify first, then delete)
   // claims: pipeline Step 2 product, do NOT delete here (claims belong to brief context)
-  // damages: may be manually created → only nullify dispute_id
-  await drizzle.update(damages).set({ dispute_id: null }).where(eq(damages.case_id, caseId));
   await drizzle.delete(disputes).where(eq(disputes.case_id, caseId));
 
   // Batch insert for D1 param limit
@@ -468,7 +465,6 @@ const persistDamages = async (
     amount: d.amount,
     basis: d.basis || null,
     evidence_refs: null,
-    dispute_id: null,
     created_at: new Date().toISOString(),
   }));
 

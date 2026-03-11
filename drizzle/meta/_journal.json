@@ -141,6 +141,13 @@
       "when": 1773196983179,
       "tag": "0019_wooden_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1773216933013,
+      "tag": "0020_loose_alex_power",
+      "breakpoints": true
     }
   ]
 }

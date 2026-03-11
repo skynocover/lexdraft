@@ -42,7 +42,6 @@ damagesRouter.post('/cases/:caseId/damages', async (c) => {
     amount: body.amount,
     basis: body.basis || null,
     evidence_refs: null,
-    dispute_id: body.dispute_id || null,
     created_at: now,
   });
 
@@ -54,7 +53,6 @@ damagesRouter.post('/cases/:caseId/damages', async (c) => {
       description: body.description || null,
       amount: body.amount,
       basis: body.basis || null,
-      dispute_id: body.dispute_id || null,
       created_at: now,
     },
     201,
@@ -72,7 +70,6 @@ damagesRouter.put('/damages/:id', async (c) => {
   if (body.description !== undefined) updates.description = body.description;
   if (body.amount !== undefined) updates.amount = body.amount;
   if (body.basis !== undefined) updates.basis = body.basis;
-  if (body.dispute_id !== undefined) updates.dispute_id = body.dispute_id;
 
   await db.update(damages).set(updates).where(eq(damages.id, id));
 
