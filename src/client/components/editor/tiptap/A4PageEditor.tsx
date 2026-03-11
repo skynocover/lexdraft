@@ -1,11 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import type { BriefEditorProps } from '../types';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
-import { useAnalysisStore } from '../../../stores/useAnalysisStore';
-import { useUIStore } from '../../../stores/useUIStore';
 import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useSelectionToolbar } from '../../../hooks/useSelectionToolbar';
@@ -48,28 +46,6 @@ export function A4PageEditor({ content }: BriefEditorProps) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useAutoSave();
-
-  // Paragraph double-click → jump to dispute in bottom panel
-  const handleEditorDoubleClick = useCallback((e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    const paragraphEl = target.closest('[data-dispute-id]') as HTMLElement | null;
-    if (!paragraphEl) return;
-
-    const disputeId = paragraphEl.getAttribute('data-dispute-id');
-    if (!disputeId) return;
-
-    useUIStore.getState().setSidebarTab('analysis');
-    useUIStore.getState().setSidebarOpen(true);
-    useUIStore.getState().setAnalysisSubTab('disputes');
-    useAnalysisStore.getState().setHighlightDisputeId(disputeId);
-
-    setTimeout(() => {
-      const card = document.querySelector(`[data-dispute-card="${disputeId}"]`);
-      if (card) {
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 100);
-  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -221,9 +197,7 @@ export function A4PageEditor({ content }: BriefEditorProps) {
             </div>
 
             {/* Tiptap Editor Content */}
-            <div onDoubleClick={handleEditorDoubleClick}>
-              <EditorContent editor={editor} />
-            </div>
+            <EditorContent editor={editor} />
           </div>
         )}
       </div>

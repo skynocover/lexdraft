@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { ChevronLeft, AlignLeft } from 'lucide-react';
 import { useBriefStore } from '../../stores/useBriefStore';
 
@@ -57,6 +57,8 @@ export function OutlinePanel() {
     return items;
   }, [currentBrief?.content_structured]);
 
+  const overlayTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   if (outlineItems.length === 0) return null;
 
   const handleClick = (item: (typeof outlineItems)[number]) => {
@@ -72,17 +74,31 @@ export function OutlinePanel() {
       el = document.querySelector(`[data-paragraph-id="${CSS.escape(item.id)}"]`);
     }
     if (el) {
-      // Scroll to 1/3 from the top of the scroll container
-      const container = el.closest('.a4-editor-container');
+      // ProseMirror strips externally-added classes on view updates,
+      // so use a temporary overlay div outside its DOM management.
+      // Use offsetTop/offsetLeft (layout-relative) instead of getBoundingClientRect
+      // to avoid race with scrollIntoView animation.
+      const container = el.closest('.a4-editor-container') as HTMLElement | null;
       if (container) {
-        const elTop = (el as HTMLElement).offsetTop;
-        const offset = container.clientHeight / 3;
-        container.scrollTo({ top: elTop - offset, behavior: 'smooth' });
-      } else {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Clean up previous overlay
+        if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+        container.querySelector('.outline-highlight-overlay')?.remove();
+
+        const htmlEl = el as HTMLElement;
+        const overlay = document.createElement('div');
+        overlay.className = 'outline-highlight-overlay';
+        Object.assign(overlay.style, {
+          position: 'absolute',
+          top: `${htmlEl.offsetTop - 2}px`,
+          left: `${htmlEl.offsetLeft - 2}px`,
+          width: `${htmlEl.offsetWidth + 4}px`,
+          height: `${htmlEl.offsetHeight + 4}px`,
+        });
+        container.appendChild(overlay);
+        overlayTimerRef.current = setTimeout(() => overlay.remove(), 2300);
       }
-      el.classList.add('highlight-paragraph');
-      setTimeout(() => el.classList.remove('highlight-paragraph'), 2000);
+
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   };
 

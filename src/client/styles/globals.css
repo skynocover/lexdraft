@@ -474,15 +474,29 @@ body {
   padding: 0 2px;
 }
 
-/* ---- Highlight paragraph (dispute bidirectional link) ---- */
-.highlight-paragraph {
-  background-color: rgba(240, 200, 80, 0.2) !important;
-  outline: 2px solid rgba(240, 200, 80, 0.5);
-  outline-offset: 2px;
-  border-radius: 2px;
-  transition:
-    background-color 0.3s,
-    outline-color 0.3s;
+/* ---- Outline panel scroll-to-anchor highlight overlay ---- */
+.a4-editor-container {
+  position: relative;
+}
+
+.outline-highlight-overlay {
+  background-color: rgba(240, 200, 80, 0.3);
+  outline: 2px solid rgba(240, 200, 80, 0.7);
+  outline-offset: 0;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 5;
+  animation: outline-highlight-fade 2.3s ease-out forwards;
+}
+
+@keyframes outline-highlight-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* ===================== Print ===================== */

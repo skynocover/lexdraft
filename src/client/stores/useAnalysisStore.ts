@@ -76,7 +76,6 @@ interface AnalysisState {
   timeline: TimelineEvent[];
   parties: Party[];
   claims: ClaimGraph[];
-  highlightDisputeId: string | null;
   analyzingType: AnalysisType | null;
 
   setDisputes: (disputes: Dispute[]) => void;
@@ -84,7 +83,6 @@ interface AnalysisState {
   setTimeline: (timeline: TimelineEvent[]) => void;
   setParties: (parties: Party[]) => void;
   setClaims: (claims: ClaimGraph[]) => void;
-  setHighlightDisputeId: (id: string | null) => void;
 
   loadDisputes: (caseId: string) => Promise<void>;
   loadDamages: (caseId: string) => Promise<void>;
@@ -133,7 +131,6 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   timeline: [],
   parties: [],
   claims: [],
-  highlightDisputeId: null,
   analyzingType: null,
 
   setDisputes: (disputes) => set({ disputes }),
@@ -141,7 +138,6 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   setTimeline: (timeline) => set({ timeline }),
   setParties: (parties) => set({ parties }),
   setClaims: (claims) => set({ claims }),
-  setHighlightDisputeId: (highlightDisputeId) => set({ highlightDisputeId }),
 
   loadDisputes: makeLoader<Dispute>('disputes', 'disputes', set),
   loadDamages: makeLoader<Damage>('damages', 'damages', set),

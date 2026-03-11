@@ -13,7 +13,6 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/colla
 
 export const DisputesTab = () => {
   const disputes = useAnalysisStore((s) => s.disputes);
-  const highlightDisputeId = useAnalysisStore((s) => s.highlightDisputeId);
   const files = useCaseStore((s) => s.files);
   const fileByName = useMemo(() => new Map(files.map((f) => [f.filename, f])), [files]);
 
@@ -36,12 +35,7 @@ export const DisputesTab = () => {
       </div>
 
       {disputes.map((d) => (
-        <DisputeCard
-          key={d.id}
-          dispute={d}
-          isHighlighted={d.id === highlightDisputeId}
-          fileByName={fileByName}
-        />
+        <DisputeCard key={d.id} dispute={d} fileByName={fileByName} />
       ))}
     </div>
   );
@@ -49,11 +43,10 @@ export const DisputesTab = () => {
 
 interface DisputeCardProps {
   dispute: Dispute;
-  isHighlighted?: boolean;
   fileByName: Map<string, { id: string; filename: string }>;
 }
 
-const DisputeCard: FC<DisputeCardProps> = ({ dispute, isHighlighted, fileByName }) => {
+const DisputeCard: FC<DisputeCardProps> = ({ dispute, fileByName }) => {
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -61,7 +54,6 @@ const DisputeCard: FC<DisputeCardProps> = ({ dispute, isHighlighted, fileByName 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const savingRef = useRef(false);
-  const setHighlightDisputeId = useAnalysisStore((s) => s.setHighlightDisputeId);
   const updateDispute = useAnalysisStore((s) => s.updateDispute);
   const removeDispute = useAnalysisStore((s) => s.removeDispute);
   const currentCase = useCaseStore((s) => s.currentCase);
@@ -70,16 +62,6 @@ const DisputeCard: FC<DisputeCardProps> = ({ dispute, isHighlighted, fileByName 
 
   const evidenceCount = dispute.evidence?.length ?? 0;
   const lawRefCount = dispute.law_refs?.length ?? 0;
-
-  useEffect(() => {
-    if (isHighlighted) {
-      setExpanded(true);
-      const timer = setTimeout(() => {
-        setHighlightDisputeId(null);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [isHighlighted, setHighlightDisputeId]);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -145,10 +127,7 @@ const DisputeCard: FC<DisputeCardProps> = ({ dispute, isHighlighted, fileByName 
 
   return (
     <div
-      className={`rounded border bg-bg-2 transition-colors ${
-        isHighlighted ? 'border-yl bg-yl/10' : 'border-bd'
-      }`}
-      data-dispute-card={dispute.id}
+      className="rounded border border-bd bg-bg-2"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -224,23 +203,13 @@ const DisputeCard: FC<DisputeCardProps> = ({ dispute, isHighlighted, fileByName 
               {dispute.our_position && (
                 <div className="border-l-2 border-l-ac pl-2.5">
                   <span className="text-xs font-medium text-t3">我方立場</span>
-                  <p
-                    className="line-clamp-3 text-sm leading-relaxed text-t1"
-                    title={dispute.our_position}
-                  >
-                    {dispute.our_position}
-                  </p>
+                  <p className="text-sm leading-relaxed text-t1">{dispute.our_position}</p>
                 </div>
               )}
               {dispute.their_position && (
                 <div className="border-l-2 border-l-or pl-2.5">
                   <span className="text-xs font-medium text-t3">對方立場</span>
-                  <p
-                    className="line-clamp-3 text-sm leading-relaxed text-t1"
-                    title={dispute.their_position}
-                  >
-                    {dispute.their_position}
-                  </p>
+                  <p className="text-sm leading-relaxed text-t1">{dispute.their_position}</p>
                 </div>
               )}
             </div>
