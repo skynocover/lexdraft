@@ -134,6 +134,13 @@
       "when": 1772897808686,
       "tag": "0018_sad_tigra",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1773196983179,
+      "tag": "0019_wooden_stingray",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
+import { ANALYSIS_LABELS, type AnalysisType } from '../../shared/types';
 
 export interface StructuredFact {
   id: string;
@@ -63,6 +64,15 @@ type DamageInput = Omit<Damage, 'id' | 'case_id' | 'created_at' | 'dispute_id'> 
   dispute_id?: string | null;
 };
 
+export type { AnalysisType };
+
+interface AnalysisResponse {
+  success: boolean;
+  data?: unknown[];
+  summary?: string;
+  error?: string;
+}
+
 interface AnalysisState {
   disputes: Dispute[];
   damages: Damage[];
@@ -70,6 +80,7 @@ interface AnalysisState {
   parties: Party[];
   claims: ClaimGraph[];
   highlightDisputeId: string | null;
+  analyzingType: AnalysisType | null;
 
   setDisputes: (disputes: Dispute[]) => void;
   setDamages: (damages: Damage[]) => void;
@@ -83,6 +94,8 @@ interface AnalysisState {
   loadTimeline: (caseId: string) => Promise<void>;
   loadParties: (caseId: string) => Promise<void>;
   loadClaims: (caseId: string) => Promise<void>;
+
+  runAnalysis: (caseId: string, type: AnalysisType) => Promise<void>;
 
   // Timeline CRUD
   addTimelineEvent: (caseId: string, data: TimelineInput) => Promise<void>;
@@ -111,14 +124,9 @@ const makeLoader =
       set({ [key]: data } as Partial<AnalysisState>);
     } catch (err) {
       console.error(`load ${key} error:`, err);
-      const label: Record<string, string> = {
-        disputes: '爭點',
-        damages: '金額',
-        timeline: '時間軸',
-        parties: '當事人',
-        claims: '主張',
-      };
-      toast.error(`載入${label[key as string] ?? key}失敗`, { id: 'case-load' });
+      const extraLabels: Record<string, string> = { parties: '當事人', claims: '主張' };
+      const label = ANALYSIS_LABELS[key as AnalysisType] ?? extraLabels[key as string] ?? key;
+      toast.error(`載入${label}失敗`, { id: 'case-load' });
     }
   };
 
@@ -129,6 +137,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   parties: [],
   claims: [],
   highlightDisputeId: null,
+  analyzingType: null,
 
   setDisputes: (disputes) => set({ disputes }),
   setDamages: (damages) => set({ damages }),
@@ -142,6 +151,35 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   loadTimeline: makeLoader<TimelineEvent>('timeline', 'timeline', set),
   loadParties: makeLoader<Party>('parties', 'parties', set),
   loadClaims: makeLoader<ClaimGraph>('claims', 'claims', set),
+
+  // Direct analysis API
+  runAnalysis: async (caseId, type) => {
+    set({ analyzingType: type });
+    try {
+      const res = await api.post<AnalysisResponse>(`/cases/${caseId}/analyze`, { type });
+      if (type === 'disputes') {
+        const items = res.data as Dispute[];
+        set({ disputes: items });
+        toast.success(`爭點分析完成（${items.length} 個爭點）`);
+      } else if (type === 'damages') {
+        const items = res.data as Damage[];
+        const total = items.reduce((s, d) => s + d.amount, 0);
+        set({ damages: items });
+        toast.success(`金額計算完成，請求總額 NT$ ${total.toLocaleString()}`);
+      } else if (type === 'timeline') {
+        const items = res.data as TimelineEvent[];
+        set({ timeline: items });
+        toast.success(`時間軸已產生（${items.length} 個事件）`);
+      }
+    } catch (err: unknown) {
+      console.error(`runAnalysis ${type} error:`, err);
+      const msg =
+        err instanceof Error ? err.message : `${ANALYSIS_LABELS[type]}分析失敗，請稍後再試`;
+      toast.error(msg);
+    } finally {
+      set({ analyzingType: null });
+    }
+  },
 
   // Timeline CRUD
   addTimelineEvent: async (caseId, data) => {

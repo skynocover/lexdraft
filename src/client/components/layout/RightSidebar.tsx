@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
 } from 'lucide-react';
+import { TooltipProvider } from '../ui/tooltip';
 import { useTabStore } from '../../stores/useTabStore';
 import { useUIStore, type SidebarTab, type AnalysisSubTab } from '../../stores/useUIStore';
 import { BriefsSection } from './sidebar/BriefsSection';
@@ -223,29 +224,24 @@ const ANALYSIS_SUB_TABS: { key: AnalysisSubTab; label: string }[] = [
   { key: 'timeline', label: '時間軸' },
 ];
 
+const selectTotalDamages = (s: { damages: Array<{ amount: number }> }) =>
+  s.damages.reduce((sum, d) => sum + d.amount, 0);
+
 const AnalysisSidebarContent = () => {
   const analysisSubTab = useUIStore((s) => s.analysisSubTab);
   const setAnalysisSubTab = useUIStore((s) => s.setAnalysisSubTab);
-  const disputes = useAnalysisStore((s) => s.disputes);
-  const damages = useAnalysisStore((s) => s.damages);
-  const timeline = useAnalysisStore((s) => s.timeline);
-
-  const totalDamages = damages.reduce((sum, d) => sum + d.amount, 0);
+  const disputeCount = useAnalysisStore((s) => s.disputes.length);
+  const totalDamages = useAnalysisStore(selectTotalDamages);
+  const timelineCount = useAnalysisStore((s) => s.timeline.length);
 
   const getBadge = (key: AnalysisSubTab): string | null => {
     switch (key) {
-      case 'disputes': {
-        if (disputes.length === 0) return null;
-        let miss = 0;
-        for (const d of disputes) {
-          if (!d.evidence || d.evidence.length === 0) miss++;
-        }
-        return miss > 0 ? `${disputes.length} · ${miss} 缺漏` : `${disputes.length}`;
-      }
+      case 'disputes':
+        return disputeCount > 0 ? `${disputeCount}` : null;
       case 'damages':
         return totalDamages > 0 ? `NT$ ${totalDamages.toLocaleString()}` : null;
       case 'timeline':
-        return timeline.length > 0 ? `${timeline.length}` : null;
+        return timelineCount > 0 ? `${timelineCount}` : null;
       default:
         return null;
     }
@@ -282,11 +278,13 @@ const AnalysisSidebarContent = () => {
       </div>
 
       {/* Sub-tab content */}
-      <div className="flex-1 overflow-y-auto p-2.5">
-        {analysisSubTab === 'disputes' && <DisputesTab />}
-        {analysisSubTab === 'damages' && <DamagesTab />}
-        {analysisSubTab === 'timeline' && <TimelineTab />}
-      </div>
+      <TooltipProvider delayDuration={300}>
+        <div className="flex-1 overflow-y-auto p-2.5">
+          {analysisSubTab === 'disputes' && <DisputesTab />}
+          {analysisSubTab === 'damages' && <DamagesTab />}
+          {analysisSubTab === 'timeline' && <TimelineTab />}
+        </div>
+      </TooltipProvider>
     </div>
   );
 };

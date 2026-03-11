@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useTemplateStore } from '../../stores/useTemplateStore';
 import { useTabStore } from '../../stores/useTabStore';
 import { useCaseStore } from '../../stores/useCaseStore';
-import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 
 export const TemplateEditor = () => {
   const currentTemplate = useTemplateStore((s) => s.currentTemplate);
@@ -220,13 +220,12 @@ export const TemplateEditor = () => {
         )}
       </div>
       {/* Confirm delete dialog */}
-      {confirmDelete && (
-        <ConfirmDialog
-          message={`確定要刪除範本「${templateTitle}」嗎？此操作無法復原。`}
-          onConfirm={handleDelete}
-          onCancel={() => setConfirmDelete(false)}
-        />
-      )}
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        description={`確定要刪除範本「${templateTitle}」嗎？此操作無法復原。`}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 };

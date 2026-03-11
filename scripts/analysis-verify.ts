@@ -6,9 +6,24 @@
  */
 
 import { stripFFFD } from '../src/server/lib/sanitize';
-import { DISPUTES_SCHEMA } from '../src/server/agent/tools/analyzeDisputes';
-import { DAMAGES_SCHEMA } from '../src/server/agent/tools/calculateDamages';
-import { TIMELINE_SCHEMA } from '../src/server/agent/tools/generateTimeline';
+import { DAMAGES_SCHEMA, TIMELINE_SCHEMA } from '../src/server/services/analysisService';
+
+// Disputes uses deep analysis in production; keep one-shot schema here for verification only
+const DISPUTES_SCHEMA = {
+  type: 'ARRAY',
+  items: {
+    type: 'OBJECT',
+    properties: {
+      number: { type: 'INTEGER' },
+      title: { type: 'STRING' },
+      our_position: { type: 'STRING' },
+      their_position: { type: 'STRING' },
+      evidence: { type: 'ARRAY', items: { type: 'STRING' } },
+      law_refs: { type: 'ARRAY', items: { type: 'STRING' } },
+    },
+    required: ['number', 'title', 'our_position', 'their_position', 'evidence', 'law_refs'],
+  },
+};
 
 // ── Config ──
 

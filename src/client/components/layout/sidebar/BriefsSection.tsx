@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useBriefStore } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
-import { ConfirmDialog } from './ConfirmDialog';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
 
 const formatDate = (dateStr: string): string => {
@@ -37,13 +37,12 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
 
   return (
     <div>
-      {confirmDelete && (
-        <ConfirmDialog
-          message={`確定要刪除「${confirmDelete.title}」嗎？此操作無法復原。`}
-          onConfirm={handleDeleteBrief}
-          onCancel={() => setConfirmDelete(null)}
-        />
-      )}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+        description={`確定要刪除「${confirmDelete?.title}」嗎？此操作無法復原。`}
+        onConfirm={handleDeleteBrief}
+      />
 
       {briefs.length === 0 ? (
         <div className="px-4 py-3">

@@ -3,7 +3,6 @@ import { getDB } from '../db';
 import { files } from '../db/schema';
 import { parseJsonField } from '../lib/jsonUtils';
 import type { LegalIssue } from './pipeline/types';
-
 // Re-export JSON utilities for backward compatibility
 export {
   parseJsonField,
@@ -15,6 +14,10 @@ export {
 
 // Re-export shared summary parser
 export { parseSummaryText } from '../../shared/summaryUtils';
+
+/** Treat DB string "null"/"undefined" as actual null */
+export const sanitizeDbString = (val: string | null): string | null =>
+  val === 'null' || val === 'undefined' ? null : val;
 
 /** Standard error return for tool execution */
 export function toolError(message: string): { result: string; success: false } {

@@ -104,6 +104,7 @@ export const disputes = sqliteTable('disputes', {
   their_position: text('their_position'),
   evidence: text('evidence'), // JSON array
   law_refs: text('law_refs'), // JSON array
+  facts: text('facts'), // JSON array of StructuredFact
 });
 
 // 3.5 damages — 金額計算

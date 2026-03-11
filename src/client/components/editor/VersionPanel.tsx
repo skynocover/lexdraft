@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronRight, Eye, Undo2, Trash2, Plus } from 'lucide-react';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useTabStore } from '../../stores/useTabStore';
-import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { DEFAULT_BRIEF_LABEL } from '../../lib/caseConstants';
 
 interface VersionPanelProps {
@@ -184,24 +184,22 @@ export function VersionPanel({ open, onClose }: VersionPanelProps) {
       </div>
 
       {/* Confirm delete dialog */}
-      {confirmDelete && (
-        <ConfirmDialog
-          message="確定刪除此版本？"
-          onConfirm={() => handleDelete(confirmDelete)}
-          onCancel={() => setConfirmDelete(null)}
-        />
-      )}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+        description="確定刪除此版本？"
+        onConfirm={() => confirmDelete && handleDelete(confirmDelete)}
+      />
 
       {/* Confirm restore dialog */}
-      {confirmRestore && (
-        <ConfirmDialog
-          message="確定還原到此版本？目前的內容將被覆蓋。"
-          confirmLabel="還原"
-          variant="primary"
-          onConfirm={() => handleRestore(confirmRestore)}
-          onCancel={() => setConfirmRestore(null)}
-        />
-      )}
+      <ConfirmDialog
+        open={!!confirmRestore}
+        onOpenChange={(open) => !open && setConfirmRestore(null)}
+        description="確定還原到此版本？目前的內容將被覆蓋。"
+        confirmLabel="還原"
+        variant="primary"
+        onConfirm={() => confirmRestore && handleRestore(confirmRestore)}
+      />
     </>
   );
 }
