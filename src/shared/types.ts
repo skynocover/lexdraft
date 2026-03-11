@@ -57,6 +57,31 @@ export interface PipelineStep {
   content?: Record<string, unknown>;
 }
 
+// Analysis types (single source of truth for client + server)
+export const ANALYSIS_TYPES = ['disputes', 'damages', 'timeline'] as const;
+export type AnalysisType = (typeof ANALYSIS_TYPES)[number];
+
+/** Chinese display labels for each analysis type */
+export const ANALYSIS_LABELS: Record<AnalysisType, string> = {
+  disputes: '爭點',
+  damages: '金額',
+  timeline: '時間軸',
+};
+
+/** Action labels for AI analysis buttons */
+export const ANALYSIS_ACTION_LABELS: Record<AnalysisType, string> = {
+  disputes: 'AI 自動分析',
+  damages: 'AI 自動計算',
+  timeline: 'AI 自動整理',
+};
+
+/** Tooltip labels for reanalyze buttons */
+export const ANALYSIS_REANALYZE_LABELS: Record<AnalysisType, string> = {
+  disputes: '重新分析爭點',
+  damages: '重新計算金額',
+  timeline: '重新產生時間軸',
+};
+
 // Chat request body
 export interface ChatRequest {
   message: string;

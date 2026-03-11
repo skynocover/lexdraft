@@ -132,6 +132,7 @@ export const runCaseReader = async (
       const response = await callAIStreaming(aiEnv, {
         messages,
         tools: CASE_READER_TOOLS,
+        maxTokens: 16384,
         signal: combinedSignal,
       });
 
@@ -260,7 +261,7 @@ export const runIssueAnalyzer = async (
         { role: 'system', content: ISSUE_ANALYZER_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
-      { maxTokens: 8192, signal: combinedSignal },
+      { maxTokens: 16384, signal: combinedSignal },
     );
 
     return parseIssueAnalyzerOutput(content);

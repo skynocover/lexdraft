@@ -8,7 +8,7 @@ import { formatROCDate } from '../../../lib/dateUtils';
 import { useBriefStore, type Exhibit } from '../../../stores/useBriefStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { CATEGORY_CONFIG, SELECTABLE_CATEGORIES } from '../../../lib/categoryConfig';
-import { ConfirmDialog } from './ConfirmDialog';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 
 const DOC_TYPES = ['影本', '正本', '繕本'] as const;
@@ -193,18 +193,17 @@ export function FileItem({
         </button>
       </div>
 
-      {confirmDelete && (
-        <ConfirmDialog
-          message="確定刪除此檔案？"
-          onConfirm={() => {
-            onDelete(file.id);
-            setConfirmDelete(false);
-          }}
-          onCancel={() => setConfirmDelete(false)}
-        >
-          <p className="truncate text-xs text-t3">{file.filename}</p>
-        </ConfirmDialog>
-      )}
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        description="確定刪除此檔案？"
+        onConfirm={() => {
+          onDelete(file.id);
+          setConfirmDelete(false);
+        }}
+      >
+        <p className="truncate text-xs text-t3">{file.filename}</p>
+      </ConfirmDialog>
     </div>
   );
 }

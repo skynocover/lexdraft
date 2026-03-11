@@ -32,6 +32,7 @@ disputesRouter.patch('/cases/:caseId/disputes/:id', async (c) => {
     ...updated,
     evidence: updated.evidence ? JSON.parse(updated.evidence) : [],
     law_refs: updated.law_refs ? JSON.parse(updated.law_refs) : [],
+    facts: updated.facts ? JSON.parse(updated.facts) : [],
   });
 });
 

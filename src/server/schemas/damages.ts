@@ -5,7 +5,6 @@ export const createDamageSchema = z.object({
   description: z.string().optional(),
   amount: z.number({ error: '金額必須為數字' }),
   basis: z.string().optional(),
-  dispute_id: z.string().optional(),
 });
 
 export const updateDamageSchema = z.object({
@@ -13,5 +12,4 @@ export const updateDamageSchema = z.object({
   description: z.string().optional(),
   amount: z.number().optional(),
   basis: z.string().optional(),
-  dispute_id: z.string().optional(),
 });

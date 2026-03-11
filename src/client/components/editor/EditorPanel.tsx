@@ -9,7 +9,7 @@ import { VersionPreviewEditor } from './VersionPreviewEditor';
 import { LawViewer } from './LawViewer';
 import { LawSearchViewer } from './LawSearchViewer';
 import { TemplateEditor } from './TemplateEditor';
-import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 
 interface EditorPanelProps {
   panelId: string;
@@ -114,15 +114,16 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
       </div>
 
       {/* Confirm restore dialog */}
-      {confirmRestore && (
-        <ConfirmDialog
-          message="確定還原到此版本？目前的內容將被覆蓋。"
-          confirmLabel="還原"
-          variant="primary"
-          onConfirm={() => handleRestore(confirmRestore.versionId, confirmRestore.tabId)}
-          onCancel={() => setConfirmRestore(null)}
-        />
-      )}
+      <ConfirmDialog
+        open={!!confirmRestore}
+        onOpenChange={(open) => !open && setConfirmRestore(null)}
+        description="確定還原到此版本？目前的內容將被覆蓋。"
+        confirmLabel="還原"
+        variant="primary"
+        onConfirm={() =>
+          confirmRestore && handleRestore(confirmRestore.versionId, confirmRestore.tabId)
+        }
+      />
     </div>
   );
 };

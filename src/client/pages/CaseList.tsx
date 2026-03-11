@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useCaseStore, type Case } from '../stores/useCaseStore';
 import { api } from '../lib/api';
-import { ConfirmDialog } from '../components/layout/sidebar/ConfirmDialog';
+import { ConfirmDialog } from '../components/ui/confirm-dialog';
 import { NewCaseDialog } from '../components/case/NewCaseDialog';
 
 export function CaseList() {
@@ -116,19 +116,18 @@ export function CaseList() {
       </div>
 
       {/* Confirm delete dialog */}
-      {confirmDelete && (
-        <ConfirmDialog
-          message="確定刪除此案件？"
-          confirmLabel="刪除案件"
-          onConfirm={() => handleDelete(confirmDelete)}
-          onCancel={() => setConfirmDelete(null)}
-        >
-          <p className="text-xs text-t2">{confirmDelete.title}</p>
-          <p className="text-xs text-rd">
-            此操作將刪除案件下所有書狀、檔案、對話記錄等資料，且無法復原。
-          </p>
-        </ConfirmDialog>
-      )}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+        description="確定刪除此案件？"
+        confirmLabel="刪除案件"
+        onConfirm={() => confirmDelete && handleDelete(confirmDelete)}
+      >
+        <p className="text-xs text-t2">{confirmDelete?.title}</p>
+        <p className="text-xs text-rd">
+          此操作將刪除案件下所有書狀、檔案、對話記錄等資料，且無法復原。
+        </p>
+      </ConfirmDialog>
 
       <NewCaseDialog open={showNewCase} onOpenChange={setShowNewCase} />
     </div>

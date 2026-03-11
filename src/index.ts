@@ -16,6 +16,7 @@ import { timelineRouter } from './server/routes/timeline';
 import { inlineAIRouter } from './server/routes/inlineAI';
 import { templatesRouter } from './server/routes/templates';
 import { exhibitsRouter } from './server/routes/exhibits';
+import { analyzeRouter } from './server/routes/analyze';
 import { processFileMessage } from './server/queue/fileProcessor';
 
 const app = new Hono<AppEnv>();
@@ -78,6 +79,9 @@ api.route('/', templatesRouter);
 
 // 證物編號
 api.route('/', exhibitsRouter);
+
+// 分析（直接觸發爭點/金額/時間軸分析）
+api.route('/', analyzeRouter);
 
 app.route('/api', api);
 

@@ -7,29 +7,24 @@ import { nanoid } from 'nanoid';
 import { files, briefs, cases, disputes, damages, templates } from '../../db/schema';
 import { readLawRefs } from '../../lib/lawRefsJson';
 import type { LawRefItem } from '../../lib/lawRefsJson';
-import {
-  runCaseReader,
-  runIssueAnalyzer,
-  type OrchestratorOutput,
-  type IssueAnalyzerOutput,
-  type OrchestratorProgressCallback,
-} from '../orchestratorAgent';
+import { type OrchestratorOutput, type OrchestratorProgressCallback } from '../orchestratorAgent';
 import {
   parseJsonField,
   parseSummaryText,
   loadReadyFiles,
   mapDisputeToLegalIssue,
+  sanitizeDbString,
 } from '../toolHelpers';
-import type { ToolResult } from '../tools/types';
+import {
+  runDeepDisputeAnalysis,
+  runAnalysis as runAnalysisService,
+  type DeepDisputeSuccess,
+} from '../../services/analysisService';
 import type { ContextStore } from '../contextStore';
 import type { LegalIssue, TimelineItem, DamageItem, PipelineContext } from './types';
 import { DEFAULT_TEMPLATES, getTemplateById, TEMPLATE_ID_AUTO } from '../../lib/defaultTemplates';
 import type { PipelineStepChild } from '../../../shared/types';
 import type { FileRow } from './writerStep';
-
-/** Treat DB string "null"/"undefined" as actual null */
-const sanitizeDbString = (val: string | null): string | null =>
-  val === 'null' || val === 'undefined' ? null : val;
 
 // ── Output Types ──
 
@@ -204,13 +199,6 @@ export const runCaseAnalysis = async (
     existingDisputes.length > 0 &&
     existingDisputes.some((d) => d.our_position?.trim() || d.their_position?.trim());
 
-  // Tool context for calling existing tool handlers
-  const toolCtx = {
-    sendSSE: ctx.sendSSE,
-    aiEnv: ctx.aiEnv,
-    mongoUrl: ctx.mongoUrl,
-  };
-
   // ── Dispute promise ──
   const disputePromise = (async (): Promise<OrchestratorOutput | null> => {
     let orchestratorOutput: OrchestratorOutput | null = null;
@@ -244,23 +232,7 @@ export const runCaseAnalysis = async (
       // Show quick progress
       await pushChild('沿用既有爭點', 'done');
     } else {
-      // No existing disputes — run full Case Reader + Issue Analyzer
-
-      const orchestratorInput = {
-        readyFiles: parsedFiles.map((f) => ({
-          id: f.id,
-          filename: f.filename,
-          category: f.category,
-          summary: f.parsedSummary,
-        })),
-        existingParties: {
-          plaintiff: sanitizeDbString(caseRow.plaintiff),
-          defendant: sanitizeDbString(caseRow.defendant),
-        },
-        caseMetadata: store.caseMetadata,
-        templateTitle: store.templateTitle,
-      };
-
+      // No existing disputes — run deep analysis via shared service
       const orchestratorProgress: OrchestratorProgressCallback = {
         onFileReadStart: (filename) => pushChild(`閱讀 ${filename}`, 'running'),
         onFileReadDone: (filename) => completeChild(`閱讀 ${filename}`),
@@ -269,103 +241,29 @@ export const runCaseAnalysis = async (
         onIssueAnalysisStart: () => pushChild('爭點分析', 'running'),
       };
 
-      // Shared fallback: run analyze_disputes
-      const fallbackToAnalyzeDisputes = async () => {
-        const { handleAnalyzeDisputes } = await import('../tools/analyzeDisputes');
-        const result = await handleAnalyzeDisputes({}, ctx.caseId, ctx.db, ctx.drizzle, {
-          sendSSE: ctx.sendSSE,
-          aiEnv: ctx.aiEnv,
-          mongoUrl: ctx.mongoUrl,
-        });
-        if (result.success) {
-          return ctx.drizzle.select().from(disputes).where(eq(disputes.case_id, ctx.caseId));
-        }
-        return [];
-      };
+      const result = await runDeepDisputeAnalysis(ctx.caseId, ctx.db, ctx.drizzle, ctx.aiEnv, {
+        progress: orchestratorProgress,
+        signal: ctx.signal,
+        templateTitle: store.templateTitle,
+        readyFiles,
+        caseMetadata: store.caseMetadata,
+        existingParties: {
+          plaintiff: sanitizeDbString(caseRow.plaintiff),
+          defendant: sanitizeDbString(caseRow.defendant),
+        },
+      });
 
-      try {
-        // Agent 0a: Case Reader
-        const caseReaderOutput = await runCaseReader(
-          ctx.aiEnv,
-          ctx.drizzle,
-          orchestratorInput,
-          ctx.signal,
-          orchestratorProgress,
-        );
-
-        // Agent 0b: Issue Analyzer
-        let issueAnalyzerOutput: IssueAnalyzerOutput;
-        try {
-          await orchestratorProgress.onIssueAnalysisStart();
-          issueAnalyzerOutput = await runIssueAnalyzer(
-            ctx.aiEnv,
-            caseReaderOutput,
-            store.templateTitle,
-            ctx.signal,
-            store.caseMetadata,
-          );
-        } catch (issueErr) {
-          console.error('Issue Analyzer failed, falling back to analyze_disputes:', issueErr);
-
-          const disputeList = await fallbackToAnalyzeDisputes();
-          issueAnalyzerOutput = {
-            legalIssues: disputeList.map(mapDisputeToLegalIssue),
-            informationGaps: [],
-          };
-        }
-
-        orchestratorOutput = {
-          caseSummary: caseReaderOutput.caseSummary,
-          parties: caseReaderOutput.parties,
-          timelineSummary: caseReaderOutput.timelineSummary,
-          legalIssues: issueAnalyzerOutput.legalIssues,
-          informationGaps: issueAnalyzerOutput.informationGaps,
-        };
-
+      if (result.success) {
+        const deepResult = result as DeepDisputeSuccess;
+        orchestratorOutput = deepResult.orchestratorOutput;
         store.seedFromOrchestrator(orchestratorOutput);
-      } catch (orchErr) {
-        console.error('Case Reader failed, falling back to analyze_disputes:', orchErr);
 
-        const disputeList = await fallbackToAnalyzeDisputes();
-        store.seedFromDisputes(disputeList);
-      }
-
-      // Sync disputes to DB if Orchestrator produced new issues (batch for D1 param limit)
-      if (orchestratorOutput && orchestratorOutput.legalIssues.length > 0) {
-        await ctx.drizzle.delete(disputes).where(eq(disputes.case_id, ctx.caseId));
-        const DISPUTE_BATCH_SIZE = 10;
-        for (let i = 0; i < orchestratorOutput.legalIssues.length; i += DISPUTE_BATCH_SIZE) {
-          const batch = orchestratorOutput.legalIssues.slice(i, i + DISPUTE_BATCH_SIZE);
-          await ctx.drizzle.insert(disputes).values(
-            batch.map((issue, batchIndex) => ({
-              id: issue.id,
-              case_id: ctx.caseId,
-              number: i + batchIndex + 1,
-              title: issue.title,
-              our_position: issue.our_position,
-              their_position: issue.their_position,
-              evidence: issue.key_evidence.length > 0 ? JSON.stringify(issue.key_evidence) : null,
-              law_refs:
-                issue.mentioned_laws.length > 0 ? JSON.stringify(issue.mentioned_laws) : null,
-            })),
-          );
-        }
-
+        // Send SSE events for frontend
         await ctx.sendSSE({
           type: 'brief_update',
           brief_id: '',
           action: 'set_disputes',
-          data: orchestratorOutput.legalIssues.map((d, i) => ({
-            id: d.id,
-            case_id: ctx.caseId,
-            number: i + 1,
-            title: d.title,
-            our_position: d.our_position,
-            their_position: d.their_position,
-            evidence: d.key_evidence,
-            law_refs: d.mentioned_laws,
-            facts: d.facts,
-          })),
+          data: deepResult.data,
         });
 
         await ctx.sendSSE({
@@ -374,18 +272,14 @@ export const runCaseAnalysis = async (
           action: 'set_parties',
           data: orchestratorOutput.parties,
         });
-
-        // Persist extracted parties back to cases table
-        const { plaintiff, defendant } = orchestratorOutput.parties;
-        if (plaintiff || defendant) {
-          await ctx.drizzle
-            .update(cases)
-            .set({
-              ...(plaintiff ? { plaintiff } : {}),
-              ...(defendant ? { defendant } : {}),
-            })
-            .where(eq(cases.id, ctx.caseId));
-        }
+      } else {
+        // Fallback already happened inside runDeepDisputeAnalysis;
+        // reload disputes from DB and seed store
+        const disputeList = await ctx.drizzle
+          .select()
+          .from(disputes)
+          .where(eq(disputes.case_id, ctx.caseId));
+        store.seedFromDisputes(disputeList);
       }
     }
 
@@ -405,22 +299,26 @@ export const runCaseAnalysis = async (
 
     await pushChild('分析金額', 'running');
 
-    const { handleCalculateDamages } = await import('../tools/calculateDamages');
-    const result = await handleCalculateDamages({}, ctx.caseId, ctx.db, ctx.drizzle, toolCtx);
+    const result = await runAnalysisService('damages', ctx.caseId, ctx.db, ctx.drizzle, ctx.aiEnv, {
+      readyFiles,
+    });
 
     await completeChild('分析金額', result.success ? 'done' : 'error');
 
     if (!result.success) return [];
 
-    // Reload from DB (targeted select — only needed fields)
-    return ctx.drizzle
-      .select({
-        category: damages.category,
-        description: damages.description,
-        amount: damages.amount,
-      })
-      .from(damages)
-      .where(eq(damages.case_id, ctx.caseId));
+    // Send SSE for frontend
+    await ctx.sendSSE({
+      type: 'brief_update',
+      brief_id: '',
+      action: 'set_damages',
+      data: result.data,
+    });
+
+    // Map to pipeline DamageItem shape (result.data already has the persisted records)
+    return (
+      result.data as Array<{ category: string; description: string | null; amount: number }>
+    ).map((d) => ({ category: d.category, description: d.description, amount: d.amount }));
   })();
 
   // ── Timeline promise ──
@@ -432,20 +330,28 @@ export const runCaseAnalysis = async (
 
     await pushChild('分析時間軸', 'running');
 
-    const { handleGenerateTimeline } = await import('../tools/generateTimeline');
-    const result = await handleGenerateTimeline({}, ctx.caseId, ctx.db, ctx.drizzle, toolCtx);
+    const result = await runAnalysisService(
+      'timeline',
+      ctx.caseId,
+      ctx.db,
+      ctx.drizzle,
+      ctx.aiEnv,
+      { readyFiles },
+    );
 
     await completeChild('分析時間軸', result.success ? 'done' : 'error');
 
     if (!result.success) return [];
 
-    // Reload from DB
-    const row = await ctx.drizzle
-      .select({ timeline: cases.timeline })
-      .from(cases)
-      .where(eq(cases.id, ctx.caseId))
-      .then((rows) => rows[0]);
-    return parseJsonField<TimelineItem[]>(row?.timeline, []);
+    // Send SSE for frontend
+    await ctx.sendSSE({
+      type: 'brief_update',
+      brief_id: '',
+      action: 'set_timeline',
+      data: result.data,
+    });
+
+    return result.data as TimelineItem[];
   })();
 
   // ── 5. Await all three in parallel ──

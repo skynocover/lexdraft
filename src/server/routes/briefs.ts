@@ -135,6 +135,7 @@ briefsRouter.get('/cases/:caseId/disputes', async (c) => {
     ...d,
     evidence: d.evidence ? JSON.parse(d.evidence) : [],
     law_refs: d.law_refs ? JSON.parse(d.law_refs) : [],
+    facts: d.facts ? JSON.parse(d.facts) : [],
   }));
 
   return c.json(parsed);

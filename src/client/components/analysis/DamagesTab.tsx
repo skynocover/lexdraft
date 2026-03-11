@@ -3,11 +3,12 @@ import { CircleDollarSign, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { useAnalysisStore, type Damage } from '../../stores/useAnalysisStore';
-import { useChatStore } from '../../stores/useChatStore';
 import { useCaseStore } from '../../stores/useCaseStore';
 import { DamageGroup } from './DamageGroup';
 import { DamageFormDialog } from './DamageFormDialog';
-import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
+import { ConfirmDialog } from '../ui/confirm-dialog';
+import { ReanalyzeButton } from './ReanalyzeButton';
+import { EmptyAnalyzeButton } from './EmptyAnalyzeButton';
 import { formatAmount } from '../../lib/textUtils';
 
 export function DamagesTab() {
@@ -15,19 +16,12 @@ export function DamagesTab() {
   const addDamage = useAnalysisStore((s) => s.addDamage);
   const updateDamage = useAnalysisStore((s) => s.updateDamage);
   const removeDamage = useAnalysisStore((s) => s.removeDamage);
-  const isStreaming = useChatStore((s) => s.isStreaming);
-  const sendMessage = useChatStore((s) => s.sendMessage);
   const currentCase = useCaseStore((s) => s.currentCase);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingDamage, setEditingDamage] = useState<Damage | null>(null);
   const [deletingDamage, setDeletingDamage] = useState<Damage | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const handleGenerate = () => {
-    if (!currentCase || isStreaming) return;
-    sendMessage(currentCase.id, '請幫我計算案件請求金額');
-  };
 
   const handleAdd = () => {
     setEditingDamage(null);
@@ -102,20 +96,14 @@ export function DamagesTab() {
               <Plus className="mr-1 h-3.5 w-3.5" />
               手動新增
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!currentCase || isStreaming}
-              onClick={handleGenerate}
-            >
-              {isStreaming ? 'AI 分析中...' : 'AI 自動計算'}
-            </Button>
+            <EmptyAnalyzeButton type="damages" />
           </div>
         </div>
       ) : (
         <div className="flex h-full flex-col">
           {/* Header */}
-          <div className="mb-2 flex items-center justify-end">
+          <div className="mb-2 flex items-center justify-end gap-1">
+            <ReanalyzeButton type="damages" hasData={damages.length > 0} />
             <button
               onClick={handleAdd}
               className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
@@ -157,13 +145,12 @@ export function DamagesTab() {
         loading={loading}
       />
 
-      {deletingDamage && (
-        <ConfirmDialog
-          message={`確定刪除金額項目「${deletingDamage.description || deletingDamage.category}」？`}
-          onConfirm={handleConfirmDelete}
-          onCancel={() => setDeletingDamage(null)}
-        />
-      )}
+      <ConfirmDialog
+        open={!!deletingDamage}
+        onOpenChange={(open) => !open && setDeletingDamage(null)}
+        description={`確定刪除金額項目「${deletingDamage?.description || deletingDamage?.category}」？`}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   );
 }

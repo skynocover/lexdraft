@@ -1,188 +1,59 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo, type FC } from 'react';
+import { ChevronRight, Pencil, Trash2, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAnalysisStore, type ClaimGraph, type Dispute } from '../../stores/useAnalysisStore';
+import { useAnalysisStore, type Dispute } from '../../stores/useAnalysisStore';
 import { useCaseStore } from '../../stores/useCaseStore';
+import { useTabStore } from '../../stores/useTabStore';
 import { cleanText } from '../../lib/textUtils';
 import { FactList } from './FactList';
-import { ConfirmDialog } from '../layout/sidebar/ConfirmDialog';
-
-type EvidenceStatus = 'ok' | 'warn' | 'miss';
-
-const STATUS_STYLE: Record<EvidenceStatus, { label: string; cls: string }> = {
-  ok: { label: '充分', cls: 'bg-gr/20 text-gr' },
-  warn: { label: '不足', cls: 'bg-yl/20 text-yl' },
-  miss: { label: '缺漏', cls: 'bg-rd/20 text-rd' },
-};
-
-const CLAIM_TYPE_LABEL: Record<ClaimGraph['claim_type'], string> = {
-  primary: '主張',
-  rebuttal: '反駁',
-  supporting: '輔助',
-};
-
-const SIDE_STYLE: Record<'ours' | 'theirs', string> = {
-  ours: 'bg-ac/20 text-ac',
-  theirs: 'bg-or/20 text-or',
-};
-
-const getEvidenceStatus = (evidence: string[] | null): EvidenceStatus => {
-  if (!evidence || evidence.length === 0) return 'miss';
-  return evidence.length >= 2 ? 'ok' : 'warn';
-};
-
-/** 根據 responds_to 攻防鏈排序：我方主張 → 輔助 → 對方主張 → 我方反駁 → … */
-const sortClaimsByThread = (claims: ClaimGraph[]): ClaimGraph[] => {
-  const idSet = new Set(claims.map((c) => c.id));
-  const childrenMap = new Map<string, ClaimGraph[]>();
-  const roots: ClaimGraph[] = [];
-
-  for (const c of claims) {
-    if (c.responds_to && idSet.has(c.responds_to)) {
-      if (!childrenMap.has(c.responds_to)) childrenMap.set(c.responds_to, []);
-      childrenMap.get(c.responds_to)!.push(c);
-    } else {
-      roots.push(c);
-    }
-  }
-
-  // 根節點排序：我方 primary → 我方 supporting → 對方 primary → 對方 supporting
-  const rootOrder = (c: ClaimGraph) => {
-    const s = c.side === 'ours' ? 0 : 2;
-    const t = c.claim_type === 'primary' ? 0 : 1;
-    return s + t;
-  };
-  roots.sort((a, b) => rootOrder(a) - rootOrder(b));
-
-  const result: ClaimGraph[] = [];
-  const visited = new Set<string>();
-
-  const traverse = (claim: ClaimGraph) => {
-    if (visited.has(claim.id)) return;
-    visited.add(claim.id);
-    result.push(claim);
-    const children = childrenMap.get(claim.id) ?? [];
-    for (const child of children) {
-      traverse(child);
-    }
-  };
-
-  for (const root of roots) {
-    traverse(root);
-  }
-
-  return result;
-};
-
-const ClaimCard = ({ claim, side }: { claim: ClaimGraph; side?: 'ours' | 'theirs' }) => {
-  const sideLabel =
-    claim.claim_type === 'supporting'
-      ? ''
-      : side === 'ours'
-        ? '我方'
-        : side === 'theirs'
-          ? '對方'
-          : '';
-  const typeLabel = CLAIM_TYPE_LABEL[claim.claim_type];
-  const badgeCls = side ? SIDE_STYLE[side] : 'bg-bg-3 text-t2';
-  const borderCls = side === 'ours' ? 'border-l-ac' : side === 'theirs' ? 'border-l-or' : '';
-
-  return (
-    <div className={`rounded border-l-2 bg-bg-1 px-2.5 py-1.5 ${borderCls}`}>
-      <div className="flex items-start gap-1.5">
-        <span
-          className={`mt-0.5 inline-flex shrink-0 ${sideLabel ? 'flex-col items-center' : 'items-center'} rounded px-1.5 py-0.5 text-xs font-medium leading-tight ${badgeCls}`}
-        >
-          {sideLabel && <span>{sideLabel}</span>}
-          <span>{typeLabel}</span>
-        </span>
-        <p className="flex-1 text-sm leading-relaxed text-t1">{claim.statement}</p>
-      </div>
-    </div>
-  );
-};
+import { ConfirmDialog } from '../ui/confirm-dialog';
+import { ReanalyzeButton } from './ReanalyzeButton';
+import { EmptyAnalyzeButton } from './EmptyAnalyzeButton';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 
 export const DisputesTab = () => {
   const disputes = useAnalysisStore((s) => s.disputes);
-  const claims = useAnalysisStore((s) => s.claims);
   const highlightDisputeId = useAnalysisStore((s) => s.highlightDisputeId);
+  const files = useCaseStore((s) => s.files);
+  const fileByName = useMemo(() => new Map(files.map((f) => [f.filename, f])), [files]);
 
-  const claimsByDispute = useMemo(() => {
-    const map = new Map<string | null, ClaimGraph[]>();
-    for (const c of claims) {
-      const key = c.dispute_id;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(c);
-    }
-    return map;
-  }, [claims]);
-
-  const unclassifiedClaims = claimsByDispute.get(null) ?? [];
-
-  const summary = useMemo(() => {
-    let ok = 0,
-      warn = 0,
-      miss = 0;
-    for (const d of disputes) {
-      const status = getEvidenceStatus(d.evidence);
-      if (status === 'ok') ok++;
-      else if (status === 'warn') warn++;
-      else miss++;
-    }
-    return { ok, warn, miss };
-  }, [disputes]);
-
-  if (disputes.length === 0 && claims.length === 0) {
+  if (disputes.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-xs text-t3">尚未分析爭點，透過 AI 助理分析</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-4">
+        <Search className="h-8 w-8 text-t3" />
+        <p className="text-center text-xs text-t3">尚未分析爭點</p>
+        <EmptyAnalyzeButton type="disputes" />
       </div>
     );
   }
 
   return (
     <div className="space-y-2">
-      {disputes.length > 0 && (
-        <div className="flex items-center gap-3 text-xs text-t3">
-          <span>{disputes.length} 個爭點</span>
-          {summary.ok > 0 && <span className="text-gr">充分 {summary.ok}</span>}
-          {summary.warn > 0 && <span className="text-yl">不足 {summary.warn}</span>}
-          {summary.miss > 0 && <span className="text-rd">缺漏 {summary.miss}</span>}
-        </div>
-      )}
+      <div className="flex items-center text-xs text-t3">
+        <span>{disputes.length} 個爭點</span>
+        <span className="flex-1" />
+        <ReanalyzeButton type="disputes" hasData={disputes.length > 0} />
+      </div>
 
       {disputes.map((d) => (
         <DisputeCard
           key={d.id}
           dispute={d}
-          claims={claimsByDispute.get(d.id) ?? []}
           isHighlighted={d.id === highlightDisputeId}
+          fileByName={fileByName}
         />
       ))}
-
-      {unclassifiedClaims.length > 0 && (
-        <div className="rounded border border-bd bg-bg-2">
-          <div className="px-3 py-2.5 text-sm font-medium text-t3">未分類主張</div>
-          <div className="space-y-1.5 border-t border-bd px-3 py-2.5">
-            {unclassifiedClaims.map((c) => (
-              <ClaimCard key={c.id} claim={c} />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
 
-const DisputeCard = ({
-  dispute,
-  claims,
-  isHighlighted,
-}: {
+interface DisputeCardProps {
   dispute: Dispute;
-  claims: ClaimGraph[];
   isHighlighted?: boolean;
-}) => {
+  fileByName: Map<string, { id: string; filename: string }>;
+}
+
+const DisputeCard: FC<DisputeCardProps> = ({ dispute, isHighlighted, fileByName }) => {
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -194,13 +65,11 @@ const DisputeCard = ({
   const updateDispute = useAnalysisStore((s) => s.updateDispute);
   const removeDispute = useAnalysisStore((s) => s.removeDispute);
   const currentCase = useCaseStore((s) => s.currentCase);
+  const openFileTab = useTabStore((s) => s.openFileTab);
+  const openLawSearchTab = useTabStore((s) => s.openLawSearchTab);
 
-  const evidenceStatus = getEvidenceStatus(dispute.evidence);
-  const statusStyle = STATUS_STYLE[evidenceStatus];
-
-  const ourClaims = useMemo(() => claims.filter((c) => c.side === 'ours'), [claims]);
-  const theirClaims = useMemo(() => claims.filter((c) => c.side === 'theirs'), [claims]);
-  const sortedClaims = useMemo(() => sortClaimsByThread(claims), [claims]);
+  const evidenceCount = dispute.evidence?.length ?? 0;
+  const lawRefCount = dispute.law_refs?.length ?? 0;
 
   useEffect(() => {
     if (isHighlighted) {
@@ -218,15 +87,6 @@ const DisputeCard = ({
       inputRef.current.select();
     }
   }, [editing]);
-
-  const handleJumpToParagraph = () => {
-    const el = document.querySelector(`[data-dispute-id="${dispute.id}"]`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('highlight-paragraph');
-      setTimeout(() => el.classList.remove('highlight-paragraph'), 3000);
-    }
-  };
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -299,31 +159,39 @@ const DisputeCard = ({
         >
           <span className="shrink-0 text-xs font-medium text-t2">爭點 {dispute.number}</span>
           <span className="flex-1" />
-          {hovered && !editing && (
-            <div className="flex shrink-0 items-center gap-1">
+          <span className="grid shrink-0 [&>*]:col-start-1 [&>*]:row-start-1">
+            {!editing && (
               <span
-                role="button"
-                onClick={handleStartEdit}
-                className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+                className={`flex items-center justify-end gap-1 transition-opacity ${hovered ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <span
+                  role="button"
+                  onClick={handleStartEdit}
+                  className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </span>
+                <span
+                  role="button"
+                  onClick={handleDeleteClick}
+                  className="rounded p-1 text-t3 transition hover:bg-rd/10 hover:text-rd"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </span>
               </span>
+            )}
+            {(evidenceCount > 0 || lawRefCount > 0) && (
               <span
-                role="button"
-                onClick={handleDeleteClick}
-                className="rounded p-1 text-t3 transition hover:bg-rd/10 hover:text-rd"
+                className={`flex items-center text-xs text-t3 transition-opacity ${hovered && !editing ? 'opacity-0' : 'opacity-100'}`}
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                {[
+                  evidenceCount > 0 ? `證據 ${evidenceCount}` : null,
+                  lawRefCount > 0 ? `法條 ${lawRefCount}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </span>
-            </div>
-          )}
-          {(!hovered || editing) && (
-            <span className="shrink-0 text-xs text-t3">
-              我方 {ourClaims.length} / 對方 {theirClaims.length}
-            </span>
-          )}
-          <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${statusStyle.cls}`}>
-            {statusStyle.label}
+            )}
           </span>
           <ChevronRight
             size={14}
@@ -350,50 +218,93 @@ const DisputeCard = ({
 
       {expanded && (
         <div className="space-y-2 border-t border-bd px-3 py-2.5">
-          {/* 主張列表 — 依攻防鏈排序，左色條區分我方/對方 */}
-          {sortedClaims.length > 0 && (
+          {/* 雙方立場 */}
+          {(dispute.our_position || dispute.their_position) && (
             <div className="space-y-1.5">
-              {sortedClaims.map((c) => (
-                <div key={c.id} className={c.claim_type === 'supporting' ? 'ml-4' : ''}>
-                  <ClaimCard claim={c} side={c.side} />
+              {dispute.our_position && (
+                <div className="border-l-2 border-l-ac pl-2.5">
+                  <span className="text-xs font-medium text-t3">我方立場</span>
+                  <p
+                    className="line-clamp-3 text-sm leading-relaxed text-t1"
+                    title={dispute.our_position}
+                  >
+                    {dispute.our_position}
+                  </p>
                 </div>
-              ))}
+              )}
+              {dispute.their_position && (
+                <div className="border-l-2 border-l-or pl-2.5">
+                  <span className="text-xs font-medium text-t3">對方立場</span>
+                  <p
+                    className="line-clamp-3 text-sm leading-relaxed text-t1"
+                    title={dispute.their_position}
+                  >
+                    {dispute.their_position}
+                  </p>
+                </div>
+              )}
             </div>
           )}
-
-          {/* 事實爭議 */}
-          {dispute.facts && dispute.facts.length > 0 && <FactList facts={dispute.facts} />}
 
           {/* 證據 + 法條合併 tag 列 */}
           {((dispute.evidence && dispute.evidence.length > 0) ||
             (dispute.law_refs && dispute.law_refs.length > 0)) && (
             <div className="flex flex-wrap gap-1">
-              {dispute.evidence?.map((e, i) => (
-                <span key={`ev-${i}`} className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2">
-                  {cleanText(e)}
-                </span>
-              ))}
+              {dispute.evidence?.map((e, i) => {
+                const file = fileByName.get(e);
+                const label = cleanText(e).replace(/\.\w+$/, '');
+                return file ? (
+                  <button
+                    key={`ev-${i}`}
+                    onClick={() => openFileTab(file.id, file.filename)}
+                    className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2 transition hover:bg-bg-h hover:text-t1"
+                  >
+                    {label}
+                  </button>
+                ) : (
+                  <span key={`ev-${i}`} className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2">
+                    {label}
+                  </span>
+                );
+              })}
               {dispute.law_refs?.map((l, i) => (
-                <span key={`law-${i}`} className="rounded bg-cy/10 px-1.5 py-0.5 text-xs text-cy">
+                <button
+                  key={`law-${i}`}
+                  onClick={() => openLawSearchTab(cleanText(l), true)}
+                  className="rounded bg-cy/10 px-1.5 py-0.5 text-xs text-cy transition hover:bg-cy/20"
+                >
                   {cleanText(l)}
-                </span>
+                </button>
               ))}
             </div>
           )}
 
-          <button onClick={handleJumpToParagraph} className="mt-1 text-xs text-t3 hover:text-ac">
-            跳到段落 →
-          </button>
+          {/* 事實爭議 (收合) */}
+          {dispute.facts && dispute.facts.length > 0 && (
+            <Collapsible>
+              <CollapsibleTrigger className="flex w-full items-center gap-1 py-1 text-xs font-medium text-t3 hover:text-t1">
+                <ChevronRight
+                  size={12}
+                  className="shrink-0 transition-transform duration-200 [[data-state=open]>&]:rotate-90"
+                />
+                事實爭議 ({dispute.facts.length})
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-1">
+                  <FactList facts={dispute.facts} />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </div>
       )}
 
-      {confirmDelete && (
-        <ConfirmDialog
-          message={`確定刪除「${cleanText(dispute.title || '未命名爭點')}」？相關主張也會一併刪除。`}
-          onConfirm={handleConfirmDelete}
-          onCancel={() => setConfirmDelete(false)}
-        />
-      )}
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        description={`確定刪除「${cleanText(dispute.title || '未命名爭點')}」？相關主張也會一併刪除。`}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   );
 };
