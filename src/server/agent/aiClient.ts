@@ -120,6 +120,7 @@ interface CallAISimpleOptions {
   maxTokens?: number;
   responseFormat?: Record<string, unknown>;
   signal?: AbortSignal;
+  temperature?: number;
 }
 
 /**
@@ -142,6 +143,9 @@ export const callAI = async (
   };
   if (opts?.responseFormat) {
     body.response_format = opts.responseFormat;
+  }
+  if (opts?.temperature !== undefined) {
+    body.temperature = opts.temperature;
   }
 
   const response = await fetch(getGatewayUrl(env), {

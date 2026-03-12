@@ -22,23 +22,40 @@ import {
   type OrchestratorOutput,
 } from '../agent/orchestratorAgent';
 import type { SimpleFact } from '../../shared/types';
-import type { LegalIssue } from '../agent/pipeline/types';
+import type { LegalIssue, DamageItem as BaseDamageItem } from '../agent/pipeline/types';
 import type { CaseMetadata } from '../agent/contextStore';
 import type { AnalysisType } from '../../shared/types';
 
 // ── Gemini Response Schemas ──
 
+const DAMAGES_BASE_PROPERTIES = {
+  category: { type: 'STRING', enum: ['財產上損害', '非財產上損害'] },
+  description: { type: 'STRING' },
+  amount: { type: 'INTEGER' },
+  basis: { type: 'STRING' },
+};
+
+const DAMAGES_BASE_REQUIRED = ['category', 'description', 'amount', 'basis'];
+
 export const DAMAGES_SCHEMA = {
   type: 'ARRAY',
   items: {
     type: 'OBJECT',
+    properties: DAMAGES_BASE_PROPERTIES,
+    required: DAMAGES_BASE_REQUIRED,
+  },
+};
+
+export const DAMAGES_WITH_DISPUTE_SCHEMA = {
+  type: 'ARRAY',
+  items: {
+    type: 'OBJECT',
     properties: {
-      category: { type: 'STRING', enum: ['財產上損害', '非財產上損害'] },
-      description: { type: 'STRING' },
-      amount: { type: 'INTEGER' },
-      basis: { type: 'STRING' },
+      ...DAMAGES_BASE_PROPERTIES,
+      dispute_id: { type: 'STRING', nullable: true },
+      evidence_refs: { type: 'ARRAY', items: { type: 'STRING' } },
     },
-    required: ['category', 'description', 'amount', 'basis'],
+    required: [...DAMAGES_BASE_REQUIRED, 'dispute_id', 'evidence_refs'],
   },
 };
 
@@ -80,6 +97,8 @@ export interface AnalysisSuccess<T = unknown> {
   success: true;
   data: T[];
   summary: string;
+  /** Populated when type='disputes' — damages analyzed with dispute context */
+  damages?: Record<string, unknown>[];
 }
 
 export interface AnalysisFailure {
@@ -89,21 +108,58 @@ export interface AnalysisFailure {
 
 export type AnalysisResult<T = unknown> = AnalysisSuccess<T> | AnalysisFailure;
 
-// Extended result for deep dispute analysis — includes OrchestratorOutput for pipeline use
+// Extended result for deep dispute analysis — includes OrchestratorOutput + damages for pipeline use
 export interface DeepDisputeSuccess extends AnalysisSuccess {
   orchestratorOutput: OrchestratorOutput;
+  /** Damages analyzed with dispute context (Stage 3) */
+  damagesData: Record<string, unknown>[];
 }
 
 export type DeepDisputeResult = DeepDisputeSuccess | AnalysisFailure;
 
 // ── Damage types ──
 
-interface DamageItem {
-  category: string;
-  description: string;
-  amount: number;
+interface DamageItem extends BaseDamageItem {
   basis: string;
+  evidence_refs?: string[];
 }
+
+// ── Undisputed facts dedup ──
+// Remove facts that mention specific NT$ amounts matching a damage item.
+// This enforces data ownership: monetary claims live in `damages`, not in free-text facts.
+
+const AMOUNT_RE = /(?:新臺幣|臺幣|新台幣|台幣|NT\$?\s*)[\d,]+元?/g;
+
+const deduplicateUndisputedFacts = (
+  facts: SimpleFact[],
+  damageItems: DamageItem[],
+): SimpleFact[] => {
+  const damageAmounts = new Set(damageItems.map((d) => d.amount));
+  const damageDescs = new Set(
+    damageItems.map((d) => d.description?.trim()).filter((s): s is string => !!s),
+  );
+  return facts.filter((fact) => {
+    const matches = fact.description.match(AMOUNT_RE);
+    if (!matches) return true;
+    for (const m of matches) {
+      const num = parseInt(m.replace(/[^\d]/g, ''), 10);
+      // Require both amount match AND description substring to avoid false positives
+      if (damageAmounts.has(num) && hasDamageDescOverlap(fact.description, damageDescs)) {
+        return false;
+      }
+    }
+    return true;
+  });
+};
+
+/** Check if fact text contains any damage description keyword */
+const hasDamageDescOverlap = (factText: string, descs: Set<string>): boolean => {
+  if (descs.size === 0) return true; // No descriptions available, fall back to amount-only
+  for (const desc of descs) {
+    if (factText.includes(desc)) return true;
+  }
+  return false;
+};
 
 // ── Timeline types ──
 
@@ -117,20 +173,70 @@ interface TimelineItem {
 
 // ── Prompts (damages + timeline only; disputes uses deep analysis) ──
 
+const DAMAGES_FIELD_RULES = `category 只能是以下兩種之一：
+- "財產上損害"：醫療費用、交通費用、工作損失、財物損害、貨款、利息、違約金等
+- "非財產上損害"：精神慰撫金等
+description 為該項目的具體名稱。
+amount 為整數，以新台幣元計。如果文件中的「主張」欄位有列出明確金額，直接使用該精確金額。`;
+
+const DAMAGES_WARNINGS = `重要：
+- 不要使用 emoji 或特殊符號
+- 不要包含「總計」或「合計」項目，只列出個別金額項目`;
+
 const buildDamagesPrompt = (
   fileContext: string,
 ): string => `請根據以下案件文件摘要，計算各項請求金額明細。
 
 ${fileContext}
 
-category 只能是以下兩種之一：
-- "財產上損害"：醫療費用、交通費用、工作損失、財物損害、貨款、利息、違約金等
-- "非財產上損害"：精神慰撫金等
-description 為該項目的具體名稱。
-amount 為整數，以新台幣元計。如果文件中的「主張」欄位有列出明確金額，直接使用該精確金額。
-重要：
-- 不要使用 emoji 或特殊符號
-- 不要包含「總計」或「合計」項目，只列出個別金額項目`;
+${DAMAGES_FIELD_RULES}
+${DAMAGES_WARNINGS}`;
+
+export interface DisputeInfo {
+  id: string;
+  number: number;
+  title: string;
+}
+
+/** Map DB dispute rows to DisputeInfo — shared by caseAnalysisStep + runAnalysis */
+export const toDisputeInfoList = (
+  rows: Array<{ id: string; number: number | null; title: string | null }>,
+): DisputeInfo[] =>
+  rows.map((d, i) => ({
+    id: d.id,
+    number: d.number ?? i + 1,
+    title: d.title ?? '',
+  }));
+
+export const buildDamagesPromptWithDisputes = (
+  fileContext: string,
+  disputeList: DisputeInfo[],
+): string => {
+  const disputeLines = disputeList
+    .map((d) => `- id: "${d.id}" — 爭點 ${d.number}: ${d.title}`)
+    .join('\n');
+
+  return `請根據以下案件文件摘要，計算各項請求金額明細。
+
+${fileContext}
+
+${DAMAGES_FIELD_RULES}
+basis 為計算依據的具體說明，應包含金額的組成明細或計算方式。例如：
+- 「急診醫療費3,850元＋住院費12,600元＋復健治療19,200元＋藥品及醫材4,350元＋門診回診費1,550元」
+- 「計程車38次×350元/次」
+- 「月薪52,000元×3個月」
+- 「前輪總成更換4,200元＋右側車殼3,500元＋右後照鏡850元＋排氣管護蓋1,200元＋煞車拉桿600元＋工資2,500元」
+evidence_refs 為該金額的來源文件名陣列（使用文件摘要中的原始檔名，如 "04_損害賠償明細.pdf"）。
+
+${DAMAGES_WARNINGS}
+
+以下是本案已識別的爭點：
+${disputeLines}
+
+請為每筆金額指定 dispute_id，填入最相關的爭點 id。
+- 一個爭點可以對應多筆金額
+- 如果某筆金額確實不屬於任何爭點，dispute_id 設為 null`;
+};
 
 const buildTimelinePrompt = (
   fileContext: string,
@@ -405,7 +511,36 @@ export const runDeepDisputeAnalysis = async (
         : Promise.resolve(),
     ]);
 
-    return { success: true, data, summary, orchestratorOutput };
+    // 7. Stage 3: Run damages with dispute context
+    const disputeList: DisputeInfo[] = orchestratorOutput.legalIssues.map((issue, i) => ({
+      id: issue.id,
+      number: i + 1,
+      title: issue.title,
+    }));
+    const damagesResult = await runDamagesWithDisputes(caseId, db, drizzle, aiEnv, disputeList, {
+      readyFiles,
+      skipDelete: true, // persistDisputes already cleared damages (FK ordering)
+    });
+    const damagesData = damagesResult.success
+      ? (damagesResult.data as Record<string, unknown>[])
+      : [];
+
+    // 8. Dedup undisputed facts against damages (data ownership enforcement)
+    if (damagesResult.success) {
+      const damageItems = (damagesResult.data as DamageItem[]) ?? [];
+      const deduped = deduplicateUndisputedFacts(orchestratorOutput.undisputedFacts, damageItems);
+      if (deduped.length !== orchestratorOutput.undisputedFacts.length) {
+        const removed = orchestratorOutput.undisputedFacts.length - deduped.length;
+        console.log(`[analysisService] Deduped ${removed} undisputed facts (overlap with damages)`);
+        orchestratorOutput.undisputedFacts = deduped;
+        await drizzle
+          .update(cases)
+          .set({ undisputed_facts: deduped.length > 0 ? JSON.stringify(deduped) : null })
+          .where(eq(cases.id, caseId));
+      }
+    }
+
+    return { success: true, data, summary, orchestratorOutput, damagesData };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -423,9 +558,9 @@ const persistDisputes = async (
   drizzle: ReturnType<typeof getDB>,
 ): Promise<{ data: Record<string, unknown>[]; summary: string }> => {
   // claims: pipeline Step 2 product, do NOT delete here (claims belong to brief context)
-  // Delete old disputes + persist case-level analysis fields in parallel (independent tables)
+  // Delete damages + update case fields in parallel (independent), then delete disputes (FK ordering)
   await Promise.all([
-    drizzle.delete(disputes).where(eq(disputes.case_id, caseId)),
+    drizzle.delete(damages).where(eq(damages.case_id, caseId)),
     drizzle
       .update(cases)
       .set({
@@ -434,6 +569,7 @@ const persistDisputes = async (
       })
       .where(eq(cases.id, caseId)),
   ]);
+  await drizzle.delete(disputes).where(eq(disputes.case_id, caseId));
 
   // Batch insert for D1 param limit
   for (let i = 0; i < issues.length; i += DISPUTE_BATCH_SIZE) {
@@ -472,8 +608,11 @@ const persistDamages = async (
   items: DamageItem[],
   caseId: string,
   drizzle: ReturnType<typeof getDB>,
+  skipDelete = false,
 ): Promise<{ data: Record<string, unknown>[]; summary: string }> => {
-  await drizzle.delete(damages).where(eq(damages.case_id, caseId));
+  if (!skipDelete) {
+    await drizzle.delete(damages).where(eq(damages.case_id, caseId));
+  }
 
   const records = items.map((d) => ({
     id: nanoid(),
@@ -482,7 +621,10 @@ const persistDamages = async (
     description: d.description || null,
     amount: d.amount,
     basis: d.basis || null,
-    evidence_refs: null,
+    // Gemini constrained decoding sometimes returns the string "null" instead of JSON null
+    dispute_id: d.dispute_id && d.dispute_id !== 'null' ? d.dispute_id : null,
+    evidence_refs:
+      d.evidence_refs && d.evidence_refs.length > 0 ? JSON.stringify(d.evidence_refs) : null,
     created_at: new Date().toISOString(),
   }));
 
@@ -513,7 +655,80 @@ const persistTimeline = async (
 
 export interface RunAnalysisOptions {
   readyFiles?: ReadyFile[];
+  /** Skip DELETE before INSERT — use when caller already cleared the table (e.g. persistDisputes) */
+  skipDelete?: boolean;
 }
+
+/**
+ * Run damages analysis with dispute context (Option A: Sequential).
+ * Disputes must be analyzed first; their IDs are passed in so the AI
+ * can assign each damage item to the most relevant dispute.
+ */
+export const runDamagesWithDisputes = async (
+  caseId: string,
+  db: D1Database,
+  drizzle: ReturnType<typeof getDB>,
+  aiEnv: AIEnv,
+  disputeList: DisputeInfo[],
+  options?: RunAnalysisOptions,
+): Promise<AnalysisResult> => {
+  // 1. Load ready files
+  let readyFiles = options?.readyFiles;
+  if (!readyFiles) {
+    const loaded = await safeLoadReadyFiles(db, caseId);
+    if (!Array.isArray(loaded)) return loaded;
+    readyFiles = loaded;
+  }
+
+  // 2. Build context + dispute-aware prompt
+  const fileContext = buildFileContext(readyFiles, { enriched: true });
+  const prompt = buildDamagesPromptWithDisputes(fileContext, disputeList);
+
+  // 3. Call Gemini with dispute_id in schema
+  let content: string;
+  try {
+    const result = await callGeminiNative(aiEnv, SYSTEM_PROMPT, prompt, {
+      maxTokens: 8192,
+      responseSchema: DAMAGES_WITH_DISPUTE_SCHEMA,
+      temperature: 0,
+      thinkingBudget: 0,
+    });
+    content = result.content;
+  } catch (e) {
+    console.error('[analysisService] AI call failed (damages+disputes):', e);
+    return { success: false, error: '無法解析金額計算結果' };
+  }
+
+  // 4. Parse JSON
+  let items: DamageItem[];
+  try {
+    items = JSON.parse(content) as DamageItem[];
+  } catch {
+    console.error(
+      `[analysisService] JSON parse failed (first 500 chars): ${content.slice(0, 500)}`,
+    );
+    return { success: false, error: '無法解析金額計算結果' };
+  }
+
+  if (!items.length) {
+    return { success: false, error: '未能識別出請求金額項目，請確認檔案已正確處理。' };
+  }
+
+  // 5. Validate dispute_ids — strip invalid ones rather than failing
+  const validDisputeIds = new Set(disputeList.map((d) => d.id));
+  for (const item of items) {
+    if (item.dispute_id && !validDisputeIds.has(item.dispute_id)) {
+      console.warn(
+        `[analysisService] Invalid dispute_id "${item.dispute_id}" for "${item.description}", setting to null`,
+      );
+      item.dispute_id = null;
+    }
+  }
+
+  // 6. Persist
+  const { data, summary } = await persistDamages(items, caseId, drizzle, options?.skipDelete);
+  return { success: true, data, summary };
+};
 
 export const runAnalysis = async (
   type: AnalysisType,
@@ -523,26 +738,58 @@ export const runAnalysis = async (
   aiEnv: AIEnv,
   options?: RunAnalysisOptions,
 ): Promise<AnalysisResult> => {
-  // Disputes uses deep analysis (Case Reader + Issue Analyzer)
+  // Disputes uses deep analysis (Case Reader + Issue Analyzer + Damages)
   if (type === 'disputes') {
-    return runDeepDisputeAnalysis(caseId, db, drizzle, aiEnv, {
+    const result = await runDeepDisputeAnalysis(caseId, db, drizzle, aiEnv, {
       readyFiles: options?.readyFiles,
     });
+
+    if (!result.success) return result;
+
+    // damagesData is already populated by runDeepDisputeAnalysis Stage 3
+    return { ...result, damages: (result as DeepDisputeSuccess).damagesData };
   }
 
-  // Damages + Timeline use Gemini one-shot
-  const config = ANALYSIS_CONFIGS[type];
-  const result = await runAnalysisCore(config, caseId, db, aiEnv, options?.readyFiles);
-
-  if (!result.success) {
-    return result;
-  }
-
-  // Persist to DB
+  // Damages: try dispute-aware analysis if disputes exist
   if (type === 'damages') {
+    const existingDisputes = await drizzle
+      .select({ id: disputes.id, number: disputes.number, title: disputes.title })
+      .from(disputes)
+      .where(eq(disputes.case_id, caseId));
+
+    if (existingDisputes.length > 0) {
+      return runDamagesWithDisputes(
+        caseId,
+        db,
+        drizzle,
+        aiEnv,
+        toDisputeInfoList(existingDisputes),
+        options,
+      );
+    }
+
+    // Fallback: no disputes yet, run without dispute context
+    const result = await runAnalysisCore(
+      ANALYSIS_CONFIGS.damages,
+      caseId,
+      db,
+      aiEnv,
+      options?.readyFiles,
+    );
+    if (!result.success) return result;
     const { data, summary } = await persistDamages(result.data as DamageItem[], caseId, drizzle);
     return { success: true, data, summary };
   }
+
+  // Timeline uses Gemini one-shot
+  const result = await runAnalysisCore(
+    ANALYSIS_CONFIGS.timeline,
+    caseId,
+    db,
+    aiEnv,
+    options?.readyFiles,
+  );
+  if (!result.success) return result;
   const { data, summary } = await persistTimeline(result.data as TimelineItem[], caseId, drizzle);
   return { success: true, data, summary };
 };

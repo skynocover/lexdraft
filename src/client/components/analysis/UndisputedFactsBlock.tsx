@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, type FC } from 'react';
 import { ChevronRight, Pencil, Trash2, Check, Plus } from 'lucide-react';
-import { useAnalysisStore, type SimpleFact } from '../../stores/useAnalysisStore';
+import { useAnalysisStore, type SimpleFact, type Damage } from '../../stores/useAnalysisStore';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { ConfirmDialog } from '../ui/confirm-dialog';
+import { InlineDamageItem } from './InlineDamageItem';
+import { formatAmount } from '../../lib/textUtils';
 
 // ── Undisputed Fact Card ──
 
@@ -32,23 +34,29 @@ const FactCard: FC<{ fact: SimpleFact; caseId: string }> = ({ fact, caseId }) =>
   const handleSave = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
-    const trimmed = editText.trim();
-    if (!trimmed) {
+    try {
+      const trimmed = editText.trim();
+      if (!trimmed) {
+        setEditing(false);
+        return;
+      }
+      if (trimmed !== fact.description) {
+        await updateFact(caseId, fact.id, trimmed);
+      }
       setEditing(false);
+    } finally {
       savingRef.current = false;
-      return;
     }
-    if (trimmed !== fact.description) {
-      await updateFact(caseId, fact.id, trimmed);
-    }
-    setEditing(false);
-    savingRef.current = false;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
+      savingRef.current = true;
       setEditing(false);
+      queueMicrotask(() => {
+        savingRef.current = false;
+      });
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -115,9 +123,20 @@ const FactCard: FC<{ fact: SimpleFact; caseId: string }> = ({ fact, caseId }) =>
 
 // ── Undisputed Facts Block ──
 
-export const UndisputedFactsBlock: FC<{ facts: SimpleFact[]; caseId: string }> = ({
+export const UndisputedFactsBlock: FC<{
+  facts: SimpleFact[];
+  caseId: string;
+  undisputedDamages?: Damage[];
+  undisputedDamageTotal?: number;
+  onEditDamage: (d: Damage) => void;
+  onDeleteDamage: (d: Damage) => void;
+}> = ({
   facts,
   caseId,
+  undisputedDamages = [],
+  undisputedDamageTotal = 0,
+  onEditDamage,
+  onDeleteDamage,
 }) => {
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
@@ -134,17 +153,19 @@ export const UndisputedFactsBlock: FC<{ facts: SimpleFact[]; caseId: string }> =
   const handleAdd = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
-    const trimmed = newText.trim();
-    if (!trimmed) {
-      setAdding(false);
+    try {
+      const trimmed = newText.trim();
+      if (!trimmed) {
+        setAdding(false);
+        setNewText('');
+        return;
+      }
+      await addFact(caseId, trimmed);
       setNewText('');
+      setAdding(false);
+    } finally {
       savingRef.current = false;
-      return;
     }
-    await addFact(caseId, trimmed);
-    setNewText('');
-    setAdding(false);
-    savingRef.current = false;
   };
 
   const handleAddKeyDown = (e: React.KeyboardEvent) => {
@@ -159,7 +180,9 @@ export const UndisputedFactsBlock: FC<{ facts: SimpleFact[]; caseId: string }> =
     }
   };
 
-  if (facts.length === 0 && !adding) return null;
+  const totalCount = facts.length + undisputedDamages.length;
+
+  if (totalCount === 0 && !adding) return null;
 
   return (
     <Collapsible className="rounded border border-bd bg-bg-2 px-3 py-2.5">
@@ -171,7 +194,10 @@ export const UndisputedFactsBlock: FC<{ facts: SimpleFact[]; caseId: string }> =
           />
           <Check className="size-3.5 shrink-0 text-gr" />
           <span className="text-xs font-medium text-t2">不爭執事項</span>
-          <span className="text-xs text-t3">({facts.length})</span>
+          <span className="text-xs text-t3">({totalCount})</span>
+          {undisputedDamageTotal > 0 && (
+            <span className="ml-auto text-xs text-t3">{formatAmount(undisputedDamageTotal)}</span>
+          )}
         </CollapsibleTrigger>
         <button
           onClick={() => setAdding(true)}
@@ -183,6 +209,15 @@ export const UndisputedFactsBlock: FC<{ facts: SimpleFact[]; caseId: string }> =
       <CollapsibleContent className="mt-2 space-y-1 pl-5">
         {facts.map((fact) => (
           <FactCard key={fact.id} fact={fact} caseId={caseId} />
+        ))}
+        {undisputedDamages.map((d) => (
+          <InlineDamageItem
+            key={d.id}
+            damage={d}
+            onEdit={onEditDamage}
+            onDelete={onDeleteDamage}
+            showRefs
+          />
         ))}
         {adding && (
           <div className="rounded bg-bg-1 px-2.5 py-1.5">

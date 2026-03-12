@@ -29,6 +29,7 @@ analyzeRouter.post('/cases/:caseId/analyze', async (c) => {
     success: true,
     data: result.data,
     summary: result.summary,
+    ...('damages' in result ? { damages: result.damages } : {}),
   });
 });
 

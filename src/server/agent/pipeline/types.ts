@@ -173,6 +173,7 @@ export interface DamageItem {
   category: string;
   description: string | null;
   amount: number;
+  dispute_id?: string | null;
 }
 
 /** Filter out "總計"/"合計" summary rows — use this everywhere damages are summed */

@@ -1,5 +1,17 @@
 export const formatAmount = (amount: number): string => `NT$ ${amount.toLocaleString()}`;
 
+/** Parse a JSON field that may arrive as string (from DB) or already-parsed array (from SSE) */
+export const parseJsonArray = (value: string | string[] | null | undefined): string[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
 /** Strip markdown headers (## ###) from cited text for display */
 export const stripMarkdownHeaders = (text: string): string => text.replace(/^#{1,3}\s+/gm, '');
 

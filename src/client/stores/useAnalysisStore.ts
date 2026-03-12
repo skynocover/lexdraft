@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
+import { formatAmount } from '../lib/textUtils';
 import { ANALYSIS_LABELS, type AnalysisType, type SimpleFact } from '../../shared/types';
 
 export type { SimpleFact };
@@ -24,6 +25,8 @@ export interface Damage {
   description: string | null;
   amount: number;
   basis: string | null;
+  dispute_id: string | null;
+  evidence_refs: string | null;
   created_at: string;
 }
 
@@ -52,13 +55,14 @@ export interface ClaimGraph {
 }
 
 type TimelineInput = Omit<TimelineEvent, 'id'>;
-type DamageInput = Omit<Damage, 'id' | 'case_id' | 'created_at'>;
+type DamageInput = Omit<Damage, 'id' | 'case_id' | 'created_at' | 'evidence_refs'>;
 
 export type { AnalysisType };
 
 interface AnalysisResponse {
   success: boolean;
   data?: unknown[];
+  damages?: Damage[];
   summary?: string;
   error?: string;
 }
@@ -125,6 +129,12 @@ const makeLoader =
       const data = await api.get<T[]>(`/cases/${caseId}/${endpoint}`);
       const current = get()[key] as unknown[];
       if (Array.isArray(current) && current.length === 0 && data.length === 0) return;
+      if (
+        Array.isArray(current) &&
+        current.length === data.length &&
+        JSON.stringify(current) === JSON.stringify(data)
+      )
+        return;
       set({ [key]: data } as Partial<AnalysisState>);
     } catch (err) {
       console.error(`load ${key} error:`, err);
@@ -165,13 +175,24 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       const res = await api.post<AnalysisResponse>(`/cases/${caseId}/analyze`, { type });
       if (type === 'disputes') {
         const items = res.data as Dispute[];
-        set({ disputes: items });
-        toast.success(`爭點分析完成（${items.length} 個爭點）`);
+
+        // Backend also runs damages analysis — update both in a single set() to avoid intermediate render
+        const damageItems = res.damages;
+        if (damageItems && damageItems.length > 0) {
+          set({ disputes: items, damages: damageItems });
+          const total = damageItems.reduce((s, d) => s + d.amount, 0);
+          toast.success(
+            `爭點分析完成（${items.length} 個爭點、${damageItems.length} 項金額 ${formatAmount(total)}）`,
+          );
+        } else {
+          set({ disputes: items });
+          toast.success(`爭點分析完成（${items.length} 個爭點）`);
+        }
       } else if (type === 'damages') {
         const items = res.data as Damage[];
         const total = items.reduce((s, d) => s + d.amount, 0);
         set({ damages: items });
-        toast.success(`金額計算完成，請求總額 NT$ ${total.toLocaleString()}`);
+        toast.success(`金額計算完成，請求總額 ${formatAmount(total)}`);
       } else if (type === 'timeline') {
         const items = res.data as TimelineEvent[];
         set({ timeline: items });

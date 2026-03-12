@@ -82,7 +82,7 @@ export const runCaseReader = async (
   const readFileIds = new Set<string>();
   const handleReadFile = async (fileId: string): Promise<string> => {
     if (readFileIds.size >= MAX_FILE_READS) {
-      return '已達閱讀上限（6 份），請用摘要完成分析。';
+      return `已達閱讀上限（${MAX_FILE_READS} 份），請用摘要完成分析。`;
     }
 
     // Skip duplicate reads (LLM may request the same file twice)
@@ -263,7 +263,7 @@ export const runIssueAnalyzer = async (
         { role: 'system', content: ISSUE_ANALYZER_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
-      { maxTokens: 16384, signal: combinedSignal },
+      { maxTokens: 16384, signal: combinedSignal, temperature: 0 },
     );
 
     return parseIssueAnalyzerOutput(content);

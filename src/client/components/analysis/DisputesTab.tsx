@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef, useMemo, type FC } from 'react';
-import { ChevronRight, Pencil, Trash2, Search, AlertTriangle } from 'lucide-react';
-import { toast } from 'sonner';
-import { useAnalysisStore, type Dispute } from '../../stores/useAnalysisStore';
+import { useMemo, type FC } from 'react';
+import { ChevronRight, Search, AlertTriangle, Clock } from 'lucide-react';
+import { useAnalysisStore, type Damage } from '../../stores/useAnalysisStore';
 import { useCaseStore } from '../../stores/useCaseStore';
-import { useTabStore } from '../../stores/useTabStore';
-import { cleanText } from '../../lib/textUtils';
+import { useDamageCrud } from '../../hooks/useDamageCrud';
+import { cleanText, formatAmount } from '../../lib/textUtils';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { ConfirmDialog } from '../ui/confirm-dialog';
+import { DamageFormDialog } from './DamageFormDialog';
+import { DisputeCard } from './DisputeCard';
 import { ReanalyzeButton } from './ReanalyzeButton';
 import { EmptyAnalyzeButton } from './EmptyAnalyzeButton';
 import { UndisputedFactsBlock } from './UndisputedFactsBlock';
+import { TimelineTab } from './TimelineTab';
 
 // ── Information Gaps Block ──
 
@@ -46,15 +48,56 @@ const InformationGapsBlock: FC<{ gaps: string[] }> = ({ gaps }) => {
   );
 };
 
+const EMPTY_DAMAGES: Damage[] = [];
+
 // ── DisputesTab (main container) ──
 
 export const DisputesTab = () => {
   const disputes = useAnalysisStore((s) => s.disputes);
+  const damages = useAnalysisStore((s) => s.damages);
   const undisputedFacts = useAnalysisStore((s) => s.undisputedFacts);
   const informationGaps = useAnalysisStore((s) => s.informationGaps);
+  const timelineCount = useAnalysisStore((s) => s.timeline.length);
   const caseId = useCaseStore((s) => s.currentCase?.id);
   const files = useCaseStore((s) => s.files);
   const fileByName = useMemo(() => new Map(files.map((f) => [f.filename, f])), [files]);
+
+  // Single damage CRUD instance for all children (DisputeCard + UndisputedFactsBlock)
+  const dmg = useDamageCrud(caseId);
+
+  // Group damages by dispute_id + compute totals in single pass
+  const {
+    damagesByDispute,
+    damageTotalByDispute,
+    unassignedDamages,
+    unassignedTotal,
+    totalAmount,
+  } = useMemo(() => {
+    const grouped = new Map<string, Damage[]>();
+    const totals = new Map<string, number>();
+    const unassigned: Damage[] = [];
+    let total = 0;
+    let unassignedSum = 0;
+    for (const d of damages) {
+      total += d.amount;
+      if (d.dispute_id) {
+        const list = grouped.get(d.dispute_id) ?? [];
+        list.push(d);
+        grouped.set(d.dispute_id, list);
+        totals.set(d.dispute_id, (totals.get(d.dispute_id) ?? 0) + d.amount);
+      } else {
+        unassigned.push(d);
+        unassignedSum += d.amount;
+      }
+    }
+    return {
+      damagesByDispute: grouped,
+      damageTotalByDispute: totals,
+      unassignedDamages: unassigned,
+      unassignedTotal: unassignedSum,
+      totalAmount: total,
+    };
+  }, [damages]);
 
   if (disputes.length === 0 && undisputedFacts.length === 0) {
     return (
@@ -67,246 +110,86 @@ export const DisputesTab = () => {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center text-xs text-t3">
-        <span>{disputes.length} 個爭點</span>
-        <span className="flex-1" />
-        <ReanalyzeButton type="disputes" hasData={disputes.length > 0} />
-      </div>
-
-      <InformationGapsBlock gaps={informationGaps} />
-
-      {disputes.map((d) => (
-        <DisputeCard key={d.id} dispute={d} fileByName={fileByName} />
-      ))}
-
-      {caseId && <UndisputedFactsBlock facts={undisputedFacts} caseId={caseId} />}
-    </div>
-  );
-};
-
-// ── DisputeCard ──
-
-interface DisputeCardProps {
-  dispute: Dispute;
-  fileByName: Map<string, { id: string; filename: string }>;
-}
-
-const DisputeCard: FC<DisputeCardProps> = ({ dispute, fileByName }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const savingRef = useRef(false);
-  const updateDispute = useAnalysisStore((s) => s.updateDispute);
-  const removeDispute = useAnalysisStore((s) => s.removeDispute);
-  const caseId = useCaseStore((s) => s.currentCase?.id);
-  const openFileTab = useTabStore((s) => s.openFileTab);
-  const openLawSearchTab = useTabStore((s) => s.openLawSearchTab);
-
-  const evidenceCount = dispute.evidence?.length ?? 0;
-  const lawRefCount = dispute.law_refs?.length ?? 0;
-
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [editing]);
-
-  const handleStartEdit = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditTitle(dispute.title || '');
-    setEditing(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (savingRef.current) return;
-    savingRef.current = true;
-    const trimmed = editTitle.trim();
-    if (!trimmed || !caseId) {
-      setEditing(false);
-      savingRef.current = false;
-      return;
-    }
-    try {
-      await updateDispute(caseId, dispute.id, { title: trimmed });
-    } catch {
-      toast.error('更新爭點標題失敗');
-    }
-    setEditing(false);
-    savingRef.current = false;
-  };
-
-  const handleCancelEdit = () => {
-    setEditing(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleSaveEdit();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      handleCancelEdit();
-    }
-  };
-
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setConfirmDelete(true);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!caseId) return;
-    try {
-      await removeDispute(caseId, dispute.id);
-      toast.success('爭點已刪除');
-    } catch {
-      toast.error('刪除爭點失敗');
-    } finally {
-      setConfirmDelete(false);
-    }
-  };
-
-  return (
-    <div
-      className="rounded border border-bd bg-bg-2"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {/* Header */}
-      <div className="px-3 py-2.5">
-        <button
-          onClick={() => !editing && setExpanded(!expanded)}
-          className="flex w-full items-center gap-2 text-left transition"
-        >
-          <span className="shrink-0 text-xs font-medium text-t2">爭點 {dispute.number}</span>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-1 space-y-2 overflow-y-auto">
+        <div className="flex items-center text-xs text-t3">
+          <span>{disputes.length} 個爭點</span>
           <span className="flex-1" />
-          <span className="grid shrink-0 [&>*]:col-start-1 [&>*]:row-start-1">
-            {!editing && (
-              <span
-                className={`flex items-center justify-end gap-1 transition-opacity ${hovered ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-              >
-                <span
-                  role="button"
-                  onClick={handleStartEdit}
-                  className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </span>
-                <span
-                  role="button"
-                  onClick={handleDeleteClick}
-                  className="rounded p-1 text-t3 transition hover:bg-rd/10 hover:text-rd"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </span>
-              </span>
-            )}
-            {(evidenceCount > 0 || lawRefCount > 0) && (
-              <span
-                className={`flex items-center text-xs text-t3 transition-opacity ${hovered && !editing ? 'opacity-0' : 'opacity-100'}`}
-              >
-                {[
-                  evidenceCount > 0 ? `證據 ${evidenceCount}` : null,
-                  lawRefCount > 0 ? `法條 ${lawRefCount}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </span>
-            )}
-          </span>
-          <ChevronRight
-            size={14}
-            className={`shrink-0 text-t3 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+          <ReanalyzeButton type="disputes" hasData={disputes.length > 0} />
+        </div>
+
+        <InformationGapsBlock gaps={informationGaps} />
+
+        {disputes.map((d) => (
+          <DisputeCard
+            key={d.id}
+            dispute={d}
+            caseId={caseId!}
+            fileByName={fileByName}
+            damages={damagesByDispute.get(d.id) ?? EMPTY_DAMAGES}
+            damageTotal={damageTotalByDispute.get(d.id) ?? 0}
+            onAddDamage={dmg.openAdd}
+            onEditDamage={dmg.openEdit}
+            onDeleteDamage={dmg.stageDelete}
           />
-        </button>
-        {editing ? (
-          <input
-            ref={inputRef}
-            value={editTitle}
-            onChange={(e) => setEditTitle(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={handleSaveEdit}
-            className="mt-1 w-full rounded border border-ac/50 bg-bg-1 px-2 py-1 text-sm font-medium text-t1 outline-none focus:border-ac"
+        ))}
+
+        {caseId && (
+          <UndisputedFactsBlock
+            facts={undisputedFacts}
+            caseId={caseId}
+            undisputedDamages={unassignedDamages}
+            undisputedDamageTotal={unassignedTotal}
+            onEditDamage={dmg.openEdit}
+            onDeleteDamage={dmg.stageDelete}
           />
-        ) : (
-          <button onClick={() => setExpanded(!expanded)} className="mt-1 w-full text-left">
-            <p className="truncate text-sm font-medium text-t1">
-              {cleanText(dispute.title || '未命名爭點')}
-            </p>
-          </button>
+        )}
+
+        {/* 時間軸 */}
+        {timelineCount > 0 && (
+          <Collapsible className="rounded border border-bd bg-bg-2">
+            <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-3 py-2.5 text-left">
+              <ChevronRight
+                size={14}
+                className="shrink-0 text-t3 transition-transform duration-200 [[data-state=open]>&]:rotate-90"
+              />
+              <Clock className="size-3.5 shrink-0 text-t3" />
+              <span className="text-xs font-medium text-t2">時間軸</span>
+              <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[10px] text-t3">
+                {timelineCount}
+              </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="border-t border-bd p-2.5">
+              <TimelineTab />
+            </CollapsibleContent>
+          </Collapsible>
         )}
       </div>
 
-      {/* Expanded content */}
-      {expanded && (
-        <div className="space-y-3 border-t border-bd px-3 py-2.5">
-          {/* 我方論證 */}
-          {dispute.our_position && (
-            <div>
-              <p className="mb-1 text-xs font-medium text-t3">我方論證</p>
-              <div className="border-l-2 border-l-ac pl-2.5">
-                <p className="text-sm leading-relaxed text-t1">{dispute.our_position}</p>
-              </div>
-              {/* 證據 + 法條 tags 歸在我方論證下 */}
-              {((dispute.evidence && dispute.evidence.length > 0) ||
-                (dispute.law_refs && dispute.law_refs.length > 0)) && (
-                <div className="mt-1.5 flex flex-wrap gap-1 pl-2.5">
-                  {dispute.evidence?.map((e, i) => {
-                    const file = fileByName.get(e);
-                    const label = cleanText(e).replace(/\.\w+$/, '');
-                    return file ? (
-                      <button
-                        key={`ev-${i}`}
-                        onClick={() => openFileTab(file.id, file.filename)}
-                        className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2 transition hover:bg-bg-h hover:text-t1"
-                      >
-                        {label}
-                      </button>
-                    ) : (
-                      <span
-                        key={`ev-${i}`}
-                        className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2"
-                      >
-                        {label}
-                      </span>
-                    );
-                  })}
-                  {dispute.law_refs?.map((l, i) => (
-                    <button
-                      key={`law-${i}`}
-                      onClick={() => openLawSearchTab(cleanText(l), true)}
-                      className="rounded bg-cy/10 px-1.5 py-0.5 text-xs text-cy transition hover:bg-cy/20"
-                    >
-                      {cleanText(l)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 對方論證 */}
-          {dispute.their_position && (
-            <div>
-              <p className="mb-1 text-xs font-medium text-t3">對方論證</p>
-              <div className="border-l-2 border-l-or pl-2.5">
-                <p className="text-sm leading-relaxed text-t1">{dispute.their_position}</p>
-              </div>
-            </div>
-          )}
+      {/* 請求總額 sticky bar */}
+      {totalAmount > 0 && (
+        <div className="shrink-0 border-t border-bd bg-bg-0 px-3 py-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-ac">請求總額</span>
+            <span className="text-sm font-bold text-ac">{formatAmount(totalAmount)}</span>
+          </div>
         </div>
       )}
 
+      {/* Shared damage dialogs — single instance for all DisputeCards + UndisputedFactsBlock */}
+      <DamageFormDialog
+        open={dmg.formOpen}
+        onOpenChange={(open) => !open && dmg.closeForm()}
+        damage={dmg.editing}
+        onSubmit={dmg.handleSubmit}
+        loading={dmg.loading}
+      />
+
       <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        description={`確定刪除「${cleanText(dispute.title || '未命名爭點')}」？相關主張也會一併刪除。`}
-        onConfirm={handleConfirmDelete}
+        open={!!dmg.deleting}
+        onOpenChange={(open) => !open && dmg.clearDelete()}
+        description={`確定刪除金額項目「${cleanText(dmg.deleting?.description || dmg.deleting?.category || '')}」？`}
+        onConfirm={dmg.handleConfirmDelete}
       />
     </div>
   );

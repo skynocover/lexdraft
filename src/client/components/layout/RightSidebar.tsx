@@ -1,23 +1,12 @@
-import {
-  Info,
-  FolderOpen,
-  BarChart3,
-  ChevronsRight,
-  ChevronRight,
-  Plus,
-  Search,
-} from 'lucide-react';
+import { Info, FolderOpen, Swords, ChevronsRight, ChevronRight, Plus, Search } from 'lucide-react';
 import { TooltipProvider } from '../ui/tooltip';
 import { useTabStore } from '../../stores/useTabStore';
-import { useUIStore, type SidebarTab, type AnalysisSubTab } from '../../stores/useUIStore';
+import { useUIStore, type SidebarTab } from '../../stores/useUIStore';
 import { BriefsSection } from './sidebar/BriefsSection';
 import { FilesSection } from './sidebar/FilesSection';
 import { LawRefsSection } from './sidebar/LawRefsSection';
 import { CaseInfoTab } from './sidebar/CaseInfoTab';
 import { DisputesTab } from '../analysis/DisputesTab';
-import { DamagesTab } from '../analysis/DamagesTab';
-import { TimelineTab } from '../analysis/TimelineTab';
-import { useAnalysisStore } from '../../stores/useAnalysisStore';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useCaseStore } from '../../stores/useCaseStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
@@ -26,8 +15,8 @@ import { useFileUpload } from '../../hooks/useFileUpload';
 
 const SIDEBAR_TABS: { key: SidebarTab; label: string; icon: typeof FolderOpen }[] = [
   { key: 'case-info', label: '案件資訊', icon: Info },
-  { key: 'case-materials', label: '卷宗檔案', icon: FolderOpen },
-  { key: 'analysis', label: '分析', icon: BarChart3 },
+  { key: 'disputes', label: '爭點', icon: Swords },
+  { key: 'case-materials', label: '卷宗', icon: FolderOpen },
 ];
 
 export const RightSidebar = () => {
@@ -71,8 +60,14 @@ export const RightSidebar = () => {
         className="flex min-h-0 flex-1 flex-col animate-in fade-in duration-150"
       >
         {sidebarTab === 'case-info' && <CaseInfoTab />}
+        {sidebarTab === 'disputes' && (
+          <TooltipProvider delayDuration={300}>
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2.5">
+              <DisputesTab />
+            </div>
+          </TooltipProvider>
+        )}
         {sidebarTab === 'case-materials' && <CaseMaterialsContent />}
-        {sidebarTab === 'analysis' && <AnalysisSidebarContent />}
       </div>
     </div>
   );
@@ -213,78 +208,5 @@ const CollapsibleSection = ({
       </div>
       <CollapsibleContent>{children}</CollapsibleContent>
     </Collapsible>
-  );
-};
-
-/* ===================== 分析 Tab ===================== */
-
-const ANALYSIS_SUB_TABS: { key: AnalysisSubTab; label: string }[] = [
-  { key: 'disputes', label: '爭點' },
-  { key: 'damages', label: '金額' },
-  { key: 'timeline', label: '時間軸' },
-];
-
-const selectTotalDamages = (s: { damages: Array<{ amount: number }> }) =>
-  s.damages.reduce((sum, d) => sum + d.amount, 0);
-
-const AnalysisSidebarContent = () => {
-  const analysisSubTab = useUIStore((s) => s.analysisSubTab);
-  const setAnalysisSubTab = useUIStore((s) => s.setAnalysisSubTab);
-  const disputeCount = useAnalysisStore((s) => s.disputes.length);
-  const totalDamages = useAnalysisStore(selectTotalDamages);
-  const timelineCount = useAnalysisStore((s) => s.timeline.length);
-
-  const getBadge = (key: AnalysisSubTab): string | null => {
-    switch (key) {
-      case 'disputes':
-        return disputeCount > 0 ? `${disputeCount}` : null;
-      case 'damages':
-        return totalDamages > 0 ? `NT$ ${totalDamages.toLocaleString()}` : null;
-      case 'timeline':
-        return timelineCount > 0 ? `${timelineCount}` : null;
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* Sub-tab pills */}
-      <div className="sticky top-0 z-10 flex gap-1 border-b border-bd bg-bg-0 px-2.5 py-2">
-        {ANALYSIS_SUB_TABS.map((tab) => {
-          const isActive = analysisSubTab === tab.key;
-          const badge = getBadge(tab.key);
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setAnalysisSubTab(tab.key)}
-              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
-                isActive ? 'bg-ac/15 text-ac' : 'text-t3 hover:bg-bg-h hover:text-t1'
-              }`}
-            >
-              <span>{tab.label}</span>
-              {badge && (
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                    isActive ? 'bg-ac/10 text-ac' : 'bg-bg-3 text-t3'
-                  }`}
-                >
-                  {badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Sub-tab content */}
-      <TooltipProvider delayDuration={300}>
-        <div className="flex-1 overflow-y-auto p-2.5">
-          {analysisSubTab === 'disputes' && <DisputesTab />}
-          {analysisSubTab === 'damages' && <DamagesTab />}
-          {analysisSubTab === 'timeline' && <TimelineTab />}
-        </div>
-      </TooltipProvider>
-    </div>
   );
 };

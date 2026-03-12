@@ -118,6 +118,7 @@ export const damages = sqliteTable('damages', {
   description: text('description'), // 明細說明
   amount: integer('amount').notNull(), // 金額（整數，以新台幣元計）
   basis: text('basis'), // 計算依據
+  dispute_id: text('dispute_id').references(() => disputes.id),
   evidence_refs: text('evidence_refs'), // JSON array — 引用的證據檔案
   created_at: text('created_at'),
 });

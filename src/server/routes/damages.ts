@@ -6,6 +6,7 @@ import { damages } from '../db/schema';
 import type { AppEnv } from '../types';
 import { notFound } from '../lib/errors';
 import { parseBody } from '../lib/validate';
+import { parseJsonField } from '../lib/jsonUtils';
 import { createDamageSchema, updateDamageSchema } from '../schemas/damages';
 
 const damagesRouter = new Hono<AppEnv>();
@@ -19,7 +20,7 @@ damagesRouter.get('/cases/:caseId/damages', async (c) => {
 
   const parsed = rows.map((d) => ({
     ...d,
-    evidence_refs: d.evidence_refs ? JSON.parse(d.evidence_refs) : [],
+    evidence_refs: parseJsonField<string[]>(d.evidence_refs, []),
   }));
 
   return c.json(parsed);
@@ -34,6 +35,8 @@ damagesRouter.post('/cases/:caseId/damages', async (c) => {
   const id = nanoid();
   const now = new Date().toISOString();
 
+  const disputeId = body.dispute_id ?? null;
+
   await db.insert(damages).values({
     id,
     case_id: caseId,
@@ -41,6 +44,7 @@ damagesRouter.post('/cases/:caseId/damages', async (c) => {
     description: body.description || null,
     amount: body.amount,
     basis: body.basis || null,
+    dispute_id: disputeId,
     evidence_refs: null,
     created_at: now,
   });
@@ -53,6 +57,8 @@ damagesRouter.post('/cases/:caseId/damages', async (c) => {
       description: body.description || null,
       amount: body.amount,
       basis: body.basis || null,
+      dispute_id: disputeId,
+      evidence_refs: null,
       created_at: now,
     },
     201,
@@ -70,16 +76,15 @@ damagesRouter.put('/damages/:id', async (c) => {
   if (body.description !== undefined) updates.description = body.description;
   if (body.amount !== undefined) updates.amount = body.amount;
   if (body.basis !== undefined) updates.basis = body.basis;
+  if (body.dispute_id !== undefined) updates.dispute_id = body.dispute_id;
 
-  await db.update(damages).set(updates).where(eq(damages.id, id));
+  const result = await db.update(damages).set(updates).where(eq(damages.id, id)).returning();
+  if (!result.length) throw notFound('金額項目');
 
-  const rows = await db.select().from(damages).where(eq(damages.id, id));
-  if (!rows.length) throw notFound('金額項目');
-
-  const row = rows[0];
+  const row = result[0];
   return c.json({
     ...row,
-    evidence_refs: row.evidence_refs ? JSON.parse(row.evidence_refs) : [],
+    evidence_refs: parseJsonField<string[]>(row.evidence_refs, []),
   });
 });
 

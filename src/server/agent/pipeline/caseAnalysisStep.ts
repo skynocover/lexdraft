@@ -18,6 +18,8 @@ import {
 import {
   runDeepDisputeAnalysis,
   runAnalysis as runAnalysisService,
+  runDamagesWithDisputes,
+  toDisputeInfoList,
   type DeepDisputeSuccess,
 } from '../../services/analysisService';
 import type { ContextStore } from '../contextStore';
@@ -196,7 +198,7 @@ export const runCaseAnalysis = async (
     }
   }
 
-  // ── 4. Three-way parallel: disputes + damages + timeline ──
+  // ── 4. Disputes → damages (sequential) + timeline (parallel) ──
 
   // Only skip if disputes have meaningful content (non-empty positions)
   const hasUsableDisputes =
@@ -204,7 +206,12 @@ export const runCaseAnalysis = async (
     existingDisputes.some((d) => d.our_position?.trim() || d.their_position?.trim());
 
   // ── Dispute promise ──
-  const disputePromise = (async (): Promise<OrchestratorOutput | null> => {
+  // Returns orchestratorOutput + any freshDamages produced by Stage 3
+  const disputePromise = (async (): Promise<{
+    orchestratorOutput: OrchestratorOutput | null;
+    freshDamages: DamageItem[] | null;
+  }> => {
+    let freshDamages: DamageItem[] | null = null;
     let orchestratorOutput: OrchestratorOutput | null = null;
 
     if (hasUsableDisputes) {
@@ -263,6 +270,25 @@ export const runCaseAnalysis = async (
         orchestratorOutput = deepResult.orchestratorOutput;
         store.seedFromOrchestrator(orchestratorOutput);
 
+        // Damages already analyzed in Stage 3 of runDeepDisputeAnalysis
+        if (deepResult.damagesData.length > 0) {
+          freshDamages = (
+            deepResult.damagesData as Array<{
+              category: string;
+              description: string | null;
+              amount: number;
+            }>
+          ).map((d) => ({ category: d.category, description: d.description, amount: d.amount }));
+
+          await ctx.sendSSE({
+            type: 'brief_update',
+            brief_id: '',
+            action: 'set_damages',
+            data: deepResult.damagesData,
+          });
+          await pushChild('分析金額', 'done');
+        }
+
         // Send SSE events for frontend
         await ctx.sendSSE({
           type: 'brief_update',
@@ -302,31 +328,56 @@ export const runCaseAnalysis = async (
       }
     }
 
-    return orchestratorOutput;
+    return { orchestratorOutput, freshDamages };
   })();
 
   // ── Damages promise ──
-  const damagesPromise = (async (): Promise<DamageItem[]> => {
+  // If disputes ran fresh, damages are already produced by Stage 3 of runDeepDisputeAnalysis.
+  // Otherwise: reuse existing or run standalone (for reused-disputes + no-damages case).
+  const damagesPromise = (async (): Promise<{
+    damages: DamageItem[];
+    orchestratorOutput: OrchestratorOutput | null;
+  }> => {
+    // Wait for dispute promise to finish — it may have produced damages in Stage 3
+    const { freshDamages, orchestratorOutput } = await disputePromise;
+
+    // Case 1: damages already produced by runDeepDisputeAnalysis Stage 3
+    if (freshDamages) return { damages: freshDamages, orchestratorOutput };
+
+    // Case 2: reuse existing damages
     if (existingDamages.length > 0) {
       await pushChild('沿用既有金額', 'done');
-      return existingDamages.map((d) => ({
+      const damages = existingDamages.map((d) => ({
         category: d.category,
         description: d.description,
         amount: d.amount,
       }));
+      return { damages, orchestratorOutput };
     }
 
+    // Case 3: disputes were reused but no existing damages — run standalone
     await pushChild('分析金額', 'running');
 
-    const result = await runAnalysisService('damages', ctx.caseId, ctx.db, ctx.drizzle, ctx.aiEnv, {
-      readyFiles,
-    });
+    // Use already-loaded existingDisputes instead of re-querying DB
+    let result;
+    if (existingDisputes.length > 0) {
+      result = await runDamagesWithDisputes(
+        ctx.caseId,
+        ctx.db,
+        ctx.drizzle,
+        ctx.aiEnv,
+        toDisputeInfoList(existingDisputes),
+        { readyFiles },
+      );
+    } else {
+      result = await runAnalysisService('damages', ctx.caseId, ctx.db, ctx.drizzle, ctx.aiEnv, {
+        readyFiles,
+      });
+    }
 
     await completeChild('分析金額', result.success ? 'done' : 'error');
+    if (!result.success) return { damages: [], orchestratorOutput };
 
-    if (!result.success) return [];
-
-    // Send SSE for frontend
     await ctx.sendSSE({
       type: 'brief_update',
       brief_id: '',
@@ -334,10 +385,10 @@ export const runCaseAnalysis = async (
       data: result.data,
     });
 
-    // Map to pipeline DamageItem shape (result.data already has the persisted records)
-    return (
+    const damages = (
       result.data as Array<{ category: string; description: string | null; amount: number }>
     ).map((d) => ({ category: d.category, description: d.description, amount: d.amount }));
+    return { damages, orchestratorOutput };
   })();
 
   // ── Timeline promise ──
@@ -373,12 +424,11 @@ export const runCaseAnalysis = async (
     return result.data as TimelineItem[];
   })();
 
-  // ── 5. Await all three in parallel ──
-  const [orchestratorOutput, finalDamages, finalTimeline] = await Promise.all([
-    disputePromise,
-    damagesPromise,
-    timelinePromise,
-  ]);
+  // ── 5. Await results ──
+  // damagesPromise internally awaits disputePromise (sequential dependency),
+  // so we only need to parallel-await damages + timeline.
+  const [damagesResult, finalTimeline] = await Promise.all([damagesPromise, timelinePromise]);
+  const { damages: finalDamages, orchestratorOutput } = damagesResult;
 
   // Store damages + timeline in ContextStore
   store.damages = finalDamages;
