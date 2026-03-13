@@ -6,6 +6,7 @@ import { useTabStore } from '../../stores/useTabStore';
 import { cleanText, formatAmount } from '../../lib/textUtils';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { InlineDamageItem } from './InlineDamageItem';
+import { FileRefTags } from './FileRefTags';
 
 // ── DisputeCard ──
 
@@ -195,26 +196,9 @@ export const DisputeCard: FC<DisputeCardProps> = ({
               {((dispute.evidence && dispute.evidence.length > 0) ||
                 (dispute.law_refs && dispute.law_refs.length > 0)) && (
                 <div className="mt-1.5 flex flex-wrap gap-1 pl-2.5">
-                  {dispute.evidence?.map((e, i) => {
-                    const file = fileByName.get(e);
-                    const label = cleanText(e).replace(/\.\w+$/, '');
-                    return file ? (
-                      <button
-                        key={`ev-${i}`}
-                        onClick={() => useTabStore.getState().openFileTab(file.id, file.filename)}
-                        className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2 transition hover:bg-bg-h hover:text-t1"
-                      >
-                        {label}
-                      </button>
-                    ) : (
-                      <span
-                        key={`ev-${i}`}
-                        className="rounded bg-bg-3 px-1.5 py-0.5 text-xs text-t2"
-                      >
-                        {label}
-                      </span>
-                    );
-                  })}
+                  {dispute.evidence && (
+                    <FileRefTags refs={dispute.evidence} fileByName={fileByName} keyPrefix="ev-" />
+                  )}
                   {dispute.law_refs?.map((l, i) => (
                     <button
                       key={`law-${i}`}

@@ -1,5 +1,5 @@
 import { useMemo, type FC } from 'react';
-import { ChevronRight, Search, AlertTriangle, Clock } from 'lucide-react';
+import { ChevronRight, Search, AlertTriangle } from 'lucide-react';
 import { useAnalysisStore, type Damage } from '../../stores/useAnalysisStore';
 import { useCaseStore } from '../../stores/useCaseStore';
 import { useDamageCrud } from '../../hooks/useDamageCrud';
@@ -12,7 +12,7 @@ import { DisputeCard } from './DisputeCard';
 import { ReanalyzeButton } from './ReanalyzeButton';
 import { EmptyAnalyzeButton } from './EmptyAnalyzeButton';
 import { UndisputedFactsBlock } from './UndisputedFactsBlock';
-import { TimelineTab } from './TimelineTab';
+import { UndisputedDamagesBlock } from './UndisputedDamagesBlock';
 
 // ── Information Gaps Block ──
 
@@ -57,7 +57,6 @@ export const DisputesTab = () => {
   const damages = useAnalysisStore((s) => s.damages);
   const undisputedFacts = useAnalysisStore((s) => s.undisputedFacts);
   const informationGaps = useAnalysisStore((s) => s.informationGaps);
-  const timelineCount = useAnalysisStore((s) => s.timeline.length);
   const caseId = useCaseStore((s) => s.currentCase?.id);
   const files = useCaseStore((s) => s.files);
   const fileByName = useMemo(() => new Map(files.map((f) => [f.filename, f])), [files]);
@@ -134,35 +133,17 @@ export const DisputesTab = () => {
           />
         ))}
 
+        {caseId && <UndisputedFactsBlock facts={undisputedFacts} caseId={caseId} />}
+
         {caseId && (
-          <UndisputedFactsBlock
-            facts={undisputedFacts}
-            caseId={caseId}
-            undisputedDamages={unassignedDamages}
-            undisputedDamageTotal={unassignedTotal}
+          <UndisputedDamagesBlock
+            damages={unassignedDamages}
+            total={unassignedTotal}
+            fileByName={fileByName}
+            onAddDamage={dmg.openAdd}
             onEditDamage={dmg.openEdit}
             onDeleteDamage={dmg.stageDelete}
           />
-        )}
-
-        {/* 時間軸 */}
-        {timelineCount > 0 && (
-          <Collapsible className="rounded border border-bd bg-bg-2">
-            <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-3 py-2.5 text-left">
-              <ChevronRight
-                size={14}
-                className="shrink-0 text-t3 transition-transform duration-200 [[data-state=open]>&]:rotate-90"
-              />
-              <Clock className="size-3.5 shrink-0 text-t3" />
-              <span className="text-xs font-medium text-t2">時間軸</span>
-              <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[10px] text-t3">
-                {timelineCount}
-              </span>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="border-t border-bd p-2.5">
-              <TimelineTab />
-            </CollapsibleContent>
-          </Collapsible>
         )}
       </div>
 

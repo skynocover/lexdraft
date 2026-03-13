@@ -1,4 +1,13 @@
-import { Info, FolderOpen, Swords, ChevronsRight, ChevronRight, Plus, Search } from 'lucide-react';
+import {
+  Info,
+  FolderOpen,
+  Swords,
+  Clock,
+  ChevronsRight,
+  ChevronRight,
+  Plus,
+  Search,
+} from 'lucide-react';
 import { TooltipProvider } from '../ui/tooltip';
 import { useTabStore } from '../../stores/useTabStore';
 import { useUIStore, type SidebarTab } from '../../stores/useUIStore';
@@ -7,6 +16,8 @@ import { FilesSection } from './sidebar/FilesSection';
 import { LawRefsSection } from './sidebar/LawRefsSection';
 import { CaseInfoTab } from './sidebar/CaseInfoTab';
 import { DisputesTab } from '../analysis/DisputesTab';
+import { TimelineTab } from '../analysis/TimelineTab';
+import { useAnalysisStore } from '../../stores/useAnalysisStore';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useCaseStore } from '../../stores/useCaseStore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
@@ -14,9 +25,10 @@ import { useCitedLawRefs } from '../../hooks/useCitedLawRefs';
 import { useFileUpload } from '../../hooks/useFileUpload';
 
 const SIDEBAR_TABS: { key: SidebarTab; label: string; icon: typeof FolderOpen }[] = [
-  { key: 'case-info', label: '案件資訊', icon: Info },
   { key: 'disputes', label: '爭點', icon: Swords },
   { key: 'case-materials', label: '卷宗', icon: FolderOpen },
+  { key: 'timeline', label: '時序', icon: Clock },
+  { key: 'case-info', label: '案件', icon: Info },
 ];
 
 export const RightSidebar = () => {
@@ -68,8 +80,28 @@ export const RightSidebar = () => {
           </TooltipProvider>
         )}
         {sidebarTab === 'case-materials' && <CaseMaterialsContent />}
+        {sidebarTab === 'timeline' && <TimelineContent />}
       </div>
     </div>
+  );
+};
+
+/* ===================== 時序 Tab ===================== */
+
+const TimelineContent = () => {
+  const timelineCount = useAnalysisStore((s) => s.timeline.length);
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2.5">
+        {timelineCount > 0 && (
+          <div className="mb-2 flex items-center text-xs text-t3">
+            <span>{timelineCount} 個事件</span>
+          </div>
+        )}
+        <TimelineTab />
+      </div>
+    </TooltipProvider>
   );
 };
 

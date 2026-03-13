@@ -20,7 +20,7 @@ import { StatusBar } from '../components/layout/StatusBar';
 import { ChatPanel } from '../components/layout/ChatPanel';
 import { RightSidebar } from '../components/layout/RightSidebar';
 import { EditorPanel } from '../components/editor/EditorPanel';
-import { useUIStore } from '../stores/useUIStore';
+import { useUIStore, SIDEBAR_TAB_KEYS, type SidebarTab } from '../stores/useUIStore';
 import { OnboardingUploadDialog } from '../components/case/OnboardingUploadDialog';
 
 export function CaseWorkspace() {
@@ -48,6 +48,7 @@ export function CaseWorkspace() {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const pollingRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const initialTabRef = useRef(new URLSearchParams(window.location.search).get('tab'));
+  const initialSidebarRef = useRef(new URLSearchParams(window.location.search).get('sidebar'));
   const onboardingShownForRef = useRef<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -91,6 +92,7 @@ export function CaseWorkspace() {
 
     // 從 ref 讀取初始 URL 參數（ref 在 render 階段就捕獲，不受 Strict Mode cleanup 影響）
     const tabParam = initialTabRef.current;
+    const sidebarParam = initialSidebarRef.current;
 
     // 載入案件資料 + 解析 analysis meta（undisputed_facts, information_gaps）
     api
@@ -134,6 +136,16 @@ export function CaseWorkspace() {
 
       // 用完即清，避免 caseId 變更時重複使用舊值
       initialTabRef.current = null;
+      initialSidebarRef.current = null;
+
+      // 從 URL 恢復右側 sidebar 狀態
+      if (sidebarParam) {
+        if (sidebarParam === 'closed') {
+          useUIStore.getState().setSidebarOpen(false);
+        } else if ((SIDEBAR_TAB_KEYS as readonly string[]).includes(sidebarParam)) {
+          useUIStore.getState().setSidebarTab(sidebarParam as SidebarTab);
+        }
+      }
 
       if (tabParam) {
         const colonIdx = tabParam.indexOf(':');
@@ -237,6 +249,24 @@ export function CaseWorkspace() {
         url.searchParams.set('tab', activeTabId);
       } else {
         url.searchParams.delete('tab');
+      }
+      window.history.replaceState(null, '', url.toString());
+    });
+
+    return unsub;
+  }, []);
+
+  // 同步右側 sidebar 狀態到 URL search params
+  useEffect(() => {
+    const unsub = useUIStore.subscribe((state, prevState) => {
+      if (state.sidebarOpen === prevState.sidebarOpen && state.sidebarTab === prevState.sidebarTab)
+        return;
+
+      const url = new URL(window.location.href);
+      if (!state.sidebarOpen) {
+        url.searchParams.set('sidebar', 'closed');
+      } else {
+        url.searchParams.set('sidebar', state.sidebarTab);
       }
       window.history.replaceState(null, '', url.toString());
     });

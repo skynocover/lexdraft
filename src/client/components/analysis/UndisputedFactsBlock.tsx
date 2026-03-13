@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef, type FC } from 'react';
 import { ChevronRight, Pencil, Trash2, Check, Plus } from 'lucide-react';
-import { useAnalysisStore, type SimpleFact, type Damage } from '../../stores/useAnalysisStore';
+import { useAnalysisStore, type SimpleFact } from '../../stores/useAnalysisStore';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { ConfirmDialog } from '../ui/confirm-dialog';
-import { InlineDamageItem } from './InlineDamageItem';
-import { formatAmount } from '../../lib/textUtils';
 
 // ── Undisputed Fact Card ──
 
@@ -87,7 +85,8 @@ const FactCard: FC<{ fact: SimpleFact; caseId: string }> = ({ fact, caseId }) =>
 
   return (
     <>
-      <div className="group relative rounded bg-bg-1 px-2.5 py-1.5">
+      <div className="group relative flex gap-1.5 rounded bg-bg-1 px-2.5 py-1.5">
+        <Check className="mt-0.5 size-3 shrink-0 text-gr" />
         <Tooltip>
           <TooltipTrigger asChild>
             <p className="line-clamp-2 pr-12 text-sm text-t2">{fact.description}</p>
@@ -126,18 +125,7 @@ const FactCard: FC<{ fact: SimpleFact; caseId: string }> = ({ fact, caseId }) =>
 export const UndisputedFactsBlock: FC<{
   facts: SimpleFact[];
   caseId: string;
-  undisputedDamages?: Damage[];
-  undisputedDamageTotal?: number;
-  onEditDamage: (d: Damage) => void;
-  onDeleteDamage: (d: Damage) => void;
-}> = ({
-  facts,
-  caseId,
-  undisputedDamages = [],
-  undisputedDamageTotal = 0,
-  onEditDamage,
-  onDeleteDamage,
-}) => {
+}> = ({ facts, caseId }) => {
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
   const newRef = useRef<HTMLTextAreaElement>(null);
@@ -180,9 +168,7 @@ export const UndisputedFactsBlock: FC<{
     }
   };
 
-  const totalCount = facts.length + undisputedDamages.length;
-
-  if (totalCount === 0 && !adding) return null;
+  if (facts.length === 0 && !adding) return null;
 
   return (
     <Collapsible className="rounded border border-bd bg-bg-2 px-3 py-2.5">
@@ -194,10 +180,7 @@ export const UndisputedFactsBlock: FC<{
           />
           <Check className="size-3.5 shrink-0 text-gr" />
           <span className="text-xs font-medium text-t2">不爭執事項</span>
-          <span className="text-xs text-t3">({totalCount})</span>
-          {undisputedDamageTotal > 0 && (
-            <span className="ml-auto text-xs text-t3">{formatAmount(undisputedDamageTotal)}</span>
-          )}
+          <span className="text-xs text-t3">({facts.length})</span>
         </CollapsibleTrigger>
         <button
           onClick={() => setAdding(true)}
@@ -206,18 +189,9 @@ export const UndisputedFactsBlock: FC<{
           <Plus className="size-3.5" />
         </button>
       </div>
-      <CollapsibleContent className="mt-2 space-y-1 pl-5">
+      <CollapsibleContent className="mt-2 space-y-1">
         {facts.map((fact) => (
           <FactCard key={fact.id} fact={fact} caseId={caseId} />
-        ))}
-        {undisputedDamages.map((d) => (
-          <InlineDamageItem
-            key={d.id}
-            damage={d}
-            onEdit={onEditDamage}
-            onDelete={onDeleteDamage}
-            showRefs
-          />
         ))}
         {adding && (
           <div className="rounded bg-bg-1 px-2.5 py-1.5">

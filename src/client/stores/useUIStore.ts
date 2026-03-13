@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
-export type SidebarTab = 'case-info' | 'disputes' | 'case-materials';
+export const SIDEBAR_TAB_KEYS = ['case-info', 'disputes', 'case-materials', 'timeline'] as const;
+export type SidebarTab = (typeof SIDEBAR_TAB_KEYS)[number];
 
 interface UIState {
   // 左側 Chat（保留現有）
