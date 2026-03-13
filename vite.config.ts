@@ -44,6 +44,10 @@ export default defineConfig({
     }),
     cloudflare(),
   ],
+  server: {
+    port: parseInt(process.env.PORT || '5173'),
+    host: '0.0.0.0',
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src/client'),
