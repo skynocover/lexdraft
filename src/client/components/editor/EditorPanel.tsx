@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
+import { Search } from 'lucide-react';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useTabStore } from '../../stores/useTabStore';
+import { useCitedLawRefs } from '../../hooks/useCitedLawRefs';
 import { TabBar } from '../layout/TabBar';
 import { A4PageEditor } from './tiptap/A4PageEditor';
 import { FileViewer } from './FileViewer';
@@ -9,6 +11,8 @@ import { VersionPreviewEditor } from './VersionPreviewEditor';
 import { LawViewer } from './LawViewer';
 import { LawSearchViewer } from './LawSearchViewer';
 import { TemplateEditor } from './TemplateEditor';
+import { CollapsibleSection } from '../layout/sidebar/CollapsibleSection';
+import { LawRefsSection } from '../layout/sidebar/LawRefsSection';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 
 interface EditorPanelProps {
@@ -67,7 +71,10 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
         {activeTab?.type === 'template' ? (
           <TemplateEditor />
         ) : activeTab?.type === 'brief' ? (
-          <A4PageEditor briefId={activeTab.briefId} />
+          <>
+            <A4PageEditor briefId={activeTab.briefId} />
+            <LawRefsPanelGuard />
+          </>
         ) : activeTab?.type === 'file' ? (
           <FileViewer
             filename={activeTab.filename}
@@ -124,5 +131,42 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
         }
       />
     </div>
+  );
+};
+
+/* ===================== 法條引用 Panel ===================== */
+
+const LawRefsPanelGuard = () => {
+  const hasLawRefs = useBriefStore((s) => s.lawRefs.length > 0);
+  if (!hasLawRefs) return null;
+  return <LawRefsPanel />;
+};
+
+const LawRefsPanel = () => {
+  const [open, setOpen] = useState(true);
+  const openLawSearchTab = useTabStore((s) => s.openLawSearchTab);
+  const { citedLawRefs, availableLawRefs, citedCount } = useCitedLawRefs();
+
+  return (
+    <CollapsibleSection
+      title="法條引用"
+      count={citedCount}
+      open={open}
+      onOpenChange={setOpen}
+      className="shrink-0 border-t border-bd"
+      action={
+        <button
+          onClick={() => openLawSearchTab()}
+          className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+          title="搜尋法條"
+        >
+          <Search size={14} />
+        </button>
+      }
+    >
+      <div className="max-h-48 overflow-y-auto">
+        <LawRefsSection citedLawRefs={citedLawRefs} availableLawRefs={availableLawRefs} />
+      </div>
+    </CollapsibleSection>
   );
 };

@@ -1,33 +1,22 @@
-import {
-  Info,
-  FolderOpen,
-  Swords,
-  Clock,
-  ChevronsRight,
-  ChevronRight,
-  Plus,
-  Search,
-} from 'lucide-react';
+import { Info, FolderOpen, Swords, Clock, ChevronsRight, Plus } from 'lucide-react';
 import { TooltipProvider } from '../ui/tooltip';
 import { useTabStore } from '../../stores/useTabStore';
 import { useUIStore, type SidebarTab } from '../../stores/useUIStore';
 import { BriefsSection } from './sidebar/BriefsSection';
+import { CollapsibleSection } from './sidebar/CollapsibleSection';
 import { FilesSection } from './sidebar/FilesSection';
-import { LawRefsSection } from './sidebar/LawRefsSection';
 import { CaseInfoTab } from './sidebar/CaseInfoTab';
 import { DisputesTab } from '../analysis/DisputesTab';
 import { TimelineTab } from '../analysis/TimelineTab';
 import { useAnalysisStore } from '../../stores/useAnalysisStore';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useCaseStore } from '../../stores/useCaseStore';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import { useCitedLawRefs } from '../../hooks/useCitedLawRefs';
 import { useFileUpload } from '../../hooks/useFileUpload';
 
 const SIDEBAR_TABS: { key: SidebarTab; label: string; icon: typeof FolderOpen }[] = [
   { key: 'disputes', label: '爭點', icon: Swords },
   { key: 'case-materials', label: '卷宗', icon: FolderOpen },
-  { key: 'timeline', label: '時序', icon: Clock },
+  { key: 'timeline', label: '時間軸', icon: Clock },
   { key: 'case-info', label: '案件', icon: Info },
 ];
 
@@ -86,7 +75,7 @@ export const RightSidebar = () => {
   );
 };
 
-/* ===================== 時序 Tab ===================== */
+/* ===================== 時間軸 Tab ===================== */
 
 const TimelineContent = () => {
   const timelineCount = useAnalysisStore((s) => s.timeline.length);
@@ -114,7 +103,6 @@ const CaseMaterialsContent = () => {
   const setCaseMaterialSection = useUIStore((s) => s.setCaseMaterialSection);
   const briefs = useBriefStore((s) => s.briefs);
   const files = useCaseStore((s) => s.files);
-  const { citedCount } = useCitedLawRefs();
 
   const focusedPanel = panels.find((p) => p.id === focusedPanelId);
   const activeTabId = focusedPanel?.activeTabId ?? null;
@@ -141,34 +129,7 @@ const CaseMaterialsContent = () => {
       >
         <FilesSection />
       </CollapsibleSection>
-
-      {/* 法條引用 */}
-      <CollapsibleSection
-        title="法條引用"
-        count={citedCount}
-        open={caseMaterialSections.lawRefs}
-        onOpenChange={(open) => setCaseMaterialSection('lawRefs', open)}
-        action={<LawSearchButton />}
-      >
-        <LawRefsSection />
-      </CollapsibleSection>
     </div>
-  );
-};
-
-/* ===================== Law Search Button ===================== */
-
-const LawSearchButton = () => {
-  const openLawSearchTab = useTabStore((s) => s.openLawSearchTab);
-
-  return (
-    <button
-      onClick={() => openLawSearchTab()}
-      className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
-      title="搜尋法條"
-    >
-      <Search size={14} />
-    </button>
   );
 };
 
@@ -203,42 +164,5 @@ const FileUploadButton = () => {
         )}
       </button>
     </>
-  );
-};
-
-/* ===================== Collapsible Section Wrapper ===================== */
-
-const CollapsibleSection = ({
-  title,
-  count,
-  open,
-  onOpenChange,
-  action,
-  children,
-}: {
-  title: string;
-  count?: number;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) => {
-  return (
-    <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className="flex items-center border-b border-bd">
-        <CollapsibleTrigger className="flex flex-1 items-center gap-2 px-4 py-2.5 text-xs font-medium text-t2 transition hover:bg-bg-h">
-          <ChevronRight
-            size={14}
-            className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
-          />
-          <span>{title}</span>
-          {count !== undefined && count > 0 && (
-            <span className="rounded-full bg-bg-3 px-1.5 py-0.5 text-[10px] text-t3">{count}</span>
-          )}
-        </CollapsibleTrigger>
-        {action && <div className="pr-3">{action}</div>}
-      </div>
-      <CollapsibleContent>{children}</CollapsibleContent>
-    </Collapsible>
   );
 };

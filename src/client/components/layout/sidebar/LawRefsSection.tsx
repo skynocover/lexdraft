@@ -1,10 +1,13 @@
-import { useBriefStore } from '../../../stores/useBriefStore';
-import { useCitedLawRefs } from '../../../hooks/useCitedLawRefs';
+import { useBriefStore, type LawRef } from '../../../stores/useBriefStore';
 import { LawRefCard } from './LawRefCard';
 
-export const LawRefsSection = () => {
+interface LawRefsSectionProps {
+  citedLawRefs: LawRef[];
+  availableLawRefs: LawRef[];
+}
+
+export const LawRefsSection = ({ citedLawRefs, availableLawRefs }: LawRefsSectionProps) => {
   const removeLawRef = useBriefStore((s) => s.removeLawRef);
-  const { citedLawRefs, availableLawRefs } = useCitedLawRefs();
 
   return (
     <div>
