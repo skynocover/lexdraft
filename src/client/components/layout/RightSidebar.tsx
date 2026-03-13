@@ -1,16 +1,18 @@
-import { Info, FolderOpen, Swords, Clock, ChevronsRight, Plus } from 'lucide-react';
+import { Info, FolderOpen, Swords, Clock, ChevronsRight, Plus, Search } from 'lucide-react';
 import { TooltipProvider } from '../ui/tooltip';
 import { useTabStore } from '../../stores/useTabStore';
 import { useUIStore, type SidebarTab } from '../../stores/useUIStore';
 import { BriefsSection } from './sidebar/BriefsSection';
 import { CollapsibleSection } from './sidebar/CollapsibleSection';
 import { FilesSection } from './sidebar/FilesSection';
+import { LawRefsSection } from './sidebar/LawRefsSection';
 import { CaseInfoTab } from './sidebar/CaseInfoTab';
 import { DisputesTab } from '../analysis/DisputesTab';
 import { TimelineTab } from '../analysis/TimelineTab';
 import { useAnalysisStore } from '../../stores/useAnalysisStore';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useCaseStore } from '../../stores/useCaseStore';
+import { useCitedLawRefs } from '../../hooks/useCitedLawRefs';
 import { useFileUpload } from '../../hooks/useFileUpload';
 
 const SIDEBAR_TABS: { key: SidebarTab; label: string; icon: typeof FolderOpen }[] = [
@@ -99,9 +101,11 @@ const TimelineContent = () => {
 const CaseMaterialsContent = () => {
   const panels = useTabStore((s) => s.panels);
   const focusedPanelId = useTabStore((s) => s.focusedPanelId);
-  const caseMaterialSections = useUIStore((s) => s.caseMaterialSections);
+  const briefsOpen = useUIStore((s) => s.caseMaterialSections.briefs);
+  const filesOpen = useUIStore((s) => s.caseMaterialSections.files);
   const setCaseMaterialSection = useUIStore((s) => s.setCaseMaterialSection);
   const briefs = useBriefStore((s) => s.briefs);
+  const hasLawRefs = useBriefStore((s) => s.lawRefs.length > 0);
   const files = useCaseStore((s) => s.files);
 
   const focusedPanel = panels.find((p) => p.id === focusedPanelId);
@@ -113,23 +117,65 @@ const CaseMaterialsContent = () => {
       <CollapsibleSection
         title="書狀草稿"
         count={briefs.length}
-        open={caseMaterialSections.briefs}
+        open={briefsOpen}
         onOpenChange={(open) => setCaseMaterialSection('briefs', open)}
       >
         <BriefsSection activeTabId={activeTabId} />
       </CollapsibleSection>
 
+      {/* 法條引用 — gate at parent to avoid mounting hooks when empty */}
+      {hasLawRefs && <LawRefsCollapsible />}
+
       {/* 案件卷宗 */}
       <CollapsibleSection
         title="案件卷宗"
         count={files.length}
-        open={caseMaterialSections.files}
+        open={filesOpen}
         onOpenChange={(open) => setCaseMaterialSection('files', open)}
         action={<FileUploadButton />}
       >
         <FilesSection />
       </CollapsibleSection>
     </div>
+  );
+};
+
+/* ===================== Law Refs Collapsible (only mounted when lawRefs exist) ===================== */
+
+const LawRefsCollapsible = () => {
+  const lawRefsOpen = useUIStore((s) => s.caseMaterialSections.lawRefs);
+  const setCaseMaterialSection = useUIStore((s) => s.setCaseMaterialSection);
+  const { citedLawRefs, availableLawRefs, citedCount } = useCitedLawRefs();
+
+  return (
+    <CollapsibleSection
+      title="法條引用"
+      count={citedCount}
+      open={lawRefsOpen}
+      onOpenChange={(open) => setCaseMaterialSection('lawRefs', open)}
+      action={<LawSearchButton />}
+    >
+      <LawRefsSection citedLawRefs={citedLawRefs} availableLawRefs={availableLawRefs} />
+    </CollapsibleSection>
+  );
+};
+
+/* ===================== Law Search Button ===================== */
+
+const LawSearchButton = () => {
+  const openLawSearchTab = useTabStore((s) => s.openLawSearchTab);
+
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        openLawSearchTab();
+      }}
+      className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+      title="搜尋法條"
+    >
+      <Search size={14} />
+    </button>
   );
 };
 

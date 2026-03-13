@@ -18,12 +18,12 @@ export const updateUndisputedFactsSchema = z.object({
 
 export const updateCaseSchema = z.object({
   title: z.string().optional(),
-  case_number: z.string().optional(),
-  court: z.string().optional(),
-  plaintiff: z.string().optional(),
-  defendant: z.string().optional(),
-  client_role: z.enum(CLIENT_ROLES).optional(),
-  case_instructions: z.string().optional(),
+  case_number: z.string().nullable().optional(),
+  court: z.string().nullable().optional(),
+  plaintiff: z.string().nullable().optional(),
+  defendant: z.string().nullable().optional(),
+  client_role: z.enum(CLIENT_ROLES).nullable().optional(),
+  case_instructions: z.string().nullable().optional(),
   division: z.string().nullable().optional(),
   template_id: z.string().nullable().optional(),
 });

@@ -5,9 +5,13 @@
 import type { ClientRole } from '../../../shared/caseConstants';
 
 export interface CaseMetaInput {
+  title?: string;
   caseNumber?: string;
   court?: string;
+  division?: string;
   clientRole?: ClientRole | '';
+  plaintiff?: string;
+  defendant?: string;
   caseInstructions?: string;
 }
 
@@ -26,9 +30,13 @@ export const buildCaseMetaLines = (meta?: CaseMetaInput, prefix = ''): string[] 
   if (!meta) return [];
   const roleLabel = getClientRoleLabel(meta.clientRole);
   return [
+    meta.title ? `${prefix}案件名稱：${meta.title}` : '',
     roleLabel ? `${prefix}我方立場：${roleLabel}` : '',
-    meta.caseNumber ? `${prefix}案號：${meta.caseNumber}` : '',
+    meta.plaintiff ? `${prefix}原告：${meta.plaintiff}` : '',
+    meta.defendant ? `${prefix}被告：${meta.defendant}` : '',
     meta.court ? `${prefix}法院：${meta.court}` : '',
+    meta.division ? `${prefix}庭別：${meta.division}` : '',
+    meta.caseNumber ? `${prefix}案號：${meta.caseNumber}` : '',
   ].filter(Boolean);
 };
 

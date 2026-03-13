@@ -95,13 +95,13 @@ casesRouter.put('/:id', async (c) => {
 
   const updates: Record<string, string | null> = { updated_at: new Date().toISOString() };
   if (body.title !== undefined) updates.title = body.title.trim();
-  if (body.case_number !== undefined) updates.case_number = body.case_number.trim() || null;
-  if (body.court !== undefined) updates.court = body.court.trim() || null;
-  if (body.plaintiff !== undefined) updates.plaintiff = body.plaintiff.trim() || null;
-  if (body.defendant !== undefined) updates.defendant = body.defendant.trim() || null;
-  if (body.client_role !== undefined) updates.client_role = body.client_role.trim() || null;
+  if (body.case_number !== undefined) updates.case_number = body.case_number?.trim() || null;
+  if (body.court !== undefined) updates.court = body.court?.trim() || null;
+  if (body.plaintiff !== undefined) updates.plaintiff = body.plaintiff?.trim() || null;
+  if (body.defendant !== undefined) updates.defendant = body.defendant?.trim() || null;
+  if (body.client_role !== undefined) updates.client_role = body.client_role?.trim() || null;
   if (body.case_instructions !== undefined)
-    updates.case_instructions = body.case_instructions.trim() || null;
+    updates.case_instructions = body.case_instructions?.trim() || null;
   if (body.division !== undefined) updates.division = body.division?.trim() || null;
   if (body.template_id !== undefined) updates.template_id = body.template_id || null;
 

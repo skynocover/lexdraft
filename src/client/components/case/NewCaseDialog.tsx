@@ -38,6 +38,10 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
       setError('案件名稱為必填');
       return;
     }
+    if (!clientRole) {
+      setError('請選擇我方立場');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -45,7 +49,7 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
     try {
       const created = await api.post<Case>('/cases', {
         title: title.trim(),
-        client_role: clientRole || undefined,
+        client_role: clientRole,
       });
       handleClose();
       navigate(`/cases/${created.id}`);
@@ -63,7 +67,7 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
           <DialogHeader>
             <DialogTitle className="text-t1">新建案件</DialogTitle>
             <DialogDescription className="text-t3">
-              輸入案件名稱即可快速建立，其他資訊可稍後補填。
+              輸入案件名稱並選擇我方立場，其他資訊可稍後補填。
             </DialogDescription>
           </DialogHeader>
 
@@ -82,7 +86,9 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm text-t2">我方立場</label>
+              <label className="mb-1.5 block text-sm text-t2">
+                我方立場 <span className="text-rd">*</span>
+              </label>
               <div className="flex gap-3">
                 {[
                   { value: 'plaintiff', label: '原告方' },
@@ -91,7 +97,7 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => setClientRole((prev) => (prev === opt.value ? '' : opt.value))}
+                    onClick={() => setClientRole(opt.value)}
                     className={`flex-1 rounded border px-4 py-2 text-sm font-medium transition ${
                       clientRole === opt.value
                         ? 'border-ac bg-ac/15 text-ac'

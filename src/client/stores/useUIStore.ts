@@ -15,6 +15,7 @@ interface UIState {
   caseMaterialSections: {
     briefs: boolean;
     files: boolean;
+    lawRefs: boolean;
   };
 
   // Actions
@@ -35,6 +36,7 @@ export const useUIStore = create<UIState>((set) => ({
   caseMaterialSections: {
     briefs: true,
     files: true,
+    lawRefs: true,
   },
 
   toggleLeftSidebar: () => set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
