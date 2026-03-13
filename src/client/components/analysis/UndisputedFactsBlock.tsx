@@ -1,13 +1,17 @@
 import { useState, useEffect, useRef, type FC } from 'react';
-import { ChevronRight, Pencil, Trash2, Check, Plus } from 'lucide-react';
+import { ChevronRight, Pencil, Trash2, Plus } from 'lucide-react';
 import { useAnalysisStore, type SimpleFact } from '../../stores/useAnalysisStore';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
-import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 
 // ── Undisputed Fact Card ──
 
-const FactCard: FC<{ fact: SimpleFact; caseId: string }> = ({ fact, caseId }) => {
+const FactCard: FC<{ fact: SimpleFact; caseId: string; index: number }> = ({
+  fact,
+  caseId,
+  index,
+}) => {
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -63,8 +67,11 @@ const FactCard: FC<{ fact: SimpleFact; caseId: string }> = ({ fact, caseId }) =>
   };
 
   const handleConfirmDelete = async () => {
-    await removeFact(caseId, fact.id);
-    setConfirmDelete(false);
+    try {
+      await removeFact(caseId, fact.id);
+    } finally {
+      setConfirmDelete(false);
+    }
   };
 
   if (editing) {
@@ -85,30 +92,33 @@ const FactCard: FC<{ fact: SimpleFact; caseId: string }> = ({ fact, caseId }) =>
 
   return (
     <>
-      <div className="group relative flex gap-1.5 rounded bg-bg-1 px-2.5 py-1.5">
-        <Check className="mt-0.5 size-3 shrink-0 text-gr" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <p className="line-clamp-2 pr-12 text-sm text-t2">{fact.description}</p>
-          </TooltipTrigger>
-          <TooltipContent side="left" className="max-w-72">
-            {fact.description}
-          </TooltipContent>
-        </Tooltip>
-        <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-          <button
-            onClick={handleStartEdit}
-            className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
-          >
-            <Pencil className="size-3" />
-          </button>
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="rounded p-1 text-t3 transition hover:bg-rd/10 hover:text-rd"
-          >
-            <Trash2 className="size-3" />
-          </button>
-        </span>
+      <div
+        className="group cursor-pointer rounded bg-bg-1 px-2.5 py-1.5"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="flex gap-1.5">
+          <span className="mt-px shrink-0 font-mono text-xs text-t3">{index}.</span>
+          <p className={`text-sm text-t2 ${expanded ? '' : 'line-clamp-2'}`}>{fact.description}</p>
+        </div>
+        {expanded && (
+          <div className="mt-1.5 flex justify-end gap-0.5">
+            <button
+              onClick={handleStartEdit}
+              className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+            >
+              <Pencil className="size-3" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirmDelete(true);
+              }}
+              className="rounded p-1 text-t3 transition hover:bg-rd/10 hover:text-rd"
+            >
+              <Trash2 className="size-3" />
+            </button>
+          </div>
+        )}
       </div>
       <ConfirmDialog
         open={confirmDelete}
@@ -178,7 +188,6 @@ export const UndisputedFactsBlock: FC<{
             size={14}
             className="shrink-0 text-t3 transition-transform duration-200 [[data-state=open]>&]:rotate-90"
           />
-          <Check className="size-3.5 shrink-0 text-gr" />
           <span className="text-xs font-medium text-t2">不爭執事項</span>
           <span className="text-xs text-t3">({facts.length})</span>
         </CollapsibleTrigger>
@@ -190,8 +199,8 @@ export const UndisputedFactsBlock: FC<{
         </button>
       </div>
       <CollapsibleContent className="mt-2 space-y-1">
-        {facts.map((fact) => (
-          <FactCard key={fact.id} fact={fact} caseId={caseId} />
+        {facts.map((fact, i) => (
+          <FactCard key={fact.id} fact={fact} caseId={caseId} index={i + 1} />
         ))}
         {adding && (
           <div className="rounded bg-bg-1 px-2.5 py-1.5">

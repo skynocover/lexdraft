@@ -128,7 +128,7 @@ export const DisputeCard: FC<DisputeCardProps> = ({
           <span className="shrink-0 text-xs font-medium text-t2">爭點 {dispute.number}</span>
           {/* Amount badge (always visible when has damages) */}
           {damageTotal > 0 && (
-            <span className="shrink-0 rounded-full bg-ac/10 px-1.5 py-0.5 text-[10px] font-medium text-ac">
+            <span className="shrink-0 rounded-full bg-ac/15 px-1.5 py-0.5 text-xs font-semibold text-ac">
               {formatAmount(damageTotal)}
             </span>
           )}
