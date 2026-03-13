@@ -4,7 +4,14 @@
 
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
 import { isDefenseTemplate } from '../prompts/strategyConstants';
-import { getSectionKey, isItemDamage, type StrategySection, type WriterContext } from './types';
+import {
+  formatDamageAmount,
+  getSectionKey,
+  isContentSection,
+  isItemDamage,
+  type StrategySection,
+  type WriterContext,
+} from './types';
 import type { ClaudeDocument } from '../claudeClient';
 import type { ContextStore } from '../contextStore';
 
@@ -23,7 +30,6 @@ export interface WriterPromptInput {
 
 export const buildWriterInstruction = (input: WriterPromptInput): string => {
   const { templateId, strategySection, writerCtx, documents, store, exhibitMap } = input;
-  const isContentSection = !!strategySection.dispute_id;
 
   // ── Context blocks ──
   const outlineText = buildOutlineBlock(writerCtx);
@@ -33,7 +39,10 @@ export const buildWriterInstruction = (input: WriterPromptInput): string => {
     argText.legal_basis.length > 0 ? `法律依據：${argText.legal_basis.join('、')}` : '';
   const factsText = buildFactsBlock(writerCtx);
   const completedText = buildCompletedBlock(writerCtx, store);
-  const docListText = buildDocListBlock(documents, isContentSection, exhibitMap);
+  const docListText = buildDocListBlock(
+    documents,
+    isContentSection(strategySection) ? exhibitMap : undefined,
+  );
 
   const meta = store.caseMetadata;
   const caseMetaLines = buildCaseMetaLines(meta, '  ').join('\n');
@@ -96,11 +105,11 @@ ${completedText}`;
     instruction += DEFENSE_WRITING_RULES;
   }
 
-  if (isContentSection && exhibitMap && exhibitMap.size > 0) {
+  if (isContentSection(strategySection) && exhibitMap && exhibitMap.size > 0) {
     instruction += EXHIBIT_RULES;
   }
 
-  if (!strategySection.dispute_id) {
+  if (!isContentSection(strategySection)) {
     instruction += buildIntroOrConclusionBlock(strategySection, store);
   }
 
@@ -158,28 +167,25 @@ const buildCompletedBlock = (writerCtx: WriterContext, store: ContextStore): str
 
 const buildDocListBlock = (
   documents: ClaudeDocument[],
-  isContentSection: boolean,
   exhibitMap?: Map<string, string>,
 ): string => {
-  const fileDocNames: string[] = [];
+  const fileDocs: ClaudeDocument[] = [];
   const lawDocNames: string[] = [];
   for (const d of documents) {
-    if (d.doc_type === 'file') fileDocNames.push(d.title);
+    if (d.doc_type === 'file') fileDocs.push(d);
     else if (d.doc_type === 'law') lawDocNames.push(d.title);
   }
 
   const docLines: string[] = [];
-  if (fileDocNames.length > 0) {
-    if (isContentSection && exhibitMap && exhibitMap.size > 0) {
-      const fileLines = documents
-        .filter((d) => d.doc_type === 'file')
-        .map((d) => {
-          const exhibitLabel = d.file_id ? exhibitMap.get(d.file_id) : undefined;
-          return exhibitLabel ? `  「${d.title}」（${exhibitLabel}）` : `  「${d.title}」`;
-        });
+  if (fileDocs.length > 0) {
+    if (exhibitMap && exhibitMap.size > 0) {
+      const fileLines = fileDocs.map((d) => {
+        const exhibitLabel = d.file_id ? exhibitMap.get(d.file_id) : undefined;
+        return exhibitLabel ? `  「${d.title}」（${exhibitLabel}）` : `  「${d.title}」`;
+      });
       docLines.push(`  案件文件：\n${fileLines.join('\n')}`);
     } else {
-      docLines.push(`  案件文件：${fileDocNames.map((n) => `「${n}」`).join('、')}`);
+      docLines.push(`  案件文件：${fileDocs.map((d) => `「${d.title}」`).join('、')}`);
     }
   }
   if (lawDocNames.length > 0) {
@@ -199,7 +205,7 @@ const buildIntroOrConclusionBlock = (
 
   const damagesLines = store.damages
     .filter((d) => d.amount > 0 && isItemDamage(d))
-    .map((d) => `  ${d.description || d.category}：新臺幣${d.amount.toLocaleString()}元`)
+    .map((d) => `  ${formatDamageAmount(d)}`)
     .join('\n');
   const totalDamage = store.damages.find((d) => d.description?.includes('總計'));
 

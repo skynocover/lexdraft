@@ -33,12 +33,14 @@ import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy'
 import { enrichStrategyOutput } from './enrichStrategy';
 import { templateToPrompt } from './templateHelper';
 import { FALLBACK_GUIDANCE } from '../../lib/defaultTemplates';
-import type {
-  ReasoningStrategyInput,
-  ReasoningStrategyOutput,
-  FetchedLaw,
-  PerIssueAnalysis,
-  LegalIssue,
+import {
+  getDamageLabel,
+  isItemDamage,
+  type ReasoningStrategyInput,
+  type ReasoningStrategyOutput,
+  type FetchedLaw,
+  type PerIssueAnalysis,
+  type LegalIssue,
 } from './types';
 import type { PipelineContext } from './types';
 import type { ContextStore } from '../contextStore';
@@ -177,12 +179,25 @@ const buildJsonOutputMessage = (store: ContextStore, input: ReasoningStrategyInp
           .join('\n')
       : '';
 
+  // Pre-build issue ID → title lookup
+  const issueIdToTitle = new Map(store.legalIssues.map((i) => [i.id, i.title]));
+
   // Build law_id → dispute mapping for prompt
   const lawDisputeMapping = store.perIssueAnalysis
     .map((a) => {
-      const issue = store.legalIssues.find((i) => i.id === a.issue_id);
-      const label = issue ? issue.title : a.issue_id;
+      const label = issueIdToTitle.get(a.issue_id) || a.issue_id;
       return `  ${label}: [${a.key_law_ids.map((id) => `"${id}"`).join(', ')}]`;
+    })
+    .join('\n');
+
+  // Build damages list for structuring
+  const damagesText = store.damages
+    .filter(isItemDamage)
+    .map((d) => {
+      const disputeLabel = d.dispute_id
+        ? issueIdToTitle.get(d.dispute_id) || d.dispute_id
+        : '不爭執';
+      return `  - ${getDamageLabel(d)}：${d.amount.toLocaleString()}元（${disputeLabel}）`;
     })
     .join('\n');
 
@@ -193,6 +208,9 @@ ${store.reasoningSummary || '（無摘要）'}
 
 ${analysisText ? `[逐爭點分析]\n${analysisText}\n\n` : ''}[爭點清單]
 ${issueText}
+
+[損害賠償項目 — 每個項目都必須有獨立 section]
+${damagesText || '（無）'}
 
 [可用法條 — 法條 ID 對照表，請從此處精確複製 ID]
 ${lawText || '（無）'}
@@ -208,7 +226,8 @@ ${store.legalIssues.map((issue, i) => `  爭點${i + 1}（${issue.title}）: "${
 
 請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。
 - 每個非前言/結論的 section 必須填寫 subsection（格式：一、描述性標題），依序編號（一、二、三…）。前言和結論的 subsection 為 null
-- 每個內容段落（非前言/結論）的 relevant_law_ids 必須從[爭點→法條分配表]中複製該爭點對應的法條 ID。前言和結論的 relevant_law_ids 為空陣列 []
+- 每個損害賠償項目（含「不爭執」的項目）都必須有獨立的 section，不得省略。不爭執項目的 section 可以較簡短，但仍需有 legal_basis、relevant_file_ids 和 relevant_law_ids
+- 每個內容段落（非前言/結論）的 relevant_law_ids 必須從[爭點→法條分配表]中複製該爭點對應的法條 ID，或從[可用法條]中選擇適合的法條。前言和結論的 relevant_law_ids 為空陣列 []
 - 每個內容段落（非前言/結論）的 relevant_file_ids 必須列出該段撰寫時需要引用的檔案 ID，確保 Writer 能產生引用標記。根據段落主題從[案件檔案]中選擇對應的檔案
 - 每個內容段落的 dispute_id 必須從上方對照表原封不動複製，前言和結論為 null
 - 每個 claim 的 dispute_id 也必須從上方對照表原封不動複製`;

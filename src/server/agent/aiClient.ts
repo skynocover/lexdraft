@@ -281,7 +281,7 @@ export const callOpenRouterText = async (
     body: JSON.stringify({
       model: OPENROUTER_MODEL,
       messages: [
-        { role: 'system', content: systemPrompt },
+        ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
         { role: 'user', content: userMessage },
       ],
       stream: false,

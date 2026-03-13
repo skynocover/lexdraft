@@ -2,18 +2,19 @@
 // Centralized data store managing inter-step data flow in the brief pipeline.
 // Each pipeline step writes its output here; downstream steps query what they need.
 
-import type {
-  Claim,
-  StrategySection,
-  LegalIssue,
-  SimpleFact,
-  FoundLaw,
-  FetchedLaw,
-  DraftSection,
-  WriterContext,
-  TimelineItem,
-  DamageItem,
-  PerIssueAnalysis,
+import {
+  isContentSection,
+  type Claim,
+  type StrategySection,
+  type LegalIssue,
+  type SimpleFact,
+  type FoundLaw,
+  type FetchedLaw,
+  type DraftSection,
+  type WriterContext,
+  type TimelineItem,
+  type DamageItem,
+  type PerIssueAnalysis,
 } from './pipeline/types';
 import type { OrchestratorOutput } from './orchestratorAgent';
 import { mapDisputeToLegalIssue, type DisputeRow } from './toolHelpers';
@@ -22,10 +23,12 @@ import { mapDisputeToLegalIssue, type DisputeRow } from './toolHelpers';
  * 3-tier law fallback for a section:
  * 1. relevant_law_ids (from enrichment) → use those
  * 2. perIssueAnalysis.key_law_ids for matching dispute → fallback
- * 3. dispute_id=null (intro/conclusion) → empty; content sections → ALL found laws as safety net
+ * 3a. dispute_id=null + subsection set (content, e.g. liability) → ALL found laws
+ * 3b. dispute_id=null + no subsection (intro/conclusion) → empty array
+ * 3c. dispute_id set but not found in perIssueAnalysis → ALL found laws (safety net)
  */
 export const resolveLawsForSection = (
-  section: { relevant_law_ids: string[]; dispute_id?: string | null },
+  section: { relevant_law_ids: string[]; dispute_id?: string | null; subsection?: string | null },
   allLaws: FoundLaw[],
   perIssueAnalysis: PerIssueAnalysis[],
 ): FoundLaw[] => {
@@ -50,10 +53,17 @@ export const resolveLawsForSection = (
     }
   }
 
-  // Tier 3: intro/conclusion (dispute_id=null) → no laws needed;
-  // content sections that missed tier 1+2 → all laws as safety net
+  // Tier 3: sections with no dispute_id and no relevant_law_ids
+  // If section has subsection, it's a content section (e.g. liability) → give ALL laws
+  // If section has no subsection, it's truly intro/conclusion → no laws
   if (!section.dispute_id) {
-    console.warn(`[contextStore] law fallback tier-3: dispute=null (intro/conclusion) → 0 laws`);
+    if (isContentSection(section)) {
+      console.log(
+        `[contextStore] law tier-3: dispute=null but has subsection → ALL ${allLaws.length} laws`,
+      );
+      return allLaws;
+    }
+    console.log(`[contextStore] law tier-3: dispute=null (intro/conclusion) → 0 laws`);
     return [];
   }
   console.warn(

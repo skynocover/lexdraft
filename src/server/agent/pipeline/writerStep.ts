@@ -2,7 +2,12 @@ import { nanoid } from 'nanoid';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { callOpenRouterText } from '../aiClient';
 import { readLawRefs, removeLawRefsWhere } from '../../lib/lawRefsJson';
-import { getSectionKey, type StrategyOutput, type PipelineContext } from './types';
+import {
+  getSectionKey,
+  isContentSection,
+  type StrategyOutput,
+  type PipelineContext,
+} from './types';
 import { buildWriterInstruction } from './writerPrompt';
 import type { ContextStore } from '../contextStore';
 import type { Paragraph, TextSegment, Citation } from '../../../client/stores/useBriefStore';
@@ -183,26 +188,12 @@ export const writeSection = async (
     exhibitMap,
   });
 
-  // ── Route: intro/conclusion → Gemini Flash, content → Sonnet Citations ──
-  const isIntroOrConclusion = !strategySection.dispute_id;
-
   let text: string;
   let segments: TextSegment[];
   let citations: Citation[];
 
-  if (isIntroOrConclusion) {
-    // Gemini 3.1 Flash Lite via OpenRouter for intro/conclusion (no citations needed)
-    const systemPrompt =
-      '你是台灣資深訴訟律師。請根據指示撰寫法律書狀段落。只輸出段落內容，不要加標題、markdown 或其他格式。';
-    const result = await callOpenRouterText(ctx.aiEnv, systemPrompt, instruction, {
-      maxTokens: 2048,
-    });
-    text = stripMarkdown(result.content.trim());
-    segments = [{ text, citations: [] }];
-    citations = [];
-    console.log(`[writer] Gemini 3.1 Flash Lite: ${text.length} chars`);
-  } else {
-    // Claude Sonnet + Citations API for content sections
+  if (isContentSection(strategySection)) {
+    // ── Content sections (有 subsection) → Claude Sonnet + Citations API ──
     const {
       text: rawText,
       segments: rawSegments,
@@ -232,6 +223,16 @@ export const writeSection = async (
     text = rebuilt.text;
     segments = rebuilt.segments;
     citations = strippedCitations;
+  } else {
+    // ── Intro/conclusion (無 subsection) → Gemini Flash (no citations needed) ──
+    // Role framing is already in `instruction` (buildWriterInstruction includes it)
+    const result = await callOpenRouterText(ctx.aiEnv, '', instruction, {
+      maxTokens: 2048,
+      signal: ctx.signal,
+    });
+    text = stripMarkdown(result.content.trim());
+    segments = [{ text, citations: [] }];
+    citations = [];
   }
 
   // Build paragraph

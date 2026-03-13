@@ -302,8 +302,6 @@ export const runBriefPipeline = async (
       try {
         // Filter out "總計/合計" rows when computing damages total
         const itemDamages = store.damages.filter(isItemDamage);
-        const damagesTotal =
-          itemDamages.length > 0 ? itemDamages.reduce((sum, d) => sum + d.amount, 0) : null;
 
         const rendered = await renderTemplate(
           ctx.aiEnv,
@@ -315,7 +313,7 @@ export const runBriefPipeline = async (
             court: store.caseMetadata.court || null,
             division: store.caseMetadata.division || null,
             clientRole: store.caseMetadata.clientRole || null,
-            damagesTotal,
+            damageItems: itemDamages,
           },
           ctx.signal,
         );

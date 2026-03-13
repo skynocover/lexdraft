@@ -180,6 +180,16 @@ export interface DamageItem {
 export const isItemDamage = (d: DamageItem): boolean =>
   !d.description?.includes('總計') && !d.description?.includes('合計');
 
+/** Resolve display label for a damage item (description with category fallback) */
+export const getDamageLabel = (d: DamageItem): string => d.description || d.category;
+
+/** Format a damage item as "label：新臺幣X元" */
+export const formatDamageAmount = (d: DamageItem): string =>
+  `${getDamageLabel(d)}：新臺幣${d.amount.toLocaleString()}元`;
+
+/** A section with a subsection is a content section (not intro/conclusion) */
+export const isContentSection = (s: { subsection?: string | null }): boolean => !!s.subsection;
+
 // ── Per-Issue Analysis (Reasoning → Structuring handoff) ──
 
 export interface PerIssueAnalysis {

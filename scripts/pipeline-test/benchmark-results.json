@@ -1,0 +1,231 @@
+{
+  "caseId": "z4keVNfyuKvL68Xg1qPl2",
+  "timestamp": "2026-03-13T14:30:55.805Z",
+  "numRuns": 2,
+  "baseline": {
+    "briefId": "8a5gUssU-FgD4qDB2cmOd",
+    "numParagraphs": 10,
+    "totalLaw": 3,
+    "totalFile": 17,
+    "totalCites": 20,
+    "totalChars": 4310,
+    "zeroLawContent": "6/8",
+    "zeroCiteAll": "7/10",
+    "sections": [
+      {
+        "label": "__header__",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 118
+      },
+      {
+        "label": "壹、訴之聲明",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 138
+      },
+      {
+        "label": "貳、前言",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 338
+      },
+      {
+        "label": "參、事實及理由 > 一、侵權行為之成立及歸責",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 347
+      },
+      {
+        "label": "參、事實及理由 > 二、原告不能工作期間之損害賠償",
+        "lawCites": 2,
+        "fileCites": 7,
+        "charCount": 1139
+      },
+      {
+        "label": "參、事實及理由 > 三、醫療費用之請求",
+        "lawCites": 1,
+        "fileCites": 4,
+        "charCount": 767
+      },
+      {
+        "label": "參、事實及理由 > 四、精神慰撫金之請求",
+        "lawCites": 0,
+        "fileCites": 6,
+        "charCount": 975
+      },
+      {
+        "label": "肆、結論",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 317
+      },
+      {
+        "label": "證據方法",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 96
+      },
+      {
+        "label": "__footer__",
+        "lawCites": 0,
+        "fileCites": 0,
+        "charCount": 75
+      }
+    ]
+  },
+  "runs": [
+    {
+      "briefId": "Sghlj9bedey-qoVU23e-o",
+      "numParagraphs": 10,
+      "totalLaw": 10,
+      "totalFile": 17,
+      "totalCites": 27,
+      "totalChars": 5021,
+      "zeroLawContent": "3/8",
+      "zeroCiteAll": "5/10",
+      "sections": [
+        {
+          "label": "__header__",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 68
+        },
+        {
+          "label": "壹、前言",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 351
+        },
+        {
+          "label": "貳、事實及理由 > 一、被告侵權行為責任之成立",
+          "lawCites": 2,
+          "fileCites": 3,
+          "charCount": 650
+        },
+        {
+          "label": "貳、事實及理由 > 二、關於醫療費用及交通費用之請求",
+          "lawCites": 2,
+          "fileCites": 4,
+          "charCount": 573
+        },
+        {
+          "label": "貳、事實及理由 > 三、關於財物損害之請求",
+          "lawCites": 2,
+          "fileCites": 1,
+          "charCount": 415
+        },
+        {
+          "label": "貳、事實及理由 > 四、關於不能工作損失之請求",
+          "lawCites": 2,
+          "fileCites": 5,
+          "charCount": 1176
+        },
+        {
+          "label": "貳、事實及理由 > 五、關於精神慰撫金之請求",
+          "lawCites": 2,
+          "fileCites": 4,
+          "charCount": 1199
+        },
+        {
+          "label": "參、結論",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 418
+        },
+        {
+          "label": "證據方法",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 96
+        },
+        {
+          "label": "__footer__",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 75
+        }
+      ],
+      "elapsed": 302.5
+    },
+    {
+      "briefId": "dYbg3Ogh9jdSFAObH3HBT",
+      "numParagraphs": 11,
+      "totalLaw": 8,
+      "totalFile": 18,
+      "totalCites": 26,
+      "totalChars": 5131,
+      "zeroLawContent": "3/9",
+      "zeroCiteAll": "5/11",
+      "sections": [
+        {
+          "label": "__header__",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 69
+        },
+        {
+          "label": "壹、前言",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 354
+        },
+        {
+          "label": "貳、事實及理由 > 一、被告侵權行為之成立及歸責",
+          "lawCites": 2,
+          "fileCites": 4,
+          "charCount": 722
+        },
+        {
+          "label": "貳、事實及理由 > 二、關於醫療費用之請求",
+          "lawCites": 1,
+          "fileCites": 1,
+          "charCount": 402
+        },
+        {
+          "label": "貳、事實及理由 > 三、關於交通費用之請求",
+          "lawCites": 1,
+          "fileCites": 2,
+          "charCount": 326
+        },
+        {
+          "label": "貳、事實及理由 > 四、關於財物損害之請求",
+          "lawCites": 1,
+          "fileCites": 1,
+          "charCount": 390
+        },
+        {
+          "label": "貳、事實及理由 > 五、關於不能工作損失之請求",
+          "lawCites": 2,
+          "fileCites": 7,
+          "charCount": 1206
+        },
+        {
+          "label": "貳、事實及理由 > 六、關於精神慰撫金之請求",
+          "lawCites": 1,
+          "fileCites": 3,
+          "charCount": 1078
+        },
+        {
+          "label": "參、結論",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 413
+        },
+        {
+          "label": "證據方法",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 96
+        },
+        {
+          "label": "__footer__",
+          "lawCites": 0,
+          "fileCites": 0,
+          "charCount": 75
+        }
+      ],
+      "elapsed": 946.3
+    }
+  ]
+}
