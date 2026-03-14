@@ -9,6 +9,9 @@ import { TimelineFormDialog } from './TimelineFormDialog';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { ReanalyzeButton } from './ReanalyzeButton';
 import { EmptyAnalyzeButton } from './EmptyAnalyzeButton';
+import { StaleAnalysisBanner } from './StaleAnalysisBanner';
+import { useNewFileCount } from '../../hooks/useNewFileCount';
+import { useAnalysisAction } from '../../hooks/useAnalysisAction';
 
 export function TimelineTab() {
   const timeline = useAnalysisStore((s) => s.timeline);
@@ -16,6 +19,8 @@ export function TimelineTab() {
   const updateTimelineEvent = useAnalysisStore((s) => s.updateTimelineEvent);
   const removeTimelineEvent = useAnalysisStore((s) => s.removeTimelineEvent);
   const currentCase = useCaseStore((s) => s.currentCase);
+  const newFileCount = useNewFileCount('timeline');
+  const { isAnalyzing, execute: reanalyze } = useAnalysisAction('timeline');
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<TimelineEvent | null>(null);
@@ -106,6 +111,12 @@ export function TimelineTab() {
               </button>
             </div>
           </div>
+
+          <StaleAnalysisBanner
+            count={newFileCount}
+            onReanalyze={reanalyze}
+            isAnalyzing={isAnalyzing}
+          />
 
           <div className="relative pl-6">
             <div className="absolute left-2 top-0 bottom-0 w-px bg-bd" />

@@ -169,6 +169,13 @@
       "when": 1773486818407,
       "tag": "0023_worthless_shiver_man",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1773499140047,
+      "tag": "0024_eager_ricochet",
+      "breakpoints": true
     }
   ]
 }

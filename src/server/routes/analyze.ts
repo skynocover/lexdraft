@@ -30,6 +30,7 @@ analyzeRouter.post('/cases/:caseId/analyze', async (c) => {
     data: result.data,
     summary: result.summary,
     ...('damages' in result ? { damages: result.damages } : {}),
+    analyzed_at: 'analyzed_at' in result ? result.analyzed_at : null,
   });
 });
 

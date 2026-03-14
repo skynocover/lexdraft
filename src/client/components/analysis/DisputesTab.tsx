@@ -13,6 +13,9 @@ import { ReanalyzeButton } from './ReanalyzeButton';
 import { EmptyAnalyzeButton } from './EmptyAnalyzeButton';
 import { UndisputedFactsBlock } from './UndisputedFactsBlock';
 import { UndisputedDamagesBlock } from './UndisputedDamagesBlock';
+import { StaleAnalysisBanner } from './StaleAnalysisBanner';
+import { useNewFileCount } from '../../hooks/useNewFileCount';
+import { useAnalysisAction } from '../../hooks/useAnalysisAction';
 
 // ── Information Gaps Block ──
 
@@ -60,6 +63,8 @@ export const DisputesTab = () => {
   const caseId = useCaseStore((s) => s.currentCase?.id);
   const files = useCaseStore((s) => s.files);
   const fileByName = useMemo(() => new Map(files.map((f) => [f.filename, f])), [files]);
+  const newFileCount = useNewFileCount('disputes');
+  const { isAnalyzing, execute: reanalyze } = useAnalysisAction('disputes');
 
   // Single damage CRUD instance for all children (DisputeCard + UndisputedFactsBlock)
   const dmg = useDamageCrud(caseId);
@@ -116,6 +121,12 @@ export const DisputesTab = () => {
           <span className="flex-1" />
           <ReanalyzeButton type="disputes" hasData={disputes.length > 0} />
         </div>
+
+        <StaleAnalysisBanner
+          count={newFileCount}
+          onReanalyze={reanalyze}
+          isAnalyzing={isAnalyzing}
+        />
 
         <InformationGapsBlock gaps={informationGaps} />
 

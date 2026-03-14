@@ -14,6 +14,7 @@ import { useBriefStore } from '../../stores/useBriefStore';
 import { useCaseStore } from '../../stores/useCaseStore';
 import { useCitedLawRefs } from '../../hooks/useCitedLawRefs';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { useNewFileCount } from '../../hooks/useNewFileCount';
 
 const SIDEBAR_TABS: { key: SidebarTab; label: string; icon: typeof FolderOpen }[] = [
   { key: 'disputes', label: '爭點', icon: Swords },
@@ -26,6 +27,13 @@ export const RightSidebar = () => {
   const sidebarTab = useUIStore((s) => s.sidebarTab);
   const setSidebarTab = useUIStore((s) => s.setSidebarTab);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+  const disputesNewCount = useNewFileCount('disputes');
+  const timelineNewCount = useNewFileCount('timeline');
+
+  const badgeCounts: Partial<Record<SidebarTab, number>> = {
+    disputes: disputesNewCount,
+    timeline: timelineNewCount,
+  };
 
   return (
     <div className="flex min-h-0 w-88 shrink-0 flex-col overflow-hidden border-l border-bd bg-bg-0">
@@ -34,16 +42,22 @@ export const RightSidebar = () => {
         {SIDEBAR_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = sidebarTab === tab.key;
+          const badge = badgeCounts[tab.key] ?? 0;
           return (
             <button
               key={tab.key}
               onClick={() => setSidebarTab(tab.key)}
-              className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition ${
+              className={`relative flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition ${
                 isActive ? 'border-ac text-ac' : 'border-transparent text-t3 hover:text-t1'
               }`}
             >
               <Icon size={14} />
               <span>{tab.label}</span>
+              {badge > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-ac px-1 text-[10px] font-semibold leading-none text-white">
+                  {badge}
+                </span>
+              )}
             </button>
           );
         })}

@@ -14,6 +14,8 @@ export interface Case {
   template_id: string | null;
   undisputed_facts: string | null;
   information_gaps: string | null;
+  disputes_analyzed_at: string | null;
+  timeline_analyzed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,6 +45,9 @@ interface CaseState {
     data: Partial<Omit<Case, 'id' | 'created_at' | 'updated_at'>>,
   ) => Promise<void>;
   deleteCase: (caseId: string) => Promise<void>;
+  patchCurrentCase: (
+    patch: Partial<Pick<Case, 'disputes_analyzed_at' | 'timeline_analyzed_at'>>,
+  ) => void;
 }
 
 export const useCaseStore = create<CaseState>((set, get) => ({
@@ -63,4 +68,8 @@ export const useCaseStore = create<CaseState>((set, get) => ({
     await api.delete(`/cases/${caseId}`);
     set({ cases: get().cases.filter((c) => c.id !== caseId) });
   },
+  patchCurrentCase: (patch) =>
+    set((s) => ({
+      currentCase: s.currentCase ? { ...s.currentCase, ...patch } : null,
+    })),
 }));

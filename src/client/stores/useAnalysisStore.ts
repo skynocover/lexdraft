@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { api } from '../lib/api';
 import { formatAmount } from '../lib/textUtils';
 import { ANALYSIS_LABELS, type AnalysisType, type SimpleFact } from '../../shared/types';
+import { useCaseStore } from './useCaseStore';
 
 export type { SimpleFact };
 
@@ -64,6 +65,7 @@ interface AnalysisResponse {
   damages?: Damage[];
   summary?: string;
   error?: string;
+  analyzed_at?: string | null;
 }
 
 interface AnalysisState {
@@ -196,6 +198,12 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         const items = res.data as TimelineEvent[];
         set({ timeline: items });
         toast.success(`時間軸已產生（${items.length} 個事件）`);
+      }
+
+      // Update analyzed_at timestamp in case store
+      if (res.analyzed_at && (type === 'disputes' || type === 'timeline')) {
+        const field = type === 'disputes' ? 'disputes_analyzed_at' : 'timeline_analyzed_at';
+        useCaseStore.getState().patchCurrentCase({ [field]: res.analyzed_at });
       }
     } catch (err: unknown) {
       console.error(`runAnalysis ${type} error:`, err);
