@@ -99,6 +99,8 @@ export interface AnalysisSuccess<T = unknown> {
   summary: string;
   /** Populated when type='disputes' — damages analyzed with dispute context */
   damages?: Record<string, unknown>[];
+  /** ISO 8601 UTC timestamp of when this analysis completed */
+  analyzed_at?: string;
 }
 
 export interface AnalysisFailure {
@@ -504,8 +506,12 @@ export const runDeepDisputeAnalysis = async (
     const aiPlaintiff = !existingParties.plaintiff ? orchestratorOutput.parties.plaintiff : null;
     const aiDefendant = !existingParties.defendant ? orchestratorOutput.parties.defendant : null;
     const partyUpdates = {
-      ...(aiPlaintiff ? { plaintiff: aiPlaintiff } : {}),
-      ...(aiDefendant ? { defendant: aiDefendant } : {}),
+      ...(!existingParties.plaintiff && orchestratorOutput.parties.plaintiff
+        ? { plaintiff: orchestratorOutput.parties.plaintiff }
+        : {}),
+      ...(!existingParties.defendant && orchestratorOutput.parties.defendant
+        ? { defendant: orchestratorOutput.parties.defendant }
+        : {}),
     };
     await Promise.all([
       drizzle.delete(damages).where(eq(damages.case_id, caseId)),
@@ -549,7 +555,8 @@ export const runDeepDisputeAnalysis = async (
       }
     }
 
-    // 9. Write undisputed_facts once (after dedup)
+    // 9. Write undisputed_facts + disputes_analyzed_at once (after dedup)
+    const analyzedAt = new Date().toISOString();
     await drizzle
       .update(cases)
       .set({
@@ -557,10 +564,18 @@ export const runDeepDisputeAnalysis = async (
           orchestratorOutput.undisputedFacts.length > 0
             ? JSON.stringify(orchestratorOutput.undisputedFacts)
             : null,
+        disputes_analyzed_at: analyzedAt,
       })
       .where(eq(cases.id, caseId));
 
-    return { success: true, data, summary, orchestratorOutput, damagesData };
+    return {
+      success: true,
+      data,
+      summary,
+      orchestratorOutput,
+      damagesData,
+      analyzed_at: analyzedAt,
+    };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -797,5 +812,10 @@ export const runAnalysis = async (
   );
   if (!result.success) return result;
   const { data, summary } = await persistTimeline(result.data as TimelineItem[], caseId, drizzle);
-  return { success: true, data, summary };
+
+  // Update timeline_analyzed_at timestamp
+  const analyzedAt = new Date().toISOString();
+  await drizzle.update(cases).set({ timeline_analyzed_at: analyzedAt }).where(eq(cases.id, caseId));
+
+  return { success: true, data, summary, analyzed_at: analyzedAt };
 };
