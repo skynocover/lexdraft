@@ -491,7 +491,13 @@ export const runDeepDisputeAnalysis = async (
     }
 
     // 6. Persist disputes + sync parties (parallel)
-    const { plaintiff, defendant } = orchestratorOutput.parties;
+    // 只在用戶尚未填寫時才用 AI 提取的值回填，避免覆蓋用戶手動輸入
+    const aiPlaintiff = !existingParties.plaintiff ? orchestratorOutput.parties.plaintiff : null;
+    const aiDefendant = !existingParties.defendant ? orchestratorOutput.parties.defendant : null;
+    const partyUpdates = {
+      ...(aiPlaintiff ? { plaintiff: aiPlaintiff } : {}),
+      ...(aiDefendant ? { defendant: aiDefendant } : {}),
+    };
     const [{ data, summary }] = await Promise.all([
       persistDisputes(
         orchestratorOutput.legalIssues,
@@ -500,14 +506,8 @@ export const runDeepDisputeAnalysis = async (
         caseId,
         drizzle,
       ),
-      plaintiff || defendant
-        ? drizzle
-            .update(cases)
-            .set({
-              ...(plaintiff ? { plaintiff } : {}),
-              ...(defendant ? { defendant } : {}),
-            })
-            .where(eq(cases.id, caseId))
+      Object.keys(partyUpdates).length > 0
+        ? drizzle.update(cases).set(partyUpdates).where(eq(cases.id, caseId))
         : Promise.resolve(),
     ]);
 
