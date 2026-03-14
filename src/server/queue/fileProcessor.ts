@@ -3,6 +3,7 @@ import { getDocumentProxy, extractText } from 'unpdf';
 import { getDB } from '../db';
 import { files, cases } from '../db/schema';
 import { callAI, callGeminiNative, type AIEnv } from '../agent/aiClient';
+import type { AppEnv } from '../types';
 
 const CMAP_BASE_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/';
 
@@ -33,7 +34,7 @@ class WorkersCMapReaderFactory {
   }
 }
 
-interface FileMessage {
+export interface FileMessage {
   fileId: string;
   caseId: string;
   r2Key: string;
@@ -138,16 +139,7 @@ const classifyWithAI = async (
   return JSON.parse(content) as ClassificationResult;
 };
 
-export const processFileMessage = async (
-  message: FileMessage,
-  env: {
-    DB: D1Database;
-    BUCKET: R2Bucket;
-    CF_ACCOUNT_ID: string;
-    CF_GATEWAY_ID: string;
-    CF_AIG_TOKEN: string;
-  },
-) => {
+export const processFileMessage = async (message: FileMessage, env: AppEnv['Bindings']) => {
   const db = getDB(env.DB);
   const aiEnv: AIEnv = {
     CF_ACCOUNT_ID: env.CF_ACCOUNT_ID,

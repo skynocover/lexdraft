@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-    "types": ["@cloudflare/workers-types/2023-07-01"],
+    "types": [],
     "outDir": "dist",
     "rootDir": ".",
     "baseUrl": ".",
@@ -16,5 +16,5 @@
       "@/*": ["./src/client/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "worker-configuration.d.ts"]
 }

@@ -13,7 +13,8 @@
     "db:migrate:local": "wrangler d1 migrations apply lexdraft-db --local",
     "test:law-fallback": "tsx scripts/pipeline-test/test-law-fallback.ts",
     "test:search": "tsx scripts/law-search-test/search-test.ts",
-    "test:benchmark": "tsx scripts/pipeline-test/pipeline-benchmark.ts"
+    "test:benchmark": "tsx scripts/pipeline-test/pipeline-benchmark.ts",
+    "cf:types": "wrangler types"
   },
   "repository": {
     "type": "git",

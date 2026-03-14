@@ -17,7 +17,7 @@ import { inlineAIRouter } from './server/routes/inlineAI';
 import { templatesRouter } from './server/routes/templates';
 import { exhibitsRouter } from './server/routes/exhibits';
 import { analyzeRouter } from './server/routes/analyze';
-import { processFileMessage } from './server/queue/fileProcessor';
+import { processFileMessage, type FileMessage } from './server/queue/fileProcessor';
 
 const app = new Hono<AppEnv>();
 
@@ -93,18 +93,10 @@ app.all('*', (c) => {
 // === Export with Queue handler ===
 export default {
   fetch: app.fetch,
-  async queue(batch: MessageBatch, env: AppEnv['Bindings']) {
+  async queue(batch: MessageBatch<FileMessage>, env: AppEnv['Bindings']) {
     for (const message of batch.messages) {
       try {
-        await processFileMessage(
-          message.body as {
-            fileId: string;
-            caseId: string;
-            r2Key: string;
-            filename: string;
-          },
-          env,
-        );
+        await processFileMessage(message.body, env);
         message.ack();
       } catch (err) {
         console.error('Queue processing error:', err);

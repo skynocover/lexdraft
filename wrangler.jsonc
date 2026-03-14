@@ -1,14 +1,14 @@
 {
   "name": "lexdraft",
   "main": "src/index.ts",
-  "compatibility_date": "2025-11-11",
+  "compatibility_date": "2026-01-20",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./public/",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     // CRITICAL: 避免 SPA fallback 攔截 API 路由，導致回傳 index.html 而非 JSON
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
   },
 
   // D1 資料庫
@@ -17,16 +17,16 @@
       "binding": "DB",
       "database_name": "lexdraft-db",
       "database_id": "placeholder-replace-after-creation",
-      "migrations_dir": "./drizzle"
-    }
+      "migrations_dir": "./drizzle",
+    },
   ],
 
   // R2 存儲（案件卷宗 PDF）
   "r2_buckets": [
     {
       "binding": "BUCKET",
-      "bucket_name": "lexdraft-files"
-    }
+      "bucket_name": "lexdraft-files",
+    },
   ],
 
   // Queue（非同步檔案處理）
@@ -34,16 +34,16 @@
     "producers": [
       {
         "binding": "FILE_QUEUE",
-        "queue": "lexdraft-file-processing"
-      }
+        "queue": "lexdraft-file-processing",
+      },
     ],
     "consumers": [
       {
         "queue": "lexdraft-file-processing",
         "max_batch_size": 1,
-        "max_retries": 3
-      }
-    ]
+        "max_retries": 3,
+      },
+    ],
   },
 
   // Durable Objects（Agent Loop）
@@ -51,21 +51,28 @@
     "bindings": [
       {
         "name": "AGENT_DO",
-        "class_name": "AgentDO"
-      }
-    ]
+        "class_name": "AgentDO",
+      },
+    ],
   },
 
   // DO Migrations
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["AgentDO"]
-    }
+      "new_sqlite_classes": ["AgentDO"],
+    },
   ],
+
+  // Observability（Workers Logs + Traces）
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 },
+  },
 
   // 環境變數（dev 用，production 另外設定）
   "vars": {
-    "AUTH_TOKEN": "dev-token-change-me"
-  }
+    "AUTH_TOKEN": "dev-token-change-me",
+  },
 }

@@ -119,16 +119,7 @@ ${TEMPLATE_SELECTION_GUIDE}
 - 列舉項目時使用頓號（、）或數字編號，不要用 emoji 或特殊符號
 - 撰寫書狀完成後，只需簡短回覆「已完成書狀撰寫，共 N 個段落」即可，絕對不要在聊天中重複書狀的內容，因為書狀已經即時顯示在右側編輯器中`;
 
-interface Env {
-  DB: D1Database;
-  CF_ACCOUNT_ID: string;
-  CF_GATEWAY_ID: string;
-  CF_AIG_TOKEN: string;
-  MONGO_URL: string;
-  MONGO_API_KEY: string;
-}
-
-export class AgentDO extends DurableObject<Env> {
+export class AgentDO extends DurableObject<Cloudflare.Env> {
   private abortController: AbortController | null = null;
 
   async fetch(request: Request): Promise<Response> {
