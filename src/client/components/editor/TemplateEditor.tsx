@@ -8,6 +8,8 @@ import { useTemplateStore } from '../../stores/useTemplateStore';
 import { useTabStore } from '../../stores/useTabStore';
 import { useCaseStore } from '../../stores/useCaseStore';
 import { ConfirmDialog } from '../ui/confirm-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { BRIEF_MODE_OPTIONS, type BriefModeValue } from '../../../shared/caseConstants';
 
 export const TemplateEditor = () => {
   const currentTemplate = useTemplateStore((s) => s.currentTemplate);
@@ -15,6 +17,7 @@ export const TemplateEditor = () => {
   const saving = useTemplateStore((s) => s.saving);
   const setContentMd = useTemplateStore((s) => s.setContentMd);
   const setTitle = useTemplateStore((s) => s.setTitle);
+  const setBriefMode = useTemplateStore((s) => s.setBriefMode);
   const saveTemplate = useTemplateStore((s) => s.saveTemplate);
   const deleteTemplate = useTemplateStore((s) => s.deleteTemplate);
 
@@ -160,6 +163,22 @@ export const TemplateEditor = () => {
             </button>
             <span className="mx-2 h-4 w-px bg-bd" />
             <span className="text-xs text-t3">範本編輯</span>
+            <span className="mx-2 h-4 w-px bg-bd" />
+            <Select
+              value={currentTemplate?.brief_mode ?? ''}
+              onValueChange={(v) => setBriefMode(v as BriefModeValue)}
+            >
+              <SelectTrigger className="h-7 w-32 border-bd bg-bg-3 text-xs text-t2">
+                <SelectValue placeholder="書狀性質" />
+              </SelectTrigger>
+              <SelectContent>
+                {BRIEF_MODE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </>
         )}
 

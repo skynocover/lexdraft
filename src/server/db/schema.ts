@@ -39,6 +39,7 @@ export const templates = sqliteTable('templates', {
   title: text('title').notNull(),
   category: text('category'), // 分組用（民事訴訟、家事事件...）
   content_md: text('content_md'), // markdown 格式範本內容
+  brief_mode: text('brief_mode'), // 'claim' | 'defense' | 'challenge' | 'supplement' | 'petition'
   is_default: integer('is_default').default(0), // 1=系統預設, 0=自訂
   created_at: text('created_at'),
   updated_at: text('updated_at'),

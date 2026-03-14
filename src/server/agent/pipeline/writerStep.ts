@@ -180,7 +180,7 @@ export const writeSection = async (
 
   // ── Build Writer instruction (prompt assembly delegated to writerPrompt.ts) ──
   const instruction = buildWriterInstruction({
-    templateId: ctx.templateId,
+    pipelineMode: ctx.pipelineMode,
     strategySection,
     writerCtx,
     documents,
@@ -230,7 +230,12 @@ export const writeSection = async (
       maxTokens: 2048,
       signal: ctx.signal,
     });
-    text = stripMarkdown(result.content.trim());
+    // Strip heading duplication first (Gemini may echo section title with # prefix)
+    const rawText = result.content.trim();
+    const rawSegments = [{ text: rawText, citations: [] as Citation[] }];
+    const stripped = stripLeadingHeadings(rawText, rawSegments, [], strategySection.section);
+
+    text = stripMarkdown(stripped.text);
     segments = [{ text, citations: [] }];
     citations = [];
   }

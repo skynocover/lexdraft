@@ -3,7 +3,7 @@
 // Extracted from writerStep.ts for readability — writerStep.ts handles AI calls + post-processing.
 
 import { buildCaseMetaLines } from '../prompts/promptHelpers';
-import { isDefenseTemplate } from '../prompts/strategyConstants';
+import type { PipelineMode } from '../prompts/strategyConstants';
 import {
   formatDamageAmount,
   getSectionKey,
@@ -18,7 +18,7 @@ import type { ContextStore } from '../contextStore';
 // ── Prompt Input ──
 
 export interface WriterPromptInput {
-  templateId: string | null;
+  pipelineMode: PipelineMode;
   strategySection: StrategySection;
   writerCtx: WriterContext;
   documents: ClaudeDocument[];
@@ -29,7 +29,7 @@ export interface WriterPromptInput {
 // ── Main Builder ──
 
 export const buildWriterInstruction = (input: WriterPromptInput): string => {
-  const { templateId, strategySection, writerCtx, documents, store, exhibitMap } = input;
+  const { pipelineMode, strategySection, writerCtx, documents, store, exhibitMap } = input;
 
   // ── Context blocks ──
   const outlineText = buildOutlineBlock(writerCtx);
@@ -101,7 +101,7 @@ ${completedText}`;
 
   instruction += COMMON_WRITING_RULES;
 
-  if (isDefenseTemplate(templateId)) {
+  if (pipelineMode === 'defense') {
     instruction += DEFENSE_WRITING_RULES;
   }
 

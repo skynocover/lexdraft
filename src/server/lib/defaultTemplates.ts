@@ -1,3 +1,5 @@
+import type { BriefModeValue } from '../../shared/caseConstants';
+
 /** 預設範本型別 */
 export interface DefaultTemplate {
   id: string;
@@ -5,6 +7,8 @@ export interface DefaultTemplate {
   category: string;
   /** AI 選擇範本時的使用場景提示 */
   agentHint: string;
+  /** 書狀論述模式 — 決定 pipeline 使用哪套 prompt */
+  briefMode: BriefModeValue;
   content_md: string;
 }
 
@@ -18,6 +22,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     title: '民事起訴狀（一般）',
     category: '民事訴訟',
     agentHint: '一般民事起訴（契約請求、借貸、返還、給付等）',
+    briefMode: 'claim',
     content_md: `民事起訴狀
 
 案號：【待填：案號，新案免填】
@@ -62,6 +67,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     title: '民事起訴狀（損害賠償）',
     category: '民事訴訟',
     agentHint: '損害賠償起訴（車禍、侵權、醫療糾紛、人身損害、財物毀損等）',
+    briefMode: 'claim',
     content_md: `民事起訴狀
 
 案號：【待填：案號，新案免填】
@@ -114,6 +120,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     title: '民事答辯狀',
     category: '民事訴訟',
     agentHint: '民事答辯（被告身份回應原告起訴）',
+    briefMode: 'defense',
     content_md: `民事答辯狀
 
 案號：【待填：案號】
@@ -163,6 +170,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     title: '民事準備書狀',
     category: '民事訴訟',
     agentHint: '民事準備書狀（補充攻防、回應對造）',
+    briefMode: 'supplement',
     content_md: `民事準備書狀
 
 案號：【待填：案號】
@@ -204,6 +212,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     title: '民事上訴狀',
     category: '民事訴訟',
     agentHint: '民事上訴（不服一審判決）',
+    briefMode: 'challenge',
     content_md: `民事上訴狀
 
 案號：【待填：原審案號】
@@ -254,6 +263,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     title: '民事聲請強制執行狀',
     category: '強制執行',
     agentHint: '聲請強制執行（有執行名義，聲請執行）',
+    briefMode: 'petition',
     content_md: `民事聲請強制執行狀
 
 案號：【待填：案號，新案免填】

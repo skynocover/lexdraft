@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
 
+import type { BriefModeValue } from '../../shared/caseConstants';
+
 export interface TemplateSummary {
   id: string;
   title: string;
   category: string | null;
+  brief_mode: BriefModeValue | null;
   is_default: number;
   created_at: string | null;
   updated_at: string | null;
@@ -24,8 +27,9 @@ interface TemplateState {
   loadTemplate: (id: string) => Promise<void>;
   setContentMd: (content: string) => void;
   setTitle: (title: string) => void;
+  setBriefMode: (mode: BriefModeValue) => void;
   saveTemplate: () => Promise<void>;
-  createTemplate: (title?: string) => Promise<Template>;
+  createTemplate: (title: string, briefMode: BriefModeValue) => Promise<Template>;
   deleteTemplate: (id: string) => Promise<void>;
   clearCurrentTemplate: () => void;
 }
@@ -34,6 +38,7 @@ const toSummary = (t: Template): TemplateSummary => ({
   id: t.id,
   title: t.title,
   category: t.category,
+  brief_mode: t.brief_mode,
   is_default: t.is_default,
   created_at: t.created_at,
   updated_at: t.updated_at,
@@ -85,6 +90,15 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
     });
   },
 
+  setBriefMode: (mode: BriefModeValue) => {
+    const { currentTemplate } = get();
+    if (!currentTemplate || currentTemplate.brief_mode === mode) return;
+    set({
+      currentTemplate: { ...currentTemplate, brief_mode: mode },
+      dirty: true,
+    });
+  },
+
   saveTemplate: async () => {
     const { currentTemplate, saving } = get();
     if (!currentTemplate || saving) return;
@@ -96,6 +110,7 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
       const updated = await api.put<Template>(`/templates/${currentTemplate.id}`, {
         title: currentTemplate.title,
         content_md: currentTemplate.content_md,
+        brief_mode: currentTemplate.brief_mode,
       });
       set((state) => ({
         currentTemplate: updated,
@@ -107,8 +122,8 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
     }
   },
 
-  createTemplate: async (title?: string) => {
-    const result = await api.post<Template>('/templates', { title: title || '新範本' });
+  createTemplate: async (title: string, briefMode: BriefModeValue) => {
+    const result = await api.post<Template>('/templates', { title, brief_mode: briefMode });
     set((state) => ({ templates: [...state.templates, toSummary(result)] }));
     return result;
   },

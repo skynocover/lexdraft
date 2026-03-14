@@ -10,12 +10,16 @@ import type { getDB } from '../../db';
 import type { AIEnv } from '../aiClient';
 import type { SSEEvent, SimpleFact } from '../../../shared/types';
 import type { CaseMetadata } from '../contextStore';
+import type { BriefModeValue } from '../../../shared/caseConstants';
+import type { PipelineMode } from '../prompts/strategyConstants';
 
 // ── Pipeline Context (shared across all steps) ──
 
 export interface PipelineContext {
   caseId: string;
   templateId: string | null;
+  briefMode: BriefModeValue | null;
+  pipelineMode: PipelineMode;
   title: string;
   signal: AbortSignal;
   sendSSE: (event: SSEEvent) => Promise<void>;

@@ -3,6 +3,8 @@ import { useCaseStore } from '../../../stores/useCaseStore';
 import { useTemplateStore, type TemplateSummary } from '../../../stores/useTemplateStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { Loader2, ExternalLink, Plus, Sparkles } from 'lucide-react';
+import { NewTemplateDialog } from './NewTemplateDialog';
+import type { BriefModeValue } from '../../../../shared/caseConstants';
 import { COURTS, DIVISIONS } from '../../../lib/caseConstants';
 import {
   Select,
@@ -62,6 +64,7 @@ export const CaseInfoTab = () => {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [newTplOpen, setNewTplOpen] = useState(false);
 
   // 載入範本列表
   useEffect(() => {
@@ -147,8 +150,8 @@ export const CaseInfoTab = () => {
     }
   };
 
-  const handleCreateTemplate = async () => {
-    const tpl = await createTemplate();
+  const handleCreateTemplate = async (title: string, briefMode: BriefModeValue) => {
+    const tpl = await createTemplate(title, briefMode);
     openTemplateTab(tpl.id, tpl.title);
   };
 
@@ -378,12 +381,17 @@ export const CaseInfoTab = () => {
             </div>
             {/* 新增自訂範本 */}
             <button
-              onClick={handleCreateTemplate}
+              onClick={() => setNewTplOpen(true)}
               className="mt-1.5 flex w-full items-center justify-center gap-1 rounded border border-dashed border-bd py-1.5 text-[11px] text-t3 transition hover:border-ac hover:text-ac"
             >
               <Plus size={12} />
               <span>新增自訂範本</span>
             </button>
+            <NewTemplateDialog
+              open={newTplOpen}
+              onOpenChange={setNewTplOpen}
+              onCreate={handleCreateTemplate}
+            />
           </div>
 
           {/* AI 處理指引 */}

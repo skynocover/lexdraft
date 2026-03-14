@@ -28,6 +28,7 @@ import {
   getClaimsRules,
   getSectionRules,
   getJsonSchema,
+  type PipelineMode,
 } from '../prompts/strategyConstants';
 import { parseStrategyOutput, validateStrategyOutput } from './validateStrategy';
 import { enrichStrategyOutput } from './enrichStrategy';
@@ -47,20 +48,21 @@ import type { ContextStore } from '../contextStore';
 
 // ── JSON Output System Prompt (separate call, clean context) ──
 
-const buildJsonOutputSystemPrompt = (templateId: string | null): string =>
-  `你是一位資深台灣訴訟律師的策略輸出助手。你將收到律師的推理摘要、爭點清單、和可用法條，你的任務是根據這些資料輸出結構化的論證策略 JSON。
+const buildJsonOutputSystemPrompt = (mode: PipelineMode): string => {
+  return `你是一位資深台灣訴訟律師的策略輸出助手。你將收到律師的推理摘要、爭點清單、和可用法條，你的任務是根據這些資料輸出結構化的論證策略 JSON。
 
 ${WRITING_CONVENTIONS}
 
-${getClaimsRules(templateId)}
+${getClaimsRules(mode)}
 
-${getSectionRules(templateId)}
+${getSectionRules(mode)}
 
 ═══ 輸出規則 ═══
 
 - 只輸出 JSON，不要加 markdown code block 或其他文字
 
-${getJsonSchema(templateId)}`;
+${getJsonSchema(mode)}`;
+};
 
 // ── Gemini responseSchema (OpenAPI format, constrained decoding) ──
 // Mirrors Claim, StrategySection, ArgumentationFramework, FactUsage in ./types.ts.
@@ -437,7 +439,8 @@ export const runReasoningStrategy = async (
   await progress?.onReasoningStart();
 
   const hasTemplate = !!(templateContentMd && templateContentMd.trim());
-  const systemPrompt = buildReasoningSystemPrompt(ctx.templateId);
+  const pipelineMode = ctx.pipelineMode;
+  const systemPrompt = buildReasoningSystemPrompt(pipelineMode);
   let userMessage = buildReasoningStrategyInput(input, hasTemplate);
 
   // 注入完整 markdown 範本到 Reasoning prompt
@@ -468,7 +471,7 @@ export const runReasoningStrategy = async (
 
   // Helper: separate clean call for JSON output (Gemini 2.5 Flash, provider-native constrained decoding)
   // 有 template → 注入完整 markdown 範本；無 template → 注入通用 fallback 指引
-  const jsonOutputBase = buildJsonOutputSystemPrompt(ctx.templateId);
+  const jsonOutputBase = buildJsonOutputSystemPrompt(pipelineMode);
   const structuringSystemPrompt = hasTemplate
     ? jsonOutputBase + templateToPrompt(templateContentMd!)
     : jsonOutputBase + `\n\n${FALLBACK_GUIDANCE}`;

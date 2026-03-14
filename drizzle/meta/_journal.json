@@ -155,6 +155,13 @@
       "when": 1773237214330,
       "tag": "0021_clammy_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1773418368879,
+      "tag": "0022_early_moonstone",
+      "breakpoints": true
     }
   ]
 }

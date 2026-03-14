@@ -44,3 +44,47 @@ export const CLIENT_ROLES = ['plaintiff', 'defendant'] as const;
 export type ClientRole = (typeof CLIENT_ROLES)[number];
 
 export const DEFAULT_BRIEF_LABEL = '書狀';
+
+/** 書狀論述模式選項（前端 Dialog / TemplateEditor 共用） */
+export const BRIEF_MODE_OPTIONS = [
+  {
+    value: 'claim',
+    label: '提出請求',
+    example: '起訴、反訴等',
+    description: 'AI 會以主動建立請求權基礎的策略撰寫此書狀',
+  },
+  {
+    value: 'defense',
+    label: '回應對方',
+    example: '答辯等',
+    description: 'AI 會以逐點反駁對方主張的策略撰寫此書狀',
+  },
+  {
+    value: 'supplement',
+    label: '補充攻防',
+    example: '準備書狀等',
+    description: 'AI 會根據案件立場，以回應前一輪攻防的策略撰寫此書狀',
+  },
+  {
+    value: 'challenge',
+    label: '挑戰裁判',
+    example: '上訴等',
+    description: 'AI 會以指出原判決錯誤的策略撰寫此書狀',
+  },
+  {
+    value: 'petition',
+    label: '聲請法院',
+    example: '強制執行等',
+    description: 'AI 會以陳述事實並聲請裁定的策略撰寫此書狀',
+  },
+] as const;
+
+/** Zod-friendly tuple: declared as const for type-safe z.enum() usage */
+export const BRIEF_MODE_VALUES = [
+  'claim',
+  'defense',
+  'supplement',
+  'challenge',
+  'petition',
+] as const;
+export type BriefModeValue = (typeof BRIEF_MODE_VALUES)[number];

@@ -7,7 +7,7 @@ import { templates } from '../db/schema';
 import { notFound } from '../lib/errors';
 import { parseBody } from '../lib/validate';
 import { createTemplateSchema, updateTemplateSchema } from '../schemas/templates';
-import { DEFAULT_TEMPLATES } from '../lib/defaultTemplates';
+import { DEFAULT_TEMPLATES, getTemplateById } from '../lib/defaultTemplates';
 
 const templatesRouter = new Hono<AppEnv>();
 
@@ -20,6 +20,7 @@ templatesRouter.get('/templates', async (c) => {
     id: t.id,
     title: t.title,
     category: t.category,
+    brief_mode: t.briefMode,
     is_default: 1,
     created_at: null as string | null,
     updated_at: null as string | null,
@@ -31,6 +32,7 @@ templatesRouter.get('/templates', async (c) => {
       id: templates.id,
       title: templates.title,
       category: templates.category,
+      brief_mode: templates.brief_mode,
       is_default: templates.is_default,
       created_at: templates.created_at,
       updated_at: templates.updated_at,
@@ -50,6 +52,7 @@ templatesRouter.post('/templates', async (c) => {
   const title = body.title?.trim() || '新範本';
   const contentMd = body.content_md ?? '';
   const category = body.category ?? null;
+  const briefMode = body.brief_mode;
 
   const now = new Date().toISOString();
   const newTemplate = {
@@ -57,6 +60,7 @@ templatesRouter.post('/templates', async (c) => {
     title,
     category,
     content_md: contentMd,
+    brief_mode: briefMode,
     is_default: 0,
     created_at: now,
     updated_at: now,
@@ -72,13 +76,14 @@ templatesRouter.get('/templates/:id', async (c) => {
 
   // 檢查是否為 hardcoded default
   if (id.startsWith('default-')) {
-    const dt = DEFAULT_TEMPLATES.find((t) => t.id === id);
+    const dt = getTemplateById(id);
     if (!dt) throw notFound('範本');
     return c.json({
       id: dt.id,
       title: dt.title,
       category: dt.category,
       content_md: dt.content_md,
+      brief_mode: dt.briefMode,
       is_default: 1,
       created_at: null,
       updated_at: null,
@@ -109,6 +114,7 @@ templatesRouter.put('/templates/:id', async (c) => {
   };
   if (body.title !== undefined) updates.title = body.title;
   if (body.content_md !== undefined) updates.content_md = body.content_md;
+  if (body.brief_mode !== undefined) updates.brief_mode = body.brief_mode;
 
   await db.update(templates).set(updates).where(eq(templates.id, id));
 

@@ -3,10 +3,10 @@
 import { buildCaseMetaLines, buildInstructionsBlock } from './promptHelpers';
 import {
   WRITING_CONVENTIONS,
-  isDefenseTemplate,
   getClaimsRules,
   getSectionRules,
   getJsonSchema,
+  type PipelineMode,
 } from './strategyConstants';
 import { FALLBACK_GUIDANCE } from '../../lib/defaultTemplates';
 import { getCaseTypeGuidance } from './caseTypeKnowledge';
@@ -154,15 +154,15 @@ const COMMON_HARD_RULES = `═══ 硬性規則 ═══
 
 // ── 組裝 System Prompt ──
 
-export const buildReasoningSystemPrompt = (templateId: string | null): string => {
-  const isDefense = isDefenseTemplate(templateId);
+export const buildReasoningSystemPrompt = (mode: PipelineMode): string => {
+  const isDefense = mode === 'defense';
   const roleIntro = isDefense
     ? '你是一位資深台灣訴訟律師，正在為被告方制定答辯策略。你可以使用文字自由推理，也可以搜尋法條資料庫來補充推理所需的法律依據。'
     : '你是一位資深台灣訴訟律師，正在為案件制定論證策略。你可以使用文字自由推理，也可以搜尋法條資料庫來補充推理所需的法律依據。';
   const workflow = isDefense ? DEFENSE_REASONING_WORKFLOW : COMPLAINT_REASONING_WORKFLOW;
-  const claimsRules = getClaimsRules(templateId);
-  const sectionRules = getSectionRules(templateId);
-  const jsonSchema = getJsonSchema(templateId);
+  const claimsRules = getClaimsRules(mode);
+  const sectionRules = getSectionRules(mode);
+  const jsonSchema = getJsonSchema(mode);
 
   return `${roleIntro}
 
