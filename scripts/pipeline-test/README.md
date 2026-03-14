@@ -79,10 +79,25 @@ npx tsx scripts/pipeline-test/pipeline-benchmark.ts --runs 5 --case-id YOUR_CASE
 
 **車禍損害賠償案**（`z4keVNfyuKvL68Xg1qPl2`）：
 
-- 原告騎機車遭被告闖紅燈撞擊
-- 6 個爭點：侵權責任、醫療費用、交通費用、不能工作損失、機車修復、精神慰撫金
-- 預期書狀結構：8 段落（前言 + 6 內容 + 結論）
-- 涉及法條：民法 §184, §191-2, §193, §195, §196, §217
+- 原告陳美玲騎機車遭被告王建宏左轉未讓直行車撞擊
+- 2 個爭點：不能工作期間（8 週 vs 3 個月）、精神慰撫金是否適當
+- 預期書狀結構：11-12 段落（header + 前言 + 6-7 內容 + 結論 + 證據方法 + footer）
+- 涉及法條：民法 §18, §184, §191-2, §193, §195, §217
+
+### Golden Fixtures
+
+`snapshots/z4keVNfyuKvL68Xg1qPl2-golden/` 存放 4 份穩定版書狀（2026-03-14 產出）：
+
+| 檔案           | Brief ID | Content Sections | Law | File | Total |
+| -------------- | -------- | ---------------- | --- | ---- | ----- |
+| `brief-1.json` | gQYQ35qK | 7                | 9   | 21   | 30    |
+| `brief-2.json` | 0_pNtxlw | 6                | 9   | 19   | 28    |
+| `brief-3.json` | modf_vKf | 6                | 11  | 21   | 32    |
+| `brief-4.json` | bUYFMY-7 | 6                | 10  | 21   | 31    |
+
+另含 `case.json`（案件 metadata）和 `disputes.json`（2 個爭點）。
+
+Pipeline snapshots（step0~step3）需要時用 `generate-snapshots.ts` 重新產出。
 
 ## 何時該跑測試
 
@@ -95,14 +110,14 @@ npx tsx scripts/pipeline-test/pipeline-benchmark.ts --runs 5 --case-id YOUR_CASE
 
 ## 品質基線
 
-最新基線（v12，Writer 改用 Sonnet 4.6 後）：
+最新基線（golden, 2026-03-14，4 份書狀平均）：
 
-| Metric                 | 值      |
-| ---------------------- | ------- |
-| Law cites              | 8       |
-| File cites             | 25      |
-| Total cites            | 33      |
-| 0-law content sections | **0/6** |
+| Metric                 | 值        |
+| ---------------------- | --------- |
+| Law cites              | 9.8       |
+| File cites             | 20.5      |
+| Total cites            | 30.3      |
+| 0-law content sections | **0/6~7** |
 
 歷史版本對比見 MEMORY.md 的 Citation Benchmarks 表格。
 
