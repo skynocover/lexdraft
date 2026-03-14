@@ -25,8 +25,6 @@ export const TemplateEditor = () => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const isInternalUpdate = useRef(false);
-
   const isDefault = currentTemplate?.is_default === 1;
 
   const editor = useEditor({
@@ -39,7 +37,6 @@ export const TemplateEditor = () => {
       },
     },
     onUpdate: ({ editor: ed }) => {
-      if (isInternalUpdate.current) return;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const md = (ed.storage as unknown as Record<string, MarkdownStorage>).markdown.getMarkdown();
       setContentMd(md);
@@ -54,12 +51,8 @@ export const TemplateEditor = () => {
 
   // Sync content when template switches or editor becomes ready
   useEffect(() => {
-    if (!editor || isInternalUpdate.current) return;
-    isInternalUpdate.current = true;
-    editor.commands.setContent(currentTemplate?.content_md ?? '');
-    requestAnimationFrame(() => {
-      isInternalUpdate.current = false;
-    });
+    if (!editor) return;
+    editor.commands.setContent(currentTemplate?.content_md ?? '', { emitUpdate: false });
   }, [editor, currentTemplate?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-save (custom templates only)

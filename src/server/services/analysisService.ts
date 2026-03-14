@@ -24,18 +24,18 @@ import {
 import type { SimpleFact } from '../../shared/types';
 import type { LegalIssue, DamageItem as BaseDamageItem } from '../agent/pipeline/types';
 import type { CaseMetadata } from '../agent/contextStore';
+import type { FileNote } from '../agent/prompts/orchestratorPrompt';
 import type { AnalysisType } from '../../shared/types';
 
 // ── Gemini Response Schemas ──
 
 const DAMAGES_BASE_PROPERTIES = {
-  category: { type: 'STRING', enum: ['財產上損害', '非財產上損害'] },
   description: { type: 'STRING' },
   amount: { type: 'INTEGER' },
   basis: { type: 'STRING' },
 };
 
-const DAMAGES_BASE_REQUIRED = ['category', 'description', 'amount', 'basis'];
+const DAMAGES_BASE_REQUIRED = ['description', 'amount', 'basis'];
 
 export const DAMAGES_SCHEMA = {
   type: 'ARRAY',
@@ -173,10 +173,7 @@ interface TimelineItem {
 
 // ── Prompts (damages + timeline only; disputes uses deep analysis) ──
 
-const DAMAGES_FIELD_RULES = `category 只能是以下兩種之一：
-- "財產上損害"：醫療費用、交通費用、工作損失、財物損害、貨款、利息、違約金等
-- "非財產上損害"：精神慰撫金等
-description 為該項目的具體名稱。
+const DAMAGES_FIELD_RULES = `description 為該金額項目的具體名稱（如「醫療費用」「精神慰撫金」「不能工作損失」）。
 amount 為整數，以新台幣元計。如果文件中的「主張」欄位有列出明確金額，直接使用該精確金額。`;
 
 const DAMAGES_WARNINGS = `重要：
@@ -208,17 +205,29 @@ export const toDisputeInfoList = (
     title: d.title ?? '',
   }));
 
+const formatKeyAmounts = (fileNotes?: FileNote[]): string => {
+  if (!fileNotes?.length) return '';
+  const lines = fileNotes
+    .filter((n) => n.key_amounts.length > 0)
+    .map((n) => `【${n.filename}】${n.key_amounts.join('、')}`);
+  if (!lines.length) return '';
+  return `\n[檔案金額明細]\n${lines.join('\n')}\n`;
+};
+
 export const buildDamagesPromptWithDisputes = (
   fileContext: string,
   disputeList: DisputeInfo[],
+  fileNotes?: FileNote[],
 ): string => {
   const disputeLines = disputeList
     .map((d) => `- id: "${d.id}" — 爭點 ${d.number}: ${d.title}`)
     .join('\n');
 
+  const keyAmountsBlock = formatKeyAmounts(fileNotes);
+
   return `請根據以下案件文件摘要，計算各項請求金額明細。
 
-${fileContext}
+${fileContext}${keyAmountsBlock}
 
 ${DAMAGES_FIELD_RULES}
 basis 為計算依據的具體說明，應包含金額的組成明細或計算方式。例如：
@@ -447,6 +456,7 @@ export const runDeepDisputeAnalysis = async (
   try {
     // 5. Run Case Reader + Issue Analyzer
     let orchestratorOutput: OrchestratorOutput;
+    let caseReaderFileNotes: FileNote[] = [];
     try {
       const caseReaderOutput = await runCaseReader(
         aiEnv,
@@ -475,11 +485,11 @@ export const runDeepDisputeAnalysis = async (
       orchestratorOutput = {
         caseSummary: caseReaderOutput.caseSummary,
         parties: caseReaderOutput.parties,
-        timelineSummary: caseReaderOutput.timelineSummary,
         legalIssues: issueAnalyzerOutput.legalIssues,
         undisputedFacts: issueAnalyzerOutput.undisputedFacts,
         informationGaps: issueAnalyzerOutput.informationGaps,
       };
+      caseReaderFileNotes = caseReaderOutput.fileNotes;
     } catch (caseReaderErr) {
       const msg = caseReaderErr instanceof Error ? caseReaderErr.message : String(caseReaderErr);
       console.error('[analysisService] Case Reader failed:', msg);
@@ -490,42 +500,45 @@ export const runDeepDisputeAnalysis = async (
       return { success: false, error: '未能識別出爭點，請確認檔案已正確處理。' };
     }
 
-    // 6. Persist disputes + sync parties (parallel)
-    // 只在用戶尚未填寫時才用 AI 提取的值回填，避免覆蓋用戶手動輸入
+    // 6. Clean up old data (FK ordering: damages first, then disputes) + sync parties
     const aiPlaintiff = !existingParties.plaintiff ? orchestratorOutput.parties.plaintiff : null;
     const aiDefendant = !existingParties.defendant ? orchestratorOutput.parties.defendant : null;
     const partyUpdates = {
       ...(aiPlaintiff ? { plaintiff: aiPlaintiff } : {}),
       ...(aiDefendant ? { defendant: aiDefendant } : {}),
     };
-    const [{ data, summary }] = await Promise.all([
-      persistDisputes(
-        orchestratorOutput.legalIssues,
-        orchestratorOutput.undisputedFacts,
-        orchestratorOutput.informationGaps,
-        caseId,
-        drizzle,
-      ),
-      Object.keys(partyUpdates).length > 0
-        ? drizzle.update(cases).set(partyUpdates).where(eq(cases.id, caseId))
-        : Promise.resolve(),
+    await Promise.all([
+      drizzle.delete(damages).where(eq(damages.case_id, caseId)),
+      drizzle
+        .update(cases)
+        .set({
+          information_gaps:
+            orchestratorOutput.informationGaps.length > 0
+              ? JSON.stringify(orchestratorOutput.informationGaps)
+              : null,
+          ...partyUpdates,
+        })
+        .where(eq(cases.id, caseId)),
     ]);
+    await drizzle.delete(disputes).where(eq(disputes.case_id, caseId));
 
-    // 7. Stage 3: Run damages with dispute context
+    // 7. Insert disputes first (damages FK references disputes)
     const disputeList: DisputeInfo[] = orchestratorOutput.legalIssues.map((issue, i) => ({
       id: issue.id,
       number: i + 1,
       title: issue.title,
     }));
+    const { data, summary } = await insertDisputes(orchestratorOutput.legalIssues, caseId, drizzle);
     const damagesResult = await runDamagesWithDisputes(caseId, db, drizzle, aiEnv, disputeList, {
       readyFiles,
-      skipDelete: true, // persistDisputes already cleared damages (FK ordering)
+      skipDelete: true,
+      fileNotes: caseReaderFileNotes,
     });
     const damagesData = damagesResult.success
       ? (damagesResult.data as Record<string, unknown>[])
       : [];
 
-    // 8. Dedup undisputed facts against damages (data ownership enforcement)
+    // 8. Dedup undisputed facts against damages, then write once
     if (damagesResult.success) {
       const damageItems = (damagesResult.data as DamageItem[]) ?? [];
       const deduped = deduplicateUndisputedFacts(orchestratorOutput.undisputedFacts, damageItems);
@@ -533,12 +546,19 @@ export const runDeepDisputeAnalysis = async (
         const removed = orchestratorOutput.undisputedFacts.length - deduped.length;
         console.log(`[analysisService] Deduped ${removed} undisputed facts (overlap with damages)`);
         orchestratorOutput.undisputedFacts = deduped;
-        await drizzle
-          .update(cases)
-          .set({ undisputed_facts: deduped.length > 0 ? JSON.stringify(deduped) : null })
-          .where(eq(cases.id, caseId));
       }
     }
+
+    // 9. Write undisputed_facts once (after dedup)
+    await drizzle
+      .update(cases)
+      .set({
+        undisputed_facts:
+          orchestratorOutput.undisputedFacts.length > 0
+            ? JSON.stringify(orchestratorOutput.undisputedFacts)
+            : null,
+      })
+      .where(eq(cases.id, caseId));
 
     return { success: true, data, summary, orchestratorOutput, damagesData };
   } finally {
@@ -550,27 +570,12 @@ export const runDeepDisputeAnalysis = async (
 
 const DISPUTE_BATCH_SIZE = 10;
 
-const persistDisputes = async (
+/** Insert disputes into DB (deletes must be done by caller) */
+const insertDisputes = async (
   issues: LegalIssue[],
-  undisputedFacts: SimpleFact[],
-  informationGaps: string[],
   caseId: string,
   drizzle: ReturnType<typeof getDB>,
 ): Promise<{ data: Record<string, unknown>[]; summary: string }> => {
-  // claims: pipeline Step 2 product, do NOT delete here (claims belong to brief context)
-  // Delete damages + update case fields in parallel (independent), then delete disputes (FK ordering)
-  await Promise.all([
-    drizzle.delete(damages).where(eq(damages.case_id, caseId)),
-    drizzle
-      .update(cases)
-      .set({
-        undisputed_facts: undisputedFacts.length > 0 ? JSON.stringify(undisputedFacts) : null,
-        information_gaps: informationGaps.length > 0 ? JSON.stringify(informationGaps) : null,
-      })
-      .where(eq(cases.id, caseId)),
-  ]);
-  await drizzle.delete(disputes).where(eq(disputes.case_id, caseId));
-
   // Batch insert for D1 param limit
   for (let i = 0; i < issues.length; i += DISPUTE_BATCH_SIZE) {
     const batch = issues.slice(i, i + DISPUTE_BATCH_SIZE);
@@ -617,7 +622,6 @@ const persistDamages = async (
   const records = items.map((d) => ({
     id: nanoid(),
     case_id: caseId,
-    category: d.category,
     description: d.description || null,
     amount: d.amount,
     basis: d.basis || null,
@@ -657,6 +661,8 @@ export interface RunAnalysisOptions {
   readyFiles?: ReadyFile[];
   /** Skip DELETE before INSERT — use when caller already cleared the table (e.g. persistDisputes) */
   skipDelete?: boolean;
+  /** Stage 1 Case Reader 產出的 fileNotes，注入 key_amounts 給 damages prompt */
+  fileNotes?: FileNote[];
 }
 
 /**
@@ -680,9 +686,9 @@ export const runDamagesWithDisputes = async (
     readyFiles = loaded;
   }
 
-  // 2. Build context + dispute-aware prompt
+  // 2. Build context + dispute-aware prompt (inject key_amounts from Stage 1 if available)
   const fileContext = buildFileContext(readyFiles, { enriched: true });
-  const prompt = buildDamagesPromptWithDisputes(fileContext, disputeList);
+  const prompt = buildDamagesPromptWithDisputes(fileContext, disputeList, options?.fileNotes);
 
   // 3. Call Gemini with dispute_id in schema
   let content: string;

@@ -374,10 +374,11 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     const bs = get().briefCache[id];
     if (!bs) return;
     const content = bs.brief.content_structured || { paragraphs: [] };
+    const newParagraphs = [...content.paragraphs, paragraph];
     const newCache = patchCache(get().briefCache, id, {
       brief: {
         ...bs.brief,
-        content_structured: { paragraphs: [...content.paragraphs, paragraph] },
+        content_structured: { paragraphs: newParagraphs },
       },
     });
     set({ briefCache: newCache, ...aliasesFor(newCache, get().activeBriefId) });

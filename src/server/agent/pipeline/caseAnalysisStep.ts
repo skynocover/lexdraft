@@ -233,7 +233,6 @@ export const runCaseAnalysis = async (
           plaintiff: sanitizeDbString(caseRow.plaintiff) || '',
           defendant: sanitizeDbString(caseRow.defendant) || '',
         },
-        timelineSummary: '',
         legalIssues: existingLegalIssues,
         undisputedFacts: parseJsonField(caseRow.undisputed_facts, []),
         informationGaps: parseJsonField(caseRow.information_gaps, []),
@@ -274,11 +273,10 @@ export const runCaseAnalysis = async (
         if (deepResult.damagesData.length > 0) {
           freshDamages = (
             deepResult.damagesData as Array<{
-              category: string;
               description: string | null;
               amount: number;
             }>
-          ).map((d) => ({ category: d.category, description: d.description, amount: d.amount }));
+          ).map((d) => ({ description: d.description, amount: d.amount }));
 
           await ctx.sendSSE({
             type: 'brief_update',
@@ -348,7 +346,6 @@ export const runCaseAnalysis = async (
     if (existingDamages.length > 0) {
       await pushChild('沿用既有金額', 'done');
       const damages = existingDamages.map((d) => ({
-        category: d.category,
         description: d.description,
         amount: d.amount,
       }));
@@ -385,9 +382,9 @@ export const runCaseAnalysis = async (
       data: result.data,
     });
 
-    const damages = (
-      result.data as Array<{ category: string; description: string | null; amount: number }>
-    ).map((d) => ({ category: d.category, description: d.description, amount: d.amount }));
+    const damages = (result.data as Array<{ description: string | null; amount: number }>).map(
+      (d) => ({ description: d.description, amount: d.amount }),
+    );
     return { damages, orchestratorOutput };
   })();
 

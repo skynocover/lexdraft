@@ -10,7 +10,7 @@ import {
 } from './strategyConstants';
 import { FALLBACK_GUIDANCE } from '../../lib/defaultTemplates';
 import { getCaseTypeGuidance } from './caseTypeKnowledge';
-import type { ReasoningStrategyInput } from '../pipeline/types';
+import { getDamageLabel, type ReasoningStrategyInput } from '../pipeline/types';
 
 // ── 起訴狀推理工作流程 ──
 const COMPLAINT_REASONING_WORKFLOW = `
@@ -217,7 +217,7 @@ export const buildReasoningStrategyInput = (
   const damageText =
     input.damages.length > 0
       ? input.damages
-          .map((d) => `- ${d.category}: NT$ ${d.amount.toLocaleString()} (${d.description || ''})`)
+          .map((d) => `- ${getDamageLabel(d)}：NT$ ${d.amount.toLocaleString()}`)
           .join('\n')
       : '無';
 

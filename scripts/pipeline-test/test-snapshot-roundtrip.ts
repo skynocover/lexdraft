@@ -32,7 +32,6 @@ store.caseMetadata = {
   clientRole: 'plaintiff',
   caseInstructions: '請求損害賠償',
 };
-store.timelineSummary = '2024-01-01 發生車禍';
 store.templateTitle = '準備書狀';
 
 const issue: LegalIssue = {
@@ -154,7 +153,6 @@ console.log('── Snapshot Round-Trip Test ──\n');
 assert(restored.caseSummary === store.caseSummary, 'caseSummary');
 assert(deepEqual(restored.parties, store.parties), 'parties');
 assert(deepEqual(restored.caseMetadata, store.caseMetadata), 'caseMetadata');
-assert(restored.timelineSummary === store.timelineSummary, 'timelineSummary');
 assert(restored.templateTitle === store.templateTitle, 'templateTitle');
 assert(deepEqual(restored.legalIssues, store.legalIssues), 'legalIssues');
 assert(deepEqual(restored.informationGaps, store.informationGaps), 'informationGaps');

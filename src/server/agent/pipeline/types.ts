@@ -174,7 +174,6 @@ export interface TimelineItem {
 // ── Damage Item (金額項目) ──
 
 export interface DamageItem {
-  category: string;
   description: string | null;
   amount: number;
   dispute_id?: string | null;
@@ -184,8 +183,10 @@ export interface DamageItem {
 export const isItemDamage = (d: DamageItem): boolean =>
   !d.description?.includes('總計') && !d.description?.includes('合計');
 
-/** Resolve display label for a damage item (description with category fallback) */
-export const getDamageLabel = (d: DamageItem): string => d.description || d.category;
+const DAMAGE_FALLBACK_LABEL = '未命名項目';
+
+/** Resolve display label for a damage item */
+export const getDamageLabel = (d: DamageItem): string => d.description || DAMAGE_FALLBACK_LABEL;
 
 /** Format a damage item as "label：新臺幣X元" */
 export const formatDamageAmount = (d: DamageItem): string =>

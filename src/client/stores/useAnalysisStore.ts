@@ -21,7 +21,6 @@ export interface Dispute {
 export interface Damage {
   id: string;
   case_id: string;
-  category: string;
   description: string | null;
   amount: number;
   basis: string | null;

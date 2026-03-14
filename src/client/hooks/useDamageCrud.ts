@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import { useAnalysisStore, type Damage } from '../stores/useAnalysisStore';
 
 interface DamageFormData {
-  category: string;
   description: string;
   amount: number;
   basis: string;

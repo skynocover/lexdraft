@@ -4,22 +4,13 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import type { Damage } from '../../stores/useAnalysisStore';
-
-export const DAMAGE_CATEGORIES = ['財產上損害', '非財產上損害'] as const;
-export type DamageCategory = (typeof DAMAGE_CATEGORIES)[number];
 
 interface DamageFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   damage: Damage | null;
-  onSubmit: (data: {
-    category: string;
-    description: string;
-    amount: number;
-    basis: string;
-  }) => void;
+  onSubmit: (data: { description: string; amount: number; basis: string }) => void;
   loading?: boolean;
 }
 
@@ -30,15 +21,12 @@ export const DamageFormDialog = ({
   onSubmit,
   loading,
 }: DamageFormDialogProps) => {
-  const [category, setCategory] = useState<string>(DAMAGE_CATEGORIES[0]);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [basis, setBasis] = useState('');
 
   useEffect(() => {
     if (open) {
-      const cat = damage?.category ?? DAMAGE_CATEGORIES[0];
-      setCategory(DAMAGE_CATEGORIES.includes(cat as DamageCategory) ? cat : DAMAGE_CATEGORIES[0]);
       setDescription(damage?.description ?? '');
       setAmount(damage?.amount?.toString() ?? '');
       setBasis(damage?.basis ?? '');
@@ -53,7 +41,6 @@ export const DamageFormDialog = ({
     if (!description.trim() || isNaN(parsedAmount)) return;
 
     onSubmit({
-      category,
       description: description.trim(),
       amount: parsedAmount,
       basis: basis.trim(),
@@ -112,25 +99,6 @@ export const DamageFormDialog = ({
               rows={3}
               className="border-bd bg-bg-2 text-t1"
             />
-          </div>
-
-          {/* 分類（移到最下面） */}
-          <div className="space-y-2">
-            <Label htmlFor="dmg-category" className="text-t2">
-              分類
-            </Label>
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger className="border-bd bg-bg-2 text-t1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-bd bg-bg-1">
-                {DAMAGE_CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <DialogFooter>

@@ -120,7 +120,6 @@ console.log('── Populated store round-trip ──');
     clientRole: 'plaintiff',
     caseInstructions: '主張侵權行為',
   };
-  store.timelineSummary = '2025年1月1日發生車禍';
   store.legalIssues = [ISSUE];
   store.informationGaps = ['缺少醫療收據'];
   store.damages = [{ category: '醫療費用', description: '手術費', amount: 50000 }];
@@ -146,7 +145,6 @@ console.log('── Populated store round-trip ──');
   assert(restored.caseMetadata.caseNumber === '113年度訴字第123號', 'caseMetadata.caseNumber');
   assert(restored.caseMetadata.court === '臺灣臺北地方法院', 'caseMetadata.court');
   assert(restored.caseMetadata.clientRole === 'plaintiff', 'caseMetadata.clientRole');
-  assert(restored.timelineSummary === '2025年1月1日發生車禍', 'timelineSummary');
 
   assert(restored.legalIssues.length === 1, 'legalIssues.length');
   assert(restored.legalIssues[0].id === 'dispute-1', 'legalIssues[0].id');

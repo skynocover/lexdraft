@@ -115,7 +115,7 @@ export const damages = sqliteTable('damages', {
   case_id: text('case_id')
     .notNull()
     .references(() => cases.id),
-  category: text('category').notNull(), // 貨款、利息、違約金、精神慰撫金 等
+  category: text('category'), // deprecated — 不再使用，保留欄位避免 migration 風險
   description: text('description'), // 明細說明
   amount: integer('amount').notNull(), // 金額（整數，以新台幣元計）
   basis: text('basis'), // 計算依據

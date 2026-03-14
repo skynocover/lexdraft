@@ -40,7 +40,6 @@ damagesRouter.post('/cases/:caseId/damages', async (c) => {
   await db.insert(damages).values({
     id,
     case_id: caseId,
-    category: body.category,
     description: body.description || null,
     amount: body.amount,
     basis: body.basis || null,
@@ -53,7 +52,6 @@ damagesRouter.post('/cases/:caseId/damages', async (c) => {
     {
       id,
       case_id: caseId,
-      category: body.category,
       description: body.description || null,
       amount: body.amount,
       basis: body.basis || null,
@@ -72,7 +70,6 @@ damagesRouter.put('/damages/:id', async (c) => {
   const db = getDB(c.env.DB);
 
   const updates: Record<string, unknown> = {};
-  if (body.category !== undefined) updates.category = body.category;
   if (body.description !== undefined) updates.description = body.description;
   if (body.amount !== undefined) updates.amount = body.amount;
   if (body.basis !== undefined) updates.basis = body.basis;

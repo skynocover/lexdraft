@@ -1,7 +1,12 @@
 import { useMemo, type FC } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import type { Damage } from '../../stores/useAnalysisStore';
-import { cleanText, formatAmount, parseJsonArray } from '../../lib/textUtils';
+import {
+  cleanText,
+  formatAmount,
+  parseJsonArray,
+  DAMAGE_FALLBACK_LABEL,
+} from '../../lib/textUtils';
 import { FileRefTags } from './FileRefTags';
 
 interface InlineDamageItemProps {
@@ -31,7 +36,7 @@ export const InlineDamageItem: FC<InlineDamageItemProps> = ({
     <div className="group rounded bg-bg-1 px-2 py-1.5">
       <div className="flex w-full items-center gap-2">
         <span className="flex-1 truncate text-xs text-t2">
-          {cleanText(damage.description || damage.category)}
+          {cleanText(damage.description || DAMAGE_FALLBACK_LABEL)}
         </span>
         <span className="shrink-0 text-xs font-medium text-ac">{formatAmount(damage.amount)}</span>
         <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">

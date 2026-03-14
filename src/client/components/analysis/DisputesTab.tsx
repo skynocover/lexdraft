@@ -3,7 +3,7 @@ import { ChevronRight, Search, AlertTriangle } from 'lucide-react';
 import { useAnalysisStore, type Damage } from '../../stores/useAnalysisStore';
 import { useCaseStore } from '../../stores/useCaseStore';
 import { useDamageCrud } from '../../hooks/useDamageCrud';
-import { cleanText, formatAmount } from '../../lib/textUtils';
+import { cleanText, formatAmount, DAMAGE_FALLBACK_LABEL } from '../../lib/textUtils';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { ConfirmDialog } from '../ui/confirm-dialog';
@@ -169,7 +169,7 @@ export const DisputesTab = () => {
       <ConfirmDialog
         open={!!dmg.deleting}
         onOpenChange={(open) => !open && dmg.clearDelete()}
-        description={`確定刪除金額項目「${cleanText(dmg.deleting?.description || dmg.deleting?.category || '')}」？`}
+        description={`確定刪除金額項目「${cleanText(dmg.deleting?.description || DAMAGE_FALLBACK_LABEL)}」？`}
         onConfirm={dmg.handleConfirmDelete}
       />
     </div>

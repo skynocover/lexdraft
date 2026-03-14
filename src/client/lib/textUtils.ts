@@ -1,3 +1,5 @@
+export const DAMAGE_FALLBACK_LABEL = '未命名項目';
+
 export const formatAmount = (amount: number): string => `NT$ ${amount.toLocaleString()}`;
 
 /** Parse a JSON field that may arrive as string (from DB) or already-parsed array (from SSE) */

@@ -34,7 +34,6 @@ const ISSUE_ANALYZER_TIMEOUT_MS = 60_000;
 export interface CaseReaderOutput {
   caseSummary: string;
   parties: { plaintiff: string; defendant: string };
-  timelineSummary: string;
   fileNotes: FileNote[];
 }
 
@@ -47,7 +46,6 @@ export interface IssueAnalyzerOutput {
 export interface OrchestratorOutput {
   caseSummary: string;
   parties: { plaintiff: string; defendant: string };
-  timelineSummary: string;
   legalIssues: LegalIssue[];
   undisputedFacts: SimpleFact[];
   informationGaps: string[];
@@ -252,7 +250,6 @@ export const runIssueAnalyzer = async (
       caseSummary: caseReaderOutput.caseSummary,
       parties: caseReaderOutput.parties,
       caseMetadata,
-      timelineSummary: caseReaderOutput.timelineSummary,
       fileNotes: formatFileNotes(caseReaderOutput.fileNotes),
       templateTitle,
     });
@@ -280,7 +277,6 @@ const parseCaseReaderOutput = (content: string, input: OrchestratorInput): CaseR
   const parsed = parseLLMJsonResponse<{
     case_summary?: string;
     parties?: { plaintiff?: string; defendant?: string };
-    timeline_summary?: string;
     file_notes?:
       | Array<{
           filename?: string;
@@ -293,7 +289,6 @@ const parseCaseReaderOutput = (content: string, input: OrchestratorInput): CaseR
   }>(content, 'Case Reader Agent 回傳格式不正確');
 
   const caseSummary = (parsed.case_summary || '').slice(0, 500);
-  const timelineSummary = (parsed.timeline_summary || '').slice(0, 800);
 
   // Parse file_notes: expected array, graceful fallback if string
   let fileNotes: FileNote[];
@@ -326,7 +321,6 @@ const parseCaseReaderOutput = (content: string, input: OrchestratorInput): CaseR
       plaintiff: parsed.parties?.plaintiff || input.existingParties.plaintiff || '',
       defendant: parsed.parties?.defendant || input.existingParties.defendant || '',
     },
-    timelineSummary,
     fileNotes,
   };
 };
@@ -376,7 +370,6 @@ const buildCaseReaderFallback = (input: OrchestratorInput): CaseReaderOutput => 
       plaintiff: input.existingParties.plaintiff || '',
       defendant: input.existingParties.defendant || '',
     },
-    timelineSummary: '',
     fileNotes: [],
   };
 };

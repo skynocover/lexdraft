@@ -95,7 +95,6 @@ export class ContextStore {
     clientRole: '',
     caseInstructions: '',
   };
-  timelineSummary = '';
   templateTitle = '';
   legalIssues: LegalIssue[] = [];
   undisputedFacts: SimpleFact[] = [];
@@ -186,7 +185,6 @@ export class ContextStore {
   seedFromOrchestrator = (output: OrchestratorOutput) => {
     this.caseSummary = output.caseSummary;
     this.parties = output.parties;
-    this.timelineSummary = output.timelineSummary;
     this.legalIssues = output.legalIssues;
     this.undisputedFacts = output.undisputedFacts;
     this.informationGaps = output.informationGaps;
@@ -250,7 +248,6 @@ export class ContextStore {
     caseSummary: this.caseSummary,
     parties: { ...this.parties },
     caseMetadata: { ...this.caseMetadata },
-    timelineSummary: this.timelineSummary,
     templateTitle: this.templateTitle,
     legalIssues: this.legalIssues,
     undisputedFacts: this.undisputedFacts,
@@ -277,7 +274,6 @@ export class ContextStore {
       clientRole: '',
       caseInstructions: '',
     };
-    store.timelineSummary = snap.timelineSummary ?? '';
     store.templateTitle = snap.templateTitle ?? '';
     store.legalIssues = snap.legalIssues ?? [];
     store.undisputedFacts = snap.undisputedFacts ?? [];
@@ -302,7 +298,6 @@ export interface ContextStoreSnapshot {
   caseSummary: string;
   parties: { plaintiff: string; defendant: string };
   caseMetadata: CaseMetadata;
-  timelineSummary: string;
   templateTitle: string;
   legalIssues: LegalIssue[];
   undisputedFacts: SimpleFact[];

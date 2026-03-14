@@ -43,7 +43,6 @@ const aiEnv = {
 // ── Types ──
 
 interface DamageWithDispute {
-  category: string;
   description: string;
   amount: number;
   basis: string;
@@ -164,7 +163,7 @@ const main = async (): Promise<void> => {
     }
     for (const d of damageItems) {
       console.log(
-        `│  ${d.description.padEnd(15)} NT$ ${d.amount.toLocaleString().padStart(10)}  (${d.category})`,
+        `│  ${(d.description || '').padEnd(15)} NT$ ${d.amount.toLocaleString().padStart(10)}`,
       );
     }
     console.log(`│  小計: NT$ ${subtotal.toLocaleString()}`);

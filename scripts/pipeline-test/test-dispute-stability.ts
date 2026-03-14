@@ -110,7 +110,6 @@ const buildCaseReaderOutputFromDB = (): CaseReaderOutput => {
       plaintiff: caseRow.plaintiff || '',
       defendant: caseRow.defendant || '',
     },
-    timelineSummary: '',
     fileNotes,
   };
 };
