@@ -1,8 +1,15 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { useParams } from 'react-router';
-import { ChevronsLeft, FileText, BookOpen } from 'lucide-react';
+import { ChevronsLeft, FileText, Search, type LucideIcon } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
 import { useUIStore } from '../../stores/useUIStore';
+
+const QUICK_ACTIONS: { icon: LucideIcon; label: string; message: string }[] = [
+  { icon: FileText, label: '撰寫起訴狀', message: '請幫我撰寫起訴狀' },
+  { icon: FileText, label: '撰寫答辯狀', message: '請幫我撰寫答辯狀' },
+  { icon: FileText, label: '撰寫準備書狀', message: '請幫我撰寫準備書狀' },
+  { icon: Search, label: '分析案件爭點', message: '請分析本案的爭點' },
+];
 import { MessageBubble } from '../chat/MessageBubble';
 import { TooltipProvider } from '../ui/tooltip';
 
@@ -107,22 +114,20 @@ export function ChatPanel() {
           <div className="flex flex-1 flex-col items-center justify-center gap-4">
             <p className="text-center text-xs text-t3">選擇指令或輸入問題開始對話</p>
             <div className="flex flex-col gap-2">
-              <button
-                onClick={() => caseId && sendMessage(caseId, '請幫我撰寫一份書狀')}
-                disabled={!caseId || isStreaming}
-                className="flex items-center gap-2 rounded-lg border border-bd bg-bg-2 px-4 py-2.5 text-xs text-t2 transition hover:bg-bg-3 hover:text-t1 disabled:opacity-50"
-              >
-                <FileText size={14} className="shrink-0 text-ac" />
-                撰寫書狀
-              </button>
-              <button
-                onClick={() => caseId && sendMessage(caseId, '請摘要本案的案件內容')}
-                disabled={!caseId || isStreaming}
-                className="flex items-center gap-2 rounded-lg border border-bd bg-bg-2 px-4 py-2.5 text-xs text-t2 transition hover:bg-bg-3 hover:text-t1 disabled:opacity-50"
-              >
-                <BookOpen size={14} className="shrink-0 text-ac" />
-                摘要案件內容
-              </button>
+              {QUICK_ACTIONS.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <button
+                    key={action.message}
+                    onClick={() => caseId && sendMessage(caseId, action.message)}
+                    disabled={!caseId || isStreaming}
+                    className="flex items-center gap-2 rounded-lg border border-bd bg-bg-2 px-4 py-2.5 text-xs text-t2 transition hover:bg-bg-3 hover:text-t1 disabled:opacity-50"
+                  >
+                    <Icon size={14} className="shrink-0 text-ac" />
+                    {action.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

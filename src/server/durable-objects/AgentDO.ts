@@ -12,7 +12,7 @@ import type { SSEEvent } from '../../shared/types';
 
 const VALID_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((t) => t.function.name));
 
-const MAX_ROUNDS = 30;
+const MAX_ROUNDS = 15;
 
 const SYSTEM_PROMPT = `你是 LexDraft AI 助理，一位專業的台灣法律分析助手。你的任務是協助律師分析案件卷宗、整理爭點、撰寫法律書狀。
 
