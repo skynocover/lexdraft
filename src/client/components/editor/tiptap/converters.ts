@@ -363,7 +363,7 @@ function citationToNode(c: Citation, index: number): JSONContent {
     type: 'citation',
     attrs: {
       citationId: c.id,
-      label: c.label,
+      label: c.exhibit_label || c.label,
       type: c.type,
       status: c.status,
       quotedText: c.quoted_text,
