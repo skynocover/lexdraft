@@ -10,7 +10,6 @@ export const SOFT_TIMEOUT_MS = 25000;
 export const MAX_TOKENS = 8192;
 export const JSON_OUTPUT_MAX_TOKENS = 32768;
 export const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
-export const TOOL_RESULT_MAX_CHARS = 200;
 
 // ── System-managed sections (不由 AI 撰寫，由程式產出) ──
 

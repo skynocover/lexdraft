@@ -24,7 +24,6 @@ import {
   MAX_TOKENS,
   JSON_OUTPUT_MAX_TOKENS,
   CLAUDE_MODEL,
-  TOOL_RESULT_MAX_CHARS,
   getClaimsRules,
   getSectionRules,
   getJsonSchema,
@@ -41,6 +40,7 @@ import {
   type ReasoningStrategyOutput,
   type FetchedLaw,
   type PerIssueAnalysis,
+  type SectionLawPlanEntry,
   type LegalIssue,
 } from './types';
 import type { PipelineContext } from './types';
@@ -204,13 +204,22 @@ const buildJsonOutputMessage = (store: ContextStore, input: ReasoningStrategyInp
   // Pre-build issue ID → title lookup
   const issueIdToTitle = new Map(store.legalIssues.map((i) => [i.id, i.title]));
 
-  // Build law_id → dispute mapping for prompt
-  const lawDisputeMapping = store.perIssueAnalysis
-    .map((a) => {
-      const label = issueIdToTitle.get(a.issue_id) || a.issue_id;
-      return `  ${label}: [${a.key_law_ids.map((id) => `"${id}"`).join(', ')}]`;
-    })
-    .join('\n');
+  // Build section-level law mapping for prompt (from Claude's reasoning)
+  // Falls back to dispute-only mapping if section_law_plan is empty
+  const sectionLawMapping =
+    store.sectionLawPlan.length > 0
+      ? store.sectionLawPlan
+          .map(
+            (entry) =>
+              `  ${entry.label} → [${entry.law_ids.map((id) => `"${id}"`).join(', ')}]（${entry.reason}）`,
+          )
+          .join('\n')
+      : store.perIssueAnalysis
+          .map((a) => {
+            const label = issueIdToTitle.get(a.issue_id) || a.issue_id;
+            return `  ${label}: [${a.key_law_ids.map((id) => `"${id}"`).join(', ')}]`;
+          })
+          .join('\n');
 
   // Build damages list for structuring
   const damagesText = store.damages
@@ -237,8 +246,8 @@ ${damagesText || '（無）'}
 [可用法條 — 法條 ID 對照表，請從此處精確複製 ID]
 ${lawText || '（無）'}
 
-[爭點→法條分配表 — 每個爭點對應的 relevant_law_ids]
-${lawDisputeMapping || '（無）'}
+[段落→法條分配表 — 每個段落對應的 relevant_law_ids（推理階段決定，請精確複製）]
+${sectionLawMapping || '（無）'}
 
 [案件檔案]
 ${fileText}
@@ -249,7 +258,7 @@ ${store.legalIssues.map((issue, i) => `  爭點${i + 1}（${issue.title}）: "${
 請根據以上推理結果，輸出完整的論證策略 JSON（claims + sections）。
 - 每個非前言/結論的 section 必須填寫 subsection（格式：一、描述性標題），依序編號（一、二、三…）。前言和結論的 subsection 為 null
 - 每個損害賠償項目（含「不爭執」的項目）都必須有獨立的 section，不得省略。不爭執項目的 section 可以較簡短，但仍需有 legal_basis、relevant_file_ids 和 relevant_law_ids
-- 每個內容段落（非前言/結論）的 relevant_law_ids 必須從[爭點→法條分配表]中複製該爭點對應的法條 ID，或從[可用法條]中選擇適合的法條。前言和結論的 relevant_law_ids 為空陣列 []
+- 每個內容段落（非前言/結論）的 relevant_law_ids 必須從[段落→法條分配表]中找到最匹配的項目並精確複製其法條 ID。前言和結論的 relevant_law_ids 為空陣列 []
 - 每個內容段落（非前言/結論）的 relevant_file_ids 必須列出該段撰寫時需要引用的檔案 ID，確保 Writer 能產生引用標記。根據段落主題從[案件檔案]中選擇對應的檔案
 - 每個內容段落的 dispute_id 必須從上方對照表原封不動複製，前言和結論為 null
 - 每個 claim 的 dispute_id 也必須從上方對照表原封不動複製`;
@@ -284,7 +293,7 @@ const SEARCH_LAW_TOOL: ClaudeToolDefinition = {
 const FINALIZE_STRATEGY_TOOL: ClaudeToolDefinition = {
   name: 'finalize_strategy',
   description:
-    '當你完成法律推理、完整性檢查、並補搜完所有需要的法條後，呼叫此工具。需提供整體策略摘要和逐爭點分析（請求權基礎、法條、涵攝、攻防）。呼叫此工具後，你需要在下一輪輸出完整的 JSON 結果。',
+    '當你完成法律推理、完整性檢查、並補搜完所有需要的法條後，呼叫此工具。需提供整體策略摘要、逐爭點分析、以及每個計畫段落的法條分配。呼叫此工具後，你需要在下一輪輸出完整的 JSON 結果。',
   input_schema: {
     type: 'object',
     properties: {
@@ -321,13 +330,37 @@ const FINALIZE_STRATEGY_TOOL: ClaudeToolDefinition = {
           required: ['issue_id', 'chosen_basis', 'key_law_ids', 'element_mapping'],
         },
       },
+      section_law_plan: {
+        type: 'array',
+        description:
+          '每個計畫段落（含非爭點段落）的法條分配。必須涵蓋所有內容段落（侵權行為歸責、每個損害項目、過失相抵等），不只是爭點段落。前言和結論不需要列入。',
+        items: {
+          type: 'object',
+          properties: {
+            label: {
+              type: 'string',
+              description: '段落主題（如「侵權行為歸責」「醫療費用」「精神慰撫金」「過失相抵」）',
+            },
+            law_ids: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '本段應引用的法條 ID（必須是已查到全文的法條）',
+            },
+            reason: {
+              type: 'string',
+              description: '簡述為什麼用這些法條（如「主要請求權基礎」「增加生活需要」）',
+            },
+          },
+          required: ['label', 'law_ids', 'reason'],
+        },
+      },
       supplemented_law_ids: {
         type: 'array',
         items: { type: 'string' },
         description: '推理過程中補搜到的法條 ID 列表',
       },
     },
-    required: ['reasoning_summary', 'per_issue_analysis'],
+    required: ['reasoning_summary', 'per_issue_analysis', 'section_law_plan'],
   },
 };
 
@@ -356,7 +389,7 @@ const handleSearchLaw = async (
   lawSession: LawSearchSession,
   searchCount: number,
   progress?: ReasoningStrategyProgressCallback,
-): Promise<{ content: string; summary: string; newCount: number }> => {
+): Promise<{ content: string; newCount: number }> => {
   const query = input.query as string;
   const lawName = input.law_name as string | undefined;
   const purpose = input.purpose as string;
@@ -365,7 +398,6 @@ const handleSearchLaw = async (
   if (searchCount >= MAX_SEARCHES) {
     return {
       content: '已達到搜尋上限。請根據現有法條完成推理並呼叫 finalize_strategy。',
-      summary: '已達搜尋上限',
       newCount: searchCount,
     };
   }
@@ -377,7 +409,6 @@ const handleSearchLaw = async (
     await progress?.onSearchLaw(query, purpose, 0, []);
     return {
       content: `未找到「${query}」的相關法條。請嘗試用更短的關鍵字，或繼續推理。`,
-      summary: `搜尋「${query}」未找到結果`,
       newCount,
     };
   }
@@ -404,24 +435,15 @@ const handleSearchLaw = async (
     console.error('[reasoningStrategy] Failed to persist law refs:', err),
   );
 
-  // Tool result 只回傳截斷版（完整內容已存入 ContextStore，Writer Step 3 獨立取用）
+  // Tool result 回傳完整法條全文（Claude 需要完整內容來精確分配 section_law_plan）
   const resultText = fetchedLaws
-    .map((l) => {
-      const truncated =
-        l.content.length > TOOL_RESULT_MAX_CHARS
-          ? l.content.slice(0, TOOL_RESULT_MAX_CHARS) + '…'
-          : l.content;
-      return `[${l.id}] ${l.law_name} ${l.article_no}\n${truncated}`;
-    })
+    .map((l) => `[${l.id}] ${l.law_name} ${l.article_no}\n${l.content}`)
     .join('\n\n');
 
   const lawNames = fetchedLaws.map((l) => `${l.law_name} ${l.article_no}`);
   await progress?.onSearchLaw(query, purpose, fetchedLaws.length, lawNames);
 
-  const summary = `已搜尋「${query}」，找到 ${fetchedLaws.length} 條：${lawNames.join('、')}`;
-
   return {
-    summary,
     content: `找到 ${fetchedLaws.length} 筆結果：\n\n${resultText}`,
     newCount,
   };
@@ -454,10 +476,6 @@ export const runReasoningStrategy = async (
   let searchCount = 0;
   const startTime = Date.now();
   const lawSession = createLawSearchSession(ctx.mongoUrl, ctx.mongoApiKey);
-
-  // tool_use_id → 摘要。用於壓縮舊 tool_result，減少每輪重傳的 input tokens。
-  const toolResultSummaries = new Map<string, string>();
-  const processedMsgIndices = new Set<number>();
 
   // Helper: call Claude with current messages (reasoning phase)
   const callReasoning = () =>
@@ -565,19 +583,20 @@ export const runReasoningStrategy = async (
         if (tc.name === 'search_law') {
           const r = await handleSearchLaw(tc.input, ctx, store, lawSession, searchCount, progress);
           resultBlocks.push({ type: 'tool_result', tool_use_id: tc.id, content: r.content });
-          toolResultSummaries.set(tc.id, r.summary);
           searchCount = r.newCount;
         }
 
         if (tc.name === 'finalize_strategy') {
           const summary = tc.input.reasoning_summary as string;
           const perIssue = (tc.input.per_issue_analysis as PerIssueAnalysis[]) || [];
+          const lawPlan = (tc.input.section_law_plan as SectionLawPlanEntry[]) || [];
           finalized = true;
           store.setReasoningSummary(summary);
           store.setPerIssueAnalysis(perIssue);
+          store.setSectionLawPlan(lawPlan);
 
           console.log(
-            `[reasoning] finalized: ${perIssue.length} issues, key_law_ids=[${perIssue.flatMap((a) => a.key_law_ids).join(', ')}]`,
+            `[reasoning] finalized: ${perIssue.length} issues, ${lawPlan.length} section law plans, key_law_ids=[${perIssue.flatMap((a) => a.key_law_ids).join(', ')}]`,
           );
 
           resultBlocks.push({ type: 'tool_result', tool_use_id: tc.id, content: '推理完成。' });
@@ -597,23 +616,6 @@ export const runReasoningStrategy = async (
       }
 
       messages.push({ role: 'user', content: resultBlocks });
-
-      // 壓縮舊的 search_law tool_result：最新一則保留完整（Claude 尚未讀過），
-      // 更早的替換為摘要，減少下一輪重傳的 input tokens。
-      const lastUserIdx = messages.length - 1;
-      for (let i = 0; i < lastUserIdx; i++) {
-        if (processedMsgIndices.has(i)) continue;
-        const msg = messages[i];
-        if (msg.role !== 'user' || typeof msg.content === 'string') continue;
-        for (const block of msg.content as ClaudeContentBlock[]) {
-          if (block.type !== 'tool_result') continue;
-          const summary = toolResultSummaries.get(block.tool_use_id);
-          if (summary) {
-            block.content = summary;
-          }
-        }
-        processedMsgIndices.add(i);
-      }
 
       // If finalize just happened, break out of loop — don't wait for next round
       if (finalized) break;
@@ -647,6 +649,7 @@ export const runReasoningStrategy = async (
           finalized = true;
           store.setReasoningSummary(tc.input.reasoning_summary as string);
           store.setPerIssueAnalysis((tc.input.per_issue_analysis as PerIssueAnalysis[]) || []);
+          store.setSectionLawPlan((tc.input.section_law_plan as SectionLawPlanEntry[]) || []);
           await progress?.onFinalized();
         }
       }

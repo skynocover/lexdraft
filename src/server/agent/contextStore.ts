@@ -15,6 +15,7 @@ import {
   type TimelineItem,
   type DamageItem,
   type PerIssueAnalysis,
+  type SectionLawPlanEntry,
 } from './pipeline/types';
 import type { OrchestratorOutput } from './orchestratorAgent';
 import { mapDisputeToLegalIssue, type DisputeRow } from './toolHelpers';
@@ -109,6 +110,7 @@ export class ContextStore {
   // Step 2: Reasoning → Structuring 產出
   reasoningSummary = '';
   perIssueAnalysis: PerIssueAnalysis[] = [];
+  sectionLawPlan: SectionLawPlanEntry[] = [];
   supplementedLaws: FetchedLaw[] = [];
   foundLaws: FoundLaw[] = []; // combined laws for Writer
 
@@ -212,6 +214,11 @@ export class ContextStore {
     this.perIssueAnalysis = analysis;
   };
 
+  /** Set section-level law plan from finalize_strategy tool call */
+  setSectionLawPlan = (plan: SectionLawPlanEntry[]) => {
+    this.sectionLawPlan = plan;
+  };
+
   /** Add supplemented laws found during Step 2 reasoning (written immediately) */
   addSupplementedLaws = (laws: FetchedLaw[]) => {
     for (const law of laws) {
@@ -258,6 +265,7 @@ export class ContextStore {
     sections: this.sections,
     reasoningSummary: this.reasoningSummary,
     perIssueAnalysis: this.perIssueAnalysis,
+    sectionLawPlan: this.sectionLawPlan,
     supplementedLaws: this.supplementedLaws,
     foundLaws: this.foundLaws,
     draftSections: this.draftSections,
@@ -284,6 +292,7 @@ export class ContextStore {
     store.sections = snap.sections ?? [];
     store.reasoningSummary = snap.reasoningSummary ?? '';
     store.perIssueAnalysis = snap.perIssueAnalysis ?? [];
+    store.sectionLawPlan = snap.sectionLawPlan ?? [];
     store.supplementedLaws = snap.supplementedLaws ?? [];
     store.foundLaws = snap.foundLaws ?? [];
     store.draftSections = snap.draftSections ?? [];
@@ -308,6 +317,7 @@ export interface ContextStoreSnapshot {
   sections: StrategySection[];
   reasoningSummary: string;
   perIssueAnalysis: PerIssueAnalysis[];
+  sectionLawPlan: SectionLawPlanEntry[];
   supplementedLaws: FetchedLaw[];
   foundLaws: FoundLaw[];
   draftSections: DraftSection[];

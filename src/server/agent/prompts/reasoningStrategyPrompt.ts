@@ -103,6 +103,7 @@ const COMMON_SEARCH_INSTRUCTIONS = `
         - 過失相抵（§217）：若對方可能主張原告與有過失，應安排獨立段落論證
         - 時效（§197）：若案件時效可能成為爭點，應安排獨立段落論證
         - 即使案件事實對我方有利，仍應主動論證以封堵對方攻擊空間
+     f. **section_law_plan 是否涵蓋所有內容段落？** 每個損害賠償項目、侵權行為歸責段、防禦性段落都必須有對應的法條分配。不要只列爭點段落。
    - 如果發現缺漏，立即補搜後再呼叫 finalize_strategy`;
 
 const COMMON_TOOLS_AND_RULES = `
@@ -111,6 +112,7 @@ const COMMON_TOOLS_AND_RULES = `
 當你完成推理和完整性檢查，呼叫 finalize_strategy 工具：
 - reasoning_summary：整體策略方向（200字以內）
 - per_issue_analysis：每個爭點的推理結論，包含選定的請求權基礎、需要的法條 ID、構成要件涵攝、攻防預判
+- section_law_plan：**每個計畫段落**的法條分配（包含非爭點段落！）。必須涵蓋所有你計畫撰寫的內容段落，例如：侵權行為歸責、每個損害賠償項目（醫療費用、交通費用、財物損害等）、過失相抵（如有）。每個項目指定 label（段落主題）、law_ids（法條 ID）、reason（簡述理由）。前言和結論不需要列入。
 然後輸出完整的 JSON 結果。
 
 ═══ 工具 ═══

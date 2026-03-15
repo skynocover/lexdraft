@@ -205,6 +205,16 @@ export interface PerIssueAnalysis {
   defense_response?: string;
 }
 
+// ── Section Law Plan (Reasoning → Structuring handoff) ──
+// Claude outputs one entry per planned section, covering ALL sections (not just disputes).
+// This is fed into Gemini's prompt so every section has explicit law guidance.
+
+export interface SectionLawPlanEntry {
+  label: string; // e.g. '侵權行為歸責', '醫療費用', '精神慰撫金'
+  law_ids: string[]; // e.g. ['B0000001-184', 'B0000001-191-2']
+  reason: string; // brief reason, e.g. '主要請求權基礎'
+}
+
 // ── Law Fetch Types ──
 
 // Step 1 output (pure function, no AI)
