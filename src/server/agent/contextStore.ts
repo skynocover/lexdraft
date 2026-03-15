@@ -59,12 +59,8 @@ export const resolveLawsForSection = (
   // If section has no subsection, it's truly intro/conclusion → no laws
   if (!section.dispute_id) {
     if (isContentSection(section)) {
-      console.log(
-        `[contextStore] law tier-3: dispute=null but has subsection → ALL ${allLaws.length} laws`,
-      );
       return allLaws;
     }
-    console.log(`[contextStore] law tier-3: dispute=null (intro/conclusion) → 0 laws`);
     return [];
   }
   console.warn(

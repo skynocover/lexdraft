@@ -550,7 +550,6 @@ export const runDeepDisputeAnalysis = async (
       const deduped = deduplicateUndisputedFacts(orchestratorOutput.undisputedFacts, damageItems);
       if (deduped.length !== orchestratorOutput.undisputedFacts.length) {
         const removed = orchestratorOutput.undisputedFacts.length - deduped.length;
-        console.log(`[analysisService] Deduped ${removed} undisputed facts (overlap with damages)`);
         orchestratorOutput.undisputedFacts = deduped;
       }
     }

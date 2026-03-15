@@ -3,14 +3,8 @@ import { getDB } from '../db';
 import { files } from '../db/schema';
 import { parseJsonField } from '../lib/jsonUtils';
 import type { LegalIssue } from './pipeline/types';
-// Re-export JSON utilities for backward compatibility
-export {
-  parseJsonField,
-  cleanLLMJson,
-  parseLLMJsonResponse,
-  repairTruncatedJson,
-  parseLLMJsonArray,
-} from '../lib/jsonUtils';
+// Re-export JSON utilities used by tool handlers
+export { parseJsonField, parseLLMJsonResponse } from '../lib/jsonUtils';
 
 // Re-export shared summary parser
 export { parseSummaryText } from '../../shared/summaryUtils';

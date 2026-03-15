@@ -132,12 +132,6 @@ export const persistExhibits = async (
       label: buildExhibitLabel(e.prefix, e.number),
     })),
   });
-
-  if (newExhibits.length > 0) {
-    console.log(
-      `[exhibits] Assigned ${newExhibits.length} new exhibits (total: ${allExhibits.length})`,
-    );
-  }
 };
 
 /** Upsert fetched law refs into the case's law_refs JSON column. */

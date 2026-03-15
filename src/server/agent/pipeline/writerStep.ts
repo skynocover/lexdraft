@@ -176,8 +176,6 @@ export const writeSection = async (
   const sectionKey = getSectionKey(strategySection.section, strategySection.subsection);
   const lawCount = documents.filter((d) => d.doc_type === 'law').length;
   const fileCount = documents.length - lawCount;
-  console.log(`[writer] section="${sectionKey}" laws=${lawCount} files=${fileCount}`);
-
   // ── Build Writer instruction (prompt assembly delegated to writerPrompt.ts) ──
   const instruction = buildWriterInstruction({
     pipelineMode: ctx.pipelineMode,

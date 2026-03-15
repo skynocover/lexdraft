@@ -44,7 +44,6 @@ export type SSEEvent =
       data: unknown;
     }
   | { type: 'pipeline_progress'; steps: PipelineStep[] }
-  | { type: 'suggested_actions'; actions: { label: string; prompt: string }[] }
   | { type: 'snapshot_data'; stepName: string; data: unknown }
   | { type: 'error'; message: string }
   | { type: 'done' };

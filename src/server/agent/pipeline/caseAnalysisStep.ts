@@ -216,10 +216,6 @@ export const runCaseAnalysis = async (
 
     if (hasUsableDisputes) {
       // Use existing disputes — skip Case Reader + Issue Analyzer entirely
-      console.log(
-        `Skipping Step 0: reusing ${existingDisputes.length} existing disputes for case ${ctx.caseId}`,
-      );
-
       const existingLegalIssues: LegalIssue[] = existingDisputes.map(mapDisputeToLegalIssue);
 
       // Build caseSummary from pre-parsed file summaries (no LLM call)

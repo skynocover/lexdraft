@@ -32,7 +32,7 @@ LexDraft is a legal document drafting platform for Taiwanese lawyers. Full-stack
 - **Auth**: Simple Bearer token middleware (`src/server/middleware/auth.ts`), token from `AUTH_TOKEN` env var
 - **Validation**: Zod v4 schemas in `src/server/schemas/`. Route bodies 用 `parseBody()`（throw badRequest），Agent tool args 用 `safeParseToolArgs()`（回傳 toolError，不 throw）
 
-**API Routes** (`src/server/routes/`): `cases`, `files`, `chat`, `briefs`, `damages`, `law`
+**API Routes** (`src/server/routes/`): `cases`, `files`, `chat`, `briefs`, `briefVersions`, `damages`, `disputes`, `law`, `timeline`, `inlineAI`, `templates`, `exhibits`, `analyze`
 
 **Agent System** (`src/server/agent/`):
 
@@ -54,13 +54,15 @@ LexDraft is a legal document drafting platform for Taiwanese lawyers. Full-stack
   - `useChatStore` — chat messages, SSE streaming, handles `brief_update` events to push into analysis/brief stores
   - `useTabStore` — workspace tab management
   - `useUIStore` — bottom panel state, UI toggles
-- **Editor**: Tiptap v3 with custom extensions (`CitationNode`, `LegalHeading`, `LegalParagraph`) in `src/client/components/editor/tiptap/`
+  - `useRewindStore` — pipeline rewind/replay state
+  - `useTemplateStore` — brief template management
+- **Editor**: Tiptap v3 with custom extensions (`CitationNode`, `LegalHeading`, `LegalParagraph`, `ExhibitMark`, `PlaceholderHighlight`) in `src/client/components/editor/tiptap/`
 - **Styling**: Tailwind CSS v4 with custom dark theme tokens defined in `src/client/app.css` (e.g., `--color-bg-1`, `--color-t1`, `--color-ac`, `--color-bd`)
 
 ### Key Data Flow
 
 1. User sends chat → `useChatStore` POSTs to `/api/cases/:id/chat` → creates Durable Object stub → AgentDO runs tool loop
-2. AgentDO streams SSE events back: `thinking`, `tool_start`, `tool_result`, `brief_update`, `message`
+2. AgentDO streams SSE events back: `message_start`, `text_delta`, `message_end`, `tool_call_start`, `tool_result`, `brief_update`, `pipeline_progress`, `done`
 3. `useChatStore.startStreaming()` parses SSE and dispatches to appropriate stores
 4. Tool results (disputes, damages, timeline) go to `useAnalysisStore`; brief content goes to `useBriefStore`
 
@@ -135,18 +137,21 @@ npx wrangler d1 execute lexdraft-db --local --command "PRAGMA table_info(cases)"
 
 ### D1 Table Schema Quick Reference
 
-| Table              | PK  | Key Columns                                                                                         | JSON Columns                                                                                           |
-| ------------------ | --- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| **cases**          | id  | user_id, title, case_number, court, case_type, plaintiff, defendant, client_role, case_instructions | law_refs (`[{id,law_name,article,full_text,is_manual}]`), timeline                                     |
-| **briefs**         | id  | case_id, template_id, title, version                                                                | content_structured (`{paragraphs:[{id,section,subsection,content_md,segments,citations,dispute_id}]}`) |
-| **files**          | id  | case_id, filename, r2_key, status, category, doc_date, full_text, summary, content_md               | —                                                                                                      |
-| **claims**         | id  | **case_id** (not brief_id!), side, claim_type, statement, assigned_section, dispute_id, responds_to | —                                                                                                      |
-| **disputes**       | id  | case_id, number, title, our_position, their_position                                                | evidence, law_refs                                                                                     |
-| **damages**        | id  | case_id, category, description, amount, basis, dispute_id                                           | evidence_refs                                                                                          |
-| **messages**       | id  | case_id, role, content                                                                              | metadata                                                                                               |
-| **brief_versions** | id  | brief_id, version_no, label, content_structured, created_by                                         | content_structured (same as briefs)                                                                    |
+| Table              | PK  | Key Columns                                                                                                     | JSON Columns                                                                                           |
+| ------------------ | --- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **users**          | id  | email, password_hash, name                                                                                      | —                                                                                                      |
+| **cases**          | id  | user_id, title, case_number, court, plaintiff, defendant, client_role, case_instructions, division, template_id | law_refs, timeline, undisputed_facts, information_gaps                                                 |
+| **templates**      | id  | title, category, content_md, brief_mode, is_default                                                             | —                                                                                                      |
+| **briefs**         | id  | case_id, template_id, title, version                                                                            | content_structured (`{paragraphs:[{id,section,subsection,content_md,segments,citations,dispute_id}]}`) |
+| **brief_versions** | id  | brief_id, version_no, label, content_structured, created_by                                                     | content_structured (same as briefs)                                                                    |
+| **files**          | id  | case_id, filename, r2_key, status, category, doc_date, full_text, summary, content_md                           | —                                                                                                      |
+| **disputes**       | id  | case_id, number, title, our_position, their_position                                                            | evidence, law_refs                                                                                     |
+| **damages**        | id  | case_id, category (deprecated), description, amount, basis, dispute_id                                          | evidence_refs                                                                                          |
+| **claims**         | id  | **case_id** (not brief_id!), side, claim_type, statement, assigned_section, dispute_id, responds_to             | —                                                                                                      |
+| **exhibits**       | id  | case_id, file_id, prefix (甲證/乙證), number, doc_type, description                                             | —                                                                                                      |
+| **messages**       | id  | case_id, role, content                                                                                          | metadata                                                                                               |
 
-⚠️ **常見陷阱**：`claims` 表的外鍵是 `case_id`，不是 `brief_id`。`content_structured` 只在 `briefs` 和 `brief_versions` 表，不在 `cases` 表。
+⚠️ **常見陷阱**：`claims` 表的外鍵是 `case_id`，不是 `brief_id`。`content_structured` 只在 `briefs` 和 `brief_versions` 表，不在 `cases` 表。`cases` 表沒有 `case_type` 欄位。
 
 ## Architecture Decision Records (ADR)
 
@@ -183,7 +188,7 @@ npx wrangler d1 execute lexdraft-db --local --command "PRAGMA table_info(cases)"
 
 - **不要修改 package.json 的依賴版本**
 - **不要創建超過 300 行的組件文件**
-- 不要換成Gemini api, 一率使用openrouter
+- 不要繞過 Cloudflare AI Gateway 直接呼叫 AI API
 - 不要自己寫CSS, 而是使用tailwind
 - 不要使用Alchemy來做部署
 - 不要擅自對正式區進行部署或執行任何命令

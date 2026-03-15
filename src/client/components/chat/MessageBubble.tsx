@@ -1,10 +1,10 @@
 import { useState, memo } from 'react';
 import Markdown from 'react-markdown';
-import { useChatStore, type ChatMessage } from '../../stores/useChatStore';
+import type { ChatMessage } from '../../stores/useChatStore';
 import { useRewindStore } from '../../stores/useRewindStore';
-import { QuickActionButtons } from './QuickActionButtons';
 import { PipelineStages } from './PipelineStages';
 import { SearchLawDisplay } from './SearchLawDisplay';
+import { Undo2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { getCategoryTagCls, getCategoryLabel } from '../../lib/categoryConfig';
 import { getToolLabel } from './getToolLabel';
@@ -27,14 +27,10 @@ export const MessageBubble = memo(function MessageBubble({
   message,
   isStreaming,
   nextToolResult,
-  isLastAssistant,
-  caseId,
 }: {
   message: ChatMessage;
   isStreaming: boolean;
   nextToolResult?: ChatMessage;
-  isLastAssistant?: boolean;
-  caseId?: string;
 }) {
   const [expanded, setExpanded] = useState(() => {
     if (message.role !== 'tool_call') return false;
@@ -63,20 +59,7 @@ export const MessageBubble = memo(function MessageBubble({
     // Hide empty assistant bubbles (happens when AI only calls tools)
     if (!message.content && !isStreaming) return null;
 
-    const handleQuickAction = (prompt: string) => {
-      if (caseId) useChatStore.getState().sendMessage(caseId, prompt);
-    };
-
-    const handleRewind = () => {
-      useRewindStore.getState().rewind(message.id);
-    };
-
-    const suggestedActions = (message.metadata?.suggested_actions ?? []) as {
-      label: string;
-      prompt: string;
-    }[];
     const showRewind = !!snapshot?.hadChanges && !isStreaming;
-    const showSuggestions = isLastAssistant && !isStreaming;
 
     return (
       <div className="flex justify-start">
@@ -91,13 +74,16 @@ export const MessageBubble = memo(function MessageBubble({
               ) : (
                 <span className="text-t3">...</span>
               )}
-              {(showRewind || (showSuggestions && suggestedActions.length > 0)) && (
-                <QuickActionButtons
-                  actions={showSuggestions ? suggestedActions : []}
-                  onAction={handleQuickAction}
-                  showRewind={showRewind}
-                  onRewind={handleRewind}
-                />
+              {showRewind && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => useRewindStore.getState().rewind(message.id)}
+                    className="flex items-center gap-1 rounded-full border border-rd/30 bg-rd/10 px-3 py-1 text-xs text-rd transition hover:bg-rd/20"
+                  >
+                    <Undo2 size={12} />
+                    回復變更
+                  </button>
+                </div>
               )}
             </div>
           </TooltipTrigger>

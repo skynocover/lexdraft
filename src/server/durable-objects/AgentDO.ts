@@ -3,35 +3,16 @@ import { nanoid } from 'nanoid';
 import { eq, asc } from 'drizzle-orm';
 import { getDB } from '../db';
 import { messages, cases } from '../db/schema';
-import {
-  callAI,
-  callAIStreaming,
-  type ChatMessage,
-  type ToolCall,
-  type AIEnv,
-} from '../agent/aiClient';
+import { callAIStreaming, type ChatMessage, type ToolCall, type AIEnv } from '../agent/aiClient';
 import { TOOL_DEFINITIONS, executeTool } from '../agent/tools';
 import { parseOpenAIStream, type OpenAIChunk } from '../agent/sseParser';
-import { parseLLMJsonArray } from '../agent/toolHelpers';
 import { TEMPLATE_ID_AUTO, TEMPLATE_SELECTION_GUIDE } from '../lib/defaultTemplates';
 import { buildCaseMetaLines } from '../agent/prompts/promptHelpers';
-
-const VALID_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((t) => t.function.name));
 import type { SSEEvent } from '../../shared/types';
 
+const VALID_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((t) => t.function.name));
+
 const MAX_ROUNDS = 30;
-
-const SUGGEST_PROMPT = `你是法律助理的建議系統。根據對話上下文，產生 2-3 個使用者可能想做的下一步操作。
-
-直接輸出 JSON array，不要用 markdown code block 包裹，不要加任何其他文字。
-格式範例：[{"label":"分析爭點","prompt":"請分析案件爭點"},{"label":"搜尋法條","prompt":"請搜尋相關法條"}]
-
-規則：
-- label 最多 4 個中文字
-- prompt 是完整的使用者指令
-- 根據對話進度建議合理的下一步
-- 不要建議使用者已經做過的操作
-- 最多 3 個建議`;
 
 const SYSTEM_PROMPT = `你是 LexDraft AI 助理，一位專業的台灣法律分析助手。你的任務是協助律師分析案件卷宗、整理爭點、撰寫法律書狀。
 
@@ -585,30 +566,6 @@ ${paragraphList}
         content: fullContent,
         created_at: new Date().toISOString(),
       });
-
-      // Generate suggested actions
-      try {
-        const recentMessages = chatMessages
-          .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .slice(-6);
-        const suggestResult = await callAI(
-          aiEnv,
-          [{ role: 'system', content: SUGGEST_PROMPT }, ...recentMessages],
-          { responseFormat: { type: 'json_object' }, maxTokens: 512 },
-        );
-        const actions = parseLLMJsonArray<{ label: string; prompt: string }>(
-          suggestResult.content,
-          '建議操作格式不正確',
-        );
-        if (actions.length > 0) {
-          await sendSSE({
-            type: 'suggested_actions',
-            actions: actions.slice(0, 3),
-          });
-        }
-      } catch (err) {
-        console.error('Suggested actions generation failed:', err);
-      }
 
       break;
     }

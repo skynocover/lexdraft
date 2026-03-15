@@ -144,22 +144,6 @@ export const handleSSEEvent = (
       break;
     }
 
-    case 'suggested_actions': {
-      const msgs = actions.getMessages();
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].role === 'assistant') {
-          actions.updateMessage(msgs[i].id, {
-            metadata: {
-              ...msgs[i].metadata,
-              suggested_actions: event.actions,
-            },
-          });
-          break;
-        }
-      }
-      break;
-    }
-
     case 'error':
       actions.setError(event.message);
       toast.error('發生錯誤', { description: event.message });

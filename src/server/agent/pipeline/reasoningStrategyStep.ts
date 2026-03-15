@@ -509,9 +509,6 @@ export const runReasoningStrategy = async (
         fileIds: input.fileSummaries.map((f) => f.id),
         lawIds: [...allLawIds],
       };
-      console.log(
-        `[reasoningStrategy] schema enum: ${_schemaIds.disputeIds.length} disputes, ${_schemaIds.fileIds.length} files, ${_schemaIds.lawIds.length} laws`,
-      );
     }
     return callGeminiNative(ctx.aiEnv, structuringSystemPrompt, msg, {
       maxTokens: JSON_OUTPUT_MAX_TOKENS,
@@ -595,10 +592,6 @@ export const runReasoningStrategy = async (
           store.setPerIssueAnalysis(perIssue);
           store.setSectionLawPlan(lawPlan);
 
-          console.log(
-            `[reasoning] finalized: ${perIssue.length} issues, ${lawPlan.length} section law plans, key_law_ids=[${perIssue.flatMap((a) => a.key_law_ids).join(', ')}]`,
-          );
-
           resultBlocks.push({ type: 'tool_result', tool_use_id: tc.id, content: '推理完成。' });
           await progress?.onFinalized();
         }
@@ -667,17 +660,6 @@ export const runReasoningStrategy = async (
     console.log(
       `[reasoning] TOTAL: input=${tokenTotals.input}, output=${tokenTotals.output}, cache_write=${tokenTotals.cacheCreation}, cache_read=${tokenTotals.cacheRead}`,
     );
-    if (tokenTotals.cacheRead > 0 && tokenTotals.input > 0) {
-      const CACHE_READ_DISCOUNT = 0.9;
-      const savingsPercent = (
-        ((tokenTotals.cacheRead * CACHE_READ_DISCOUNT) / tokenTotals.input) *
-        100
-      ).toFixed(1);
-      console.log(
-        `[reasoning] CACHE SAVINGS: ${tokenTotals.cacheRead} tokens read from cache (~${savingsPercent}% input cost reduction)`,
-      );
-    }
-
     // ── Structuring: 策略結構化 JSON 輸出 ──
     await progress?.onOutputStart();
 

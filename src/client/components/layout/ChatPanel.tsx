@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { useParams } from 'react-router';
 import { ChevronsLeft, FileText, BookOpen } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
@@ -19,12 +19,6 @@ export function ChatPanel() {
 
   const prefillInput = useChatStore((s) => s.prefillInput);
   const setPrefillInput = useChatStore((s) => s.setPrefillInput);
-
-  // Find last assistant message id
-  const lastAssistantId = useMemo(
-    () => messages.findLast((m) => m.role === 'assistant')?.id ?? null,
-    [messages],
-  );
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -139,15 +133,12 @@ export function ChatPanel() {
               msg.role === 'tool_call'
                 ? messages.slice(idx + 1).find((m) => m.role === 'tool_result')
                 : undefined;
-            const isLastAssistant = msg.id === lastAssistantId;
             return (
               <MessageBubble
                 key={msg.id}
                 message={msg}
                 isStreaming={isStreaming}
                 nextToolResult={nextToolResult}
-                isLastAssistant={isLastAssistant}
-                caseId={caseId}
               />
             );
           })}
