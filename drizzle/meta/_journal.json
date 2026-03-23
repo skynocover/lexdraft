@@ -176,6 +176,13 @@
       "when": 1773499140047,
       "tag": "0024_eager_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1774277720869,
+      "tag": "0025_greedy_carlie_cooper",
+      "breakpoints": true
     }
   ]
 }

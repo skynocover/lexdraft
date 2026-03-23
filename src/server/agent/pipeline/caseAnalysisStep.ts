@@ -90,6 +90,7 @@ export const runCaseAnalysis = async (
           division: cases.division,
           client_role: cases.client_role,
           case_instructions: cases.case_instructions,
+          case_summary: cases.case_summary,
           timeline: cases.timeline,
           undisputed_facts: cases.undisputed_facts,
           information_gaps: cases.information_gaps,
@@ -107,6 +108,7 @@ export const runCaseAnalysis = async (
               division: null,
               client_role: null,
               case_instructions: null,
+              case_summary: null,
               timeline: null,
               undisputed_facts: null,
               information_gaps: null,
@@ -218,10 +220,9 @@ export const runCaseAnalysis = async (
       // Use existing disputes — skip Case Reader + Issue Analyzer entirely
       const existingLegalIssues: LegalIssue[] = existingDisputes.map(mapDisputeToLegalIssue);
 
-      // Build caseSummary from pre-parsed file summaries (no LLM call)
-      const caseSummary = parsedFiles
-        .map((f) => `${f.filename}: ${f.parsedSummary || ''}`)
-        .join('\n');
+      const caseSummary =
+        caseRow.case_summary ||
+        parsedFiles.map((f) => `${f.filename}: ${f.parsedSummary || ''}`).join('\n');
 
       orchestratorOutput = {
         caseSummary,
