@@ -318,8 +318,8 @@ const parseCaseReaderOutput = (content: string, input: OrchestratorInput): CaseR
   return {
     caseSummary,
     parties: {
-      plaintiff: parsed.parties?.plaintiff || input.existingParties.plaintiff || '',
-      defendant: parsed.parties?.defendant || input.existingParties.defendant || '',
+      plaintiff: input.existingParties.plaintiff || parsed.parties?.plaintiff || '',
+      defendant: input.existingParties.defendant || parsed.parties?.defendant || '',
     },
     fileNotes,
   };

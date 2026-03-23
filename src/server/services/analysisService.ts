@@ -518,6 +518,7 @@ export const runDeepDisputeAnalysis = async (
       drizzle
         .update(cases)
         .set({
+          case_summary: orchestratorOutput.caseSummary || null,
           information_gaps:
             orchestratorOutput.informationGaps.length > 0
               ? JSON.stringify(orchestratorOutput.informationGaps)

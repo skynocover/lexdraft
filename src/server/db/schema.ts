@@ -27,6 +27,7 @@ export const cases = sqliteTable('cases', {
   timeline: text('timeline'), // JSON array of timeline events
   undisputed_facts: text('undisputed_facts'), // JSON array of {id, description}
   information_gaps: text('information_gaps'), // JSON array of strings
+  case_summary: text('case_summary'), // Case Reader 產出的案件摘要（跨書狀共用）
   division: text('division'), // 庭別 (民事庭, 刑事庭, etc.)
   template_id: text('template_id'), // nullable, 選用的書狀範本
   disputes_analyzed_at: text('disputes_analyzed_at'), // ISO 8601 UTC, null = 從未分析
