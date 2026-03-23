@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useTabStore, type LawSearchResult } from '../../stores/useTabStore';
 import { useBriefStore, type LawRef } from '../../stores/useBriefStore';
 import { useCaseStore } from '../../stores/useCaseStore';
+import { useCitedLawRefs } from '../../hooks/useCitedLawRefs';
 import { api } from '../../lib/api';
 import { Accordion } from '../ui/accordion';
 import { LawSearchResultItem } from './LawSearchResultItem';
@@ -26,7 +27,6 @@ export const LawSearchViewer = ({
   const updateLawSearchTabQuery = useTabStore((s) => s.updateLawSearchTabQuery);
   const updateLawSearchTabCache = useTabStore((s) => s.updateLawSearchTabCache);
   const setLawRefs = useBriefStore((s) => s.setLawRefs);
-  const lawRefs = useBriefStore((s) => s.lawRefs);
   const currentCase = useCaseStore((s) => s.currentCase);
 
   const [query, setQuery] = useState(initialQuery);
@@ -40,7 +40,12 @@ export const LawSearchViewer = ({
   resultsRef.current = results;
   selectedRef.current = selected;
 
-  const existingIds = useMemo(() => new Set(lawRefs.map((r) => r.id)), [lawRefs]);
+  // Match sidebar logic: only show "已加入" for cited + manual laws (not pipeline residuals)
+  const { citedLawRefs, availableLawRefs } = useCitedLawRefs();
+  const existingIds = useMemo(
+    () => new Set([...citedLawRefs, ...availableLawRefs].map((r) => r.id)),
+    [citedLawRefs, availableLawRefs],
+  );
 
   // Sync cache back to store only on unmount
   useEffect(() => {

@@ -10,8 +10,6 @@ import {
 } from '../claudeClient';
 import { callGeminiNative } from '../aiClient';
 import { createLawSearchSession, type LawSearchSession } from '../../lib/lawSearch';
-import { upsertManyLawRefs } from '../../lib/lawRefsJson';
-import type { LawRefItem } from '../../lib/lawRefsJson';
 import {
   buildReasoningSystemPrompt,
   buildReasoningStrategyInput,
@@ -422,18 +420,6 @@ const handleSearchLaw = async (
     source: 'supplemented' as const,
   }));
   store.addSupplementedLaws(fetchedLaws);
-
-  // Persist to DB immediately (fire and forget for speed)
-  const lawRefs: LawRefItem[] = fetchedLaws.map((l) => ({
-    id: l.id,
-    law_name: l.law_name,
-    article: l.article_no,
-    full_text: l.content,
-    is_manual: false,
-  }));
-  upsertManyLawRefs(ctx.drizzle, ctx.caseId, lawRefs).catch((err) =>
-    console.error('[reasoningStrategy] Failed to persist law refs:', err),
-  );
 
   // Tool result 回傳完整法條全文（Claude 需要完整內容來精確分配 section_law_plan）
   const resultText = fetchedLaws

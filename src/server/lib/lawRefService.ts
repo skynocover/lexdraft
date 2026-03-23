@@ -11,66 +11,6 @@ export const LAW_ARTICLE_REGEX =
   /([\u4e00-\u9fff]{2,}(?:法|規則|條例|辦法|細則))第(\d+條(?:之\d+)?)/g;
 
 /**
- * Load law documents by IDs — cache-first with MongoDB fallback.
- * Returns loaded docs (id, title, content) ready for ClaudeDocument construction.
- * Automatically caches any newly fetched laws.
- */
-export const loadLawDocsByIds = async (
-  drizzle: Drizzle,
-  caseId: string,
-  mongoUrl: string,
-  lawIds: string[],
-): Promise<Array<{ id: string; title: string; content: string }>> => {
-  if (!lawIds.length) return [];
-
-  const cachedRefs = await readLawRefs(drizzle, caseId);
-  const cachedById = new Map(cachedRefs.map((r) => [r.id, r]));
-
-  const loaded: Array<{ id: string; title: string; content: string }> = [];
-  const loadedIds = new Set<string>();
-
-  // Phase 1: load from cache
-  for (const id of lawIds) {
-    const ref = cachedById.get(id);
-    if (ref && ref.full_text) {
-      loaded.push({ id: ref.id, title: `${ref.law_name} ${ref.article}`, content: ref.full_text });
-      loadedIds.add(ref.id);
-    }
-  }
-
-  // Phase 2: batch fetch missing from MongoDB (single $in query)
-  const stillMissing = lawIds.filter((id) => !loadedIds.has(id));
-  if (stillMissing.length && mongoUrl) {
-    try {
-      const results = await batchLookupLawsByIds(mongoUrl, stillMissing);
-      const toCache: LawRefItem[] = [];
-      for (const r of results) {
-        loaded.push({
-          id: r._id,
-          title: `${r.law_name} ${r.article_no}`,
-          content: r.content,
-        });
-        loadedIds.add(r._id);
-        toCache.push({
-          id: r._id,
-          law_name: r.law_name,
-          article: r.article_no,
-          full_text: r.content,
-          is_manual: false,
-        });
-      }
-      if (toCache.length) {
-        await upsertManyLawRefs(drizzle, caseId, toCache);
-      }
-    } catch {
-      /* skip on error */
-    }
-  }
-
-  return loaded;
-};
-
-/**
  * Detect law mentions in text that aren't already cited,
  * fetch them from MongoDB, cache in JSON, and return updated refs.
  */

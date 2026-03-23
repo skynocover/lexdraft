@@ -4,8 +4,6 @@
 import { eq, max } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { briefs, briefVersions, claims, exhibits } from '../../db/schema';
-import { upsertManyLawRefs } from '../../lib/lawRefsJson';
-import type { LawRefItem } from '../../lib/lawRefsJson';
 import type { Claim, PipelineContext } from './types';
 import type { ClientRole } from '../../../shared/caseConstants';
 import type { Paragraph } from '../../../client/stores/useBriefStore';
@@ -132,13 +130,4 @@ export const persistExhibits = async (
       label: buildExhibitLabel(e.prefix, e.number),
     })),
   });
-};
-
-/** Upsert fetched law refs into the case's law_refs JSON column. */
-export const persistLawRefs = async (
-  ctx: PipelineContext,
-  lawRefs: LawRefItem[],
-): Promise<void> => {
-  if (lawRefs.length === 0) return;
-  await upsertManyLawRefs(ctx.drizzle, ctx.caseId, lawRefs);
 };

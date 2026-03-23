@@ -3,7 +3,8 @@ import { nanoid } from 'nanoid';
 import { files, briefs } from '../../db/schema';
 import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { toolError, toolSuccess, parseJsonField } from '../toolHelpers';
-import { loadLawDocsByIds, fetchAndCacheUncitedMentions } from '../../lib/lawRefService';
+import { batchLookupLawsByIds } from '../../lib/lawSearch';
+import { fetchAndCacheUncitedMentions } from '../../lib/lawRefService';
 import type { Paragraph } from '../../../client/stores/useBriefStore';
 import type { ToolHandler } from './types';
 
@@ -73,11 +74,15 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
     doc_type: 'file' as const,
   }));
 
-  // 3. Load law refs specified by relevant_law_ids: JSON cache first, fallback to MongoDB
-  if (relevantLawIds.length) {
-    const lawDocs = await loadLawDocsByIds(drizzle, caseId, ctx.mongoUrl, relevantLawIds);
-    for (const doc of lawDocs) {
-      documents.push({ title: doc.title, content: doc.content, doc_type: 'law' as const });
+  // 3. Load law refs specified by relevant_law_ids directly from MongoDB
+  if (relevantLawIds.length && ctx.mongoUrl) {
+    const lawResults = await batchLookupLawsByIds(ctx.mongoUrl, relevantLawIds);
+    for (const r of lawResults) {
+      documents.push({
+        title: `${r.law_name} ${r.article_no}`,
+        content: r.content,
+        doc_type: 'law' as const,
+      });
     }
   }
 

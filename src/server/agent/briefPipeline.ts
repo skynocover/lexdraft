@@ -20,7 +20,6 @@ import {
   type ReasoningStrategyOutput,
   type PipelineContext,
 } from './pipeline/types';
-import type { LawRefItem } from '../lib/lawRefsJson';
 import { runCaseAnalysis } from './pipeline/caseAnalysisStep';
 import { buildQualityReport } from './pipeline/qualityReport';
 import { mapToJson } from './pipeline/snapshotUtils';
@@ -36,7 +35,6 @@ import {
   persistClaims,
   persistBriefContent,
   saveBriefVersion,
-  persistLawRefs,
   persistExhibits,
 } from './pipeline/pipelinePersistence';
 import { buildChineseExhibitMap } from '../lib/exhibitAssign';
@@ -149,16 +147,6 @@ export const runBriefPipeline = async (
       });
     }
     await progress.setStepChildren(STEP_LAW, [...lawFetchChildren]);
-
-    // Cache fetched laws in DB
-    const lawRefsToCache: LawRefItem[] = mentionedLaws.map((l) => ({
-      id: l.id,
-      law_name: l.law_name,
-      article: l.article_no,
-      full_text: l.content,
-      is_manual: false,
-    }));
-    await persistLawRefs(ctx, lawRefsToCache);
 
     await progress.completeStep(STEP_LAW, `${lawFetchResult.total} 條法條`);
 
