@@ -4,6 +4,7 @@ import { getDB } from '../db';
 import { files, cases } from '../db/schema';
 import { callAI, callGeminiNative, type AIEnv } from '../agent/aiClient';
 import type { AppEnv } from '../types';
+import { FILE_CATEGORY_VALUES, type FileCategoryValue } from '../../shared/caseConstants';
 
 const CMAP_BASE_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/';
 
@@ -42,7 +43,7 @@ export interface FileMessage {
 }
 
 interface ClassificationResult {
-  category: 'brief' | 'exhibit_a' | 'exhibit_b' | 'court' | 'other';
+  category: FileCategoryValue;
   doc_date: string | null;
   summary: string;
 }
@@ -50,7 +51,10 @@ interface ClassificationResult {
 const CLASSIFICATION_SCHEMA = {
   type: 'OBJECT',
   properties: {
-    category: { type: 'STRING', enum: ['brief', 'exhibit_a', 'exhibit_b', 'court', 'other'] },
+    category: {
+      type: 'STRING',
+      enum: FILE_CATEGORY_VALUES,
+    },
     doc_date: { type: 'STRING', nullable: true },
     summary: { type: 'STRING' },
   },
@@ -64,15 +68,16 @@ const buildClassifyPrompt = (clientRole: 'plaintiff' | 'defendant'): string => {
 
   return `你是法律文件分類助手。本案當事人為${roleLabel}方。根據以下檔案名稱和內容，判斷：
 
-1. category: brief（書狀）| ${ourSide}（我方證物）| ${theirSide}（對方證物）| court（法院文件）| other
+1. category: brief_theirs（對方書狀）| ${ourSide}（我方證物）| ${theirSide}（對方證物）| judgment（判決）| court（法院文件）| other
 2. doc_date: 文件日期（YYYY-MM-DD），如無法判斷則 null
 3. summary: 50-100 字繁體中文摘要，包含文件類型、當事人、核心主張、關鍵金額
 
 分類依據：
-- brief：起訴狀、準備狀、答辯狀、爭點整理狀等書狀（不論哪方）
+- brief_theirs：對方（非我方）提出的書狀，包含起訴狀、答辯狀、準備書狀、爭點整理狀等。判斷方式：若書狀的提出者是對方當事人，分類為 brief_theirs
 - ${ourSide}：我方提出的證據（合約、發票、照片、診斷證明等）
 - ${theirSide}：對方提出的證據
-- court：筆錄、通知書、裁定、判決等法院文件
+- judgment：法院判決書（含有「主文」「事實及理由」等段落的終局裁判）
+- court：裁定、筆錄、通知書、調解紀錄等法院文件（非判決）
 - other：無法分類
 
 回傳純 JSON，不要包含 markdown 標記。格式：
@@ -245,11 +250,12 @@ const fallbackClassify = (
     name.includes('答辯') ||
     name.includes('爭點')
   ) {
-    category = 'brief';
+    category = 'brief_theirs';
+  } else if (name.includes('判決')) {
+    category = 'judgment';
   } else if (
     name.includes('筆錄') ||
     name.includes('裁定') ||
-    name.includes('判決') ||
     name.includes('通知') ||
     name.includes('調解')
   ) {

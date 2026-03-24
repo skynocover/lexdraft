@@ -11,6 +11,8 @@ import {
 import { FALLBACK_GUIDANCE } from '../../lib/defaultTemplates';
 import { getCaseTypeGuidance } from './caseTypeKnowledge';
 import { getDamageLabel, type ReasoningStrategyInput } from '../pipeline/types';
+import { truncateText } from '../../lib/jsonUtils';
+import type { BriefModeValue } from '../../../shared/caseConstants';
 
 // ── 起訴狀推理工作流程 ──
 const COMPLAINT_REASONING_WORKFLOW = `
@@ -154,9 +156,60 @@ const COMMON_HARD_RULES = `═══ 硬性規則 ═══
 - legal_reasoning 不超過 500 字
 - 如果你發現某條法條被截斷（結尾有「...（截斷）」），且你需要完整內容來分析要件，請用 search_law 搜尋該條號的完整全文。`;
 
+// ── briefMode-specific overlay 指引 ──
+
+const SUPPLEMENT_OVERLAY = `
+
+═══ 準備書狀特別指引 ═══
+
+你正在撰寫準備書狀，核心目的是回應對造上一輪的攻防。
+
+1. 優先從下方 [對造書狀] 區塊識別對方的每一項主張和論點
+2. 對方的每個新主張、新證據、新法律論點都必須逐點回應
+3. 除了回應對方，也可以補充我方新的攻擊或防禦方法
+4. section 規劃應以「回應對方各點主張」為主軸，每個主要主張安排獨立段落
+5. 若對方提出新證據，規劃對應的反駁策略（質疑證據力、提出反證、或區分其證明範圍）
+6. 若 [對造書狀] 區塊不存在，根據爭點清單中的對方立場進行回應`;
+
+const CHALLENGE_OVERLAY = `
+
+═══ 上訴狀特別指引 ═══
+
+你正在撰寫上訴狀，核心目的是指出原判決的認事用法錯誤。
+
+1. 優先從下方 [原審判決] 區塊識別原判決的各項認定和理由
+2. 對每項認定判斷錯誤類型：
+   a. 事實認定錯誤：忽略關鍵證據、錯誤推論事實、違反經驗法則
+   b. 法律適用錯誤：引用錯誤法條、錯誤解釋法律要件、漏未適用應適用之法律
+   c. 判決理由矛盾：前後認定不一致、理由與主文矛盾
+   d. 判決金額計算錯誤：計算基礎有誤、遺漏應計項目
+3. section 規劃以「原判決第X項錯誤」為主軸
+4. 每個上訴理由的結構：原判決認定 → 錯在哪裡 → 正確見解 → 法律依據
+5. 搜尋最高法院相關判例來支持上訴主張
+6. 若 [原審判決] 區塊不存在，根據爭點清單和案件摘要推斷應挑戰的爭點`;
+
+/** Unified briefMode config: system prompt overlay + focus document section header */
+const BRIEF_MODE_CONFIG: Partial<
+  Record<BriefModeValue, { overlay: string; docTitle: string; docDesc: string }>
+> = {
+  supplement: {
+    overlay: SUPPLEMENT_OVERLAY,
+    docTitle: '對造書狀（你需要逐點回應）',
+    docDesc: '以下是對方提出的書狀，你的準備書狀需要針對這些主張逐一回應：',
+  },
+  challenge: {
+    overlay: CHALLENGE_OVERLAY,
+    docTitle: '原審判決（你需要逐點指出錯誤）',
+    docDesc: '以下是你要挑戰的判決，逐一找出認事用法錯誤：',
+  },
+};
+
 // ── 組裝 System Prompt ──
 
-export const buildReasoningSystemPrompt = (mode: PipelineMode): string => {
+export const buildReasoningSystemPrompt = (
+  mode: PipelineMode,
+  briefMode?: BriefModeValue | null,
+): string => {
   const isDefense = mode === 'defense';
   const roleIntro = isDefense
     ? '你是一位資深台灣訴訟律師，正在為被告方制定答辯策略。你可以使用文字自由推理，也可以搜尋法條資料庫來補充推理所需的法律依據。'
@@ -165,6 +218,8 @@ export const buildReasoningSystemPrompt = (mode: PipelineMode): string => {
   const claimsRules = getClaimsRules(mode);
   const sectionRules = getSectionRules(mode);
   const jsonSchema = getJsonSchema(mode);
+
+  const overlay = (briefMode && BRIEF_MODE_CONFIG[briefMode]?.overlay) || '';
 
   return `${roleIntro}
 
@@ -183,7 +238,23 @@ ${WRITING_CONVENTIONS}
 
 ${jsonSchema}
 
-${COMMON_HARD_RULES}`;
+${COMMON_HARD_RULES}${overlay}`;
+};
+
+// ── 焦點文件專區 ──
+
+const buildFocusDocSection = (
+  briefMode: BriefModeValue | null | undefined,
+  focusDocuments: ReasoningStrategyInput['focusDocuments'],
+): string => {
+  if (!focusDocuments || focusDocuments.length === 0) return '';
+  const cfg = briefMode ? BRIEF_MODE_CONFIG[briefMode] : undefined;
+  if (!cfg) return '';
+
+  const docs = focusDocuments
+    .map((d) => `【${d.filename}】(${d.fileId})\n${d.content}`)
+    .join('\n\n---\n\n');
+  return `\n\n═══ ${cfg.docTitle} ═══\n${cfg.docDesc}\n\n${docs}\n`;
 };
 
 // ── Build user message for reasoning strategy agent ──
@@ -228,7 +299,9 @@ export const buildReasoningStrategyInput = (
   const userLawText =
     input.userAddedLaws.length > 0
       ? input.userAddedLaws
-          .map((l) => `- [${l.id}] ${l.law_name} ${l.article_no}\n  ${l.content.slice(0, 200)}`)
+          .map(
+            (l) => `- [${l.id}] ${l.law_name} ${l.article_no}\n  ${truncateText(l.content, 200)}`,
+          )
           .join('\n')
       : '無';
 
@@ -270,7 +343,7 @@ ${lawText}
 
 [案件檔案摘要]
 ${fileText}
-
+${buildFocusDocSection(input.briefMode, input.focusDocuments)}
 [Information Gaps]
 ${gapText}
 

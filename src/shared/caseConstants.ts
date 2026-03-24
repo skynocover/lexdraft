@@ -88,3 +88,14 @@ export const BRIEF_MODE_VALUES = [
   'petition',
 ] as const;
 export type BriefModeValue = (typeof BRIEF_MODE_VALUES)[number];
+
+/** 檔案分類值（6 類 + legacy 'brief' alias） */
+export const FILE_CATEGORY_VALUES = [
+  'brief_theirs',
+  'exhibit_a',
+  'exhibit_b',
+  'judgment',
+  'court',
+  'other',
+] as const;
+export type FileCategoryValue = (typeof FILE_CATEGORY_VALUES)[number];

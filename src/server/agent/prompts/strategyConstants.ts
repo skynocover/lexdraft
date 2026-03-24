@@ -11,6 +11,11 @@ export const MAX_TOKENS = 8192;
 export const JSON_OUTPUT_MAX_TOKENS = 32768;
 export const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 
+/** 焦點文件（對方書狀/判決）注入 reasoning prompt 時的截斷字數上限 */
+export const FOCUS_DOC_MAX_LENGTH = 8000;
+/** 焦點文件最多注入幾份（避免 prompt 膨脹） */
+export const FOCUS_DOC_MAX_COUNT = 3;
+
 // ── System-managed sections (不由 AI 撰寫，由程式產出) ──
 
 export const AUTO_HEADINGS = ['證據方法', '證據'];

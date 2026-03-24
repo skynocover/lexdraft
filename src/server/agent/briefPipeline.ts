@@ -40,6 +40,46 @@ import {
 import { buildChineseExhibitMap } from '../lib/exhibitAssign';
 import { exhibits } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import { FOCUS_DOC_MAX_LENGTH, FOCUS_DOC_MAX_COUNT } from './prompts/strategyConstants';
+import type { BriefModeValue } from '../../shared/caseConstants';
+import { truncateText } from '../lib/jsonUtils';
+import type { FileRow } from './pipeline/writerStep';
+
+/** 根據 briefMode 從卷宗中提取焦點文件的 content_md（fallback full_text） */
+const extractFocusDocuments = (
+  briefMode: BriefModeValue | null,
+  parsedFiles: Array<{ id: string; filename: string; category: string | null }>,
+  fileContentMap: Map<string, FileRow>,
+): ReasoningStrategyInput['focusDocuments'] => {
+  if (!briefMode) return null;
+
+  let targetCategories: string[];
+  if (briefMode === 'supplement') {
+    targetCategories = ['brief_theirs', 'brief']; // 'brief' = legacy fallback
+  } else if (briefMode === 'challenge') {
+    targetCategories = ['judgment'];
+  } else {
+    return null;
+  }
+
+  const docs: Array<{ filename: string; fileId: string; content: string }> = [];
+  for (const f of parsedFiles) {
+    if (!f.category || !targetCategories.includes(f.category)) continue;
+    const full = fileContentMap.get(f.id);
+    if (!full) continue;
+    const raw = full.content_md || full.full_text || '';
+    if (!/\S/.test(raw)) continue;
+    const content = truncateText(
+      raw,
+      FOCUS_DOC_MAX_LENGTH,
+      `\n\n...（截斷，原文共 ${raw.length} 字）`,
+    );
+    docs.push({ filename: f.filename, fileId: f.id, content });
+    if (docs.length >= FOCUS_DOC_MAX_COUNT) break;
+  }
+
+  return docs.length === 0 ? null : docs;
+};
 
 export type { PipelineContext } from './pipeline/types';
 
@@ -214,6 +254,8 @@ export const runBriefPipeline = async (
       timeline: store.timeline,
       userAddedLaws,
       caseMetadata: store.caseMetadata,
+      briefMode: ctx.briefMode,
+      focusDocuments: extractFocusDocuments(ctx.briefMode, step0.parsedFiles, step0.fileContentMap),
     };
 
     const strategyOutput: ReasoningStrategyOutput = await runReasoningStrategy(

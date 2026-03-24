@@ -265,6 +265,12 @@ export interface ReasoningStrategyInput {
     content: string;
   }>;
   caseMetadata?: CaseMetadata;
+  briefMode?: BriefModeValue | null;
+  focusDocuments?: Array<{
+    filename: string;
+    fileId: string;
+    content: string;
+  }> | null;
 }
 
 // Re-export commonly used types

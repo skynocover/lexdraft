@@ -448,7 +448,7 @@ export const runReasoningStrategy = async (
 
   const hasTemplate = !!(templateContentMd && templateContentMd.trim());
   const pipelineMode = ctx.pipelineMode;
-  const systemPrompt = buildReasoningSystemPrompt(pipelineMode);
+  const systemPrompt = buildReasoningSystemPrompt(pipelineMode, ctx.briefMode);
   let userMessage = buildReasoningStrategyInput(input, hasTemplate);
 
   // 注入完整 markdown 範本到 Reasoning prompt
