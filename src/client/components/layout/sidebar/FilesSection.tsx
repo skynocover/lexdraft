@@ -17,10 +17,13 @@ import { useFileUpload } from '../../../hooks/useFileUpload';
 import { FileItem, SortableFileItem } from './FileItem';
 
 const CATEGORY_ORDER: Record<string, number> = {
-  brief: 0,
-  court: 1,
-  other: 2,
+  brief_theirs: 0,
+  judgment: 1,
+  court: 2,
+  other: 3,
 };
+// Legacy fallback — 舊檔案 category='brief' 沿用 brief_theirs 排序
+CATEGORY_ORDER.brief = CATEGORY_ORDER.brief_theirs;
 
 type FileWithExhibit = { file: CaseFile; exhibit?: Exhibit };
 

@@ -11,7 +11,6 @@ import {
 import { FALLBACK_GUIDANCE } from '../../lib/defaultTemplates';
 import { getCaseTypeGuidance } from './caseTypeKnowledge';
 import { getDamageLabel, type ReasoningStrategyInput } from '../pipeline/types';
-import { truncateText } from '../../lib/jsonUtils';
 import type { BriefModeValue } from '../../../shared/caseConstants';
 
 // ── 起訴狀推理工作流程 ──
@@ -299,9 +298,7 @@ export const buildReasoningStrategyInput = (
   const userLawText =
     input.userAddedLaws.length > 0
       ? input.userAddedLaws
-          .map(
-            (l) => `- [${l.id}] ${l.law_name} ${l.article_no}\n  ${truncateText(l.content, 200)}`,
-          )
+          .map((l) => `- [${l.id}] ${l.law_name} ${l.article_no}\n  ${l.content.slice(0, 200)}`)
           .join('\n')
       : '無';
 

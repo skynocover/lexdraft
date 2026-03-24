@@ -42,7 +42,6 @@ import { exhibits } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { FOCUS_DOC_MAX_LENGTH, FOCUS_DOC_MAX_COUNT } from './prompts/strategyConstants';
 import type { BriefModeValue } from '../../shared/caseConstants';
-import { truncateText } from '../lib/jsonUtils';
 import type { FileRow } from './pipeline/writerStep';
 
 /** 根據 briefMode 從卷宗中提取焦點文件的 content_md（fallback full_text） */
@@ -69,11 +68,10 @@ const extractFocusDocuments = (
     if (!full) continue;
     const raw = full.content_md || full.full_text || '';
     if (!/\S/.test(raw)) continue;
-    const content = truncateText(
-      raw,
-      FOCUS_DOC_MAX_LENGTH,
-      `\n\n...（截斷，原文共 ${raw.length} 字）`,
-    );
+    const content =
+      raw.length > FOCUS_DOC_MAX_LENGTH
+        ? raw.slice(0, FOCUS_DOC_MAX_LENGTH) + `\n\n...（截斷，原文共 ${raw.length} 字）`
+        : raw;
     docs.push({ filename: f.filename, fileId: f.id, content });
     if (docs.length >= FOCUS_DOC_MAX_COUNT) break;
   }
