@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
-import { FileText, Scale, ScrollText } from 'lucide-react';
+import { FileText, MessageSquare, Scale, ScrollText, Upload } from 'lucide-react';
 import { useBriefStore } from '../../stores/useBriefStore';
+import { useCaseStore } from '../../stores/useCaseStore';
 import { useTabStore } from '../../stores/useTabStore';
 import { TabBar } from '../layout/TabBar';
 import { A4PageEditor } from './tiptap/A4PageEditor';
@@ -107,23 +108,7 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
             autoSearch={activeTab.autoSearch}
           />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-4">
-            <p className="text-sm text-t2">從右側面板選擇內容</p>
-            <div className="space-y-2.5 text-xs text-t3">
-              <div className="flex items-center gap-2">
-                <ScrollText size={14} className="shrink-0 text-ac" />
-                <span>書狀草稿 — 在「卷宗」tab</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <FileText size={14} className="shrink-0 text-ac" />
-                <span>案件文件 — 在「卷宗」tab</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Scale size={14} className="shrink-0 text-ac" />
-                <span>法條全文 — 點擊書狀中的法條引用</span>
-              </div>
-            </div>
-          </div>
+          <EmptyEditorGuide />
         )}
       </div>
 
@@ -138,6 +123,52 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
           confirmRestore && handleRestore(confirmRestore.versionId, confirmRestore.tabId)
         }
       />
+    </div>
+  );
+};
+
+const EmptyEditorGuide = () => {
+  const hasFiles = useCaseStore((s) => s.files.length > 0);
+  const hasBriefs = useBriefStore((s) => s.briefs.length > 0);
+
+  if (!hasFiles) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3">
+        <Upload size={28} className="text-t3" />
+        <p className="text-sm text-t2">先上傳案件文件</p>
+        <p className="text-xs text-t3">起訴狀、答辯狀、證據等 PDF</p>
+        <p className="text-xs text-t3">上傳後 AI 會自動摘要並分析</p>
+      </div>
+    );
+  }
+
+  if (!hasBriefs) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3">
+        <MessageSquare size={28} className="text-t3" />
+        <p className="text-sm text-t2">在左側對話開始生成書狀</p>
+        <p className="text-xs text-t3">例如：「幫我寫民事起訴狀」</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4">
+      <p className="text-sm text-t2">從右側面板選擇內容</p>
+      <div className="space-y-2.5 text-xs text-t3">
+        <div className="flex items-center gap-2">
+          <ScrollText size={14} className="shrink-0 text-ac" />
+          <span>書狀草稿 — 在「卷宗」tab</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <FileText size={14} className="shrink-0 text-ac" />
+          <span>案件文件 — 在「卷宗」tab</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Scale size={14} className="shrink-0 text-ac" />
+          <span>法條全文 — 點擊書狀中的法條引用</span>
+        </div>
+      </div>
     </div>
   );
 };

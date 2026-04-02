@@ -88,3 +88,24 @@ export const hasLawRefByNameArticle = (
 ): boolean => {
   return refs.some((r) => r.law_name === lawName && r.article === article);
 };
+
+/** Build LawRefItem[] from cited labels resolved against a label-keyed law map. */
+export const buildCitedLawRefs = (
+  citedLawLabels: Set<string>,
+  lawsByLabel: Map<string, { id: string; law_name: string; article_no: string; content: string }>,
+): LawRefItem[] => {
+  const refs: LawRefItem[] = [];
+  for (const label of citedLawLabels) {
+    const law = lawsByLabel.get(label);
+    if (law) {
+      refs.push({
+        id: law.id,
+        law_name: law.law_name,
+        article: law.article_no,
+        full_text: law.content,
+        is_manual: false,
+      });
+    }
+  }
+  return refs;
+};

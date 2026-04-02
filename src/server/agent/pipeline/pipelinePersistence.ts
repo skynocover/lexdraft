@@ -14,29 +14,24 @@ import {
   type FileInfo,
   type ExistingExhibit,
 } from '../../lib/exhibitAssign';
-
-const CLAIM_BATCH_SIZE = 10;
+import { batchInsert } from '../../lib/dbUtils';
 
 /** Delete old claims, batch insert new ones, notify frontend via SSE. */
 export const persistClaims = async (ctx: PipelineContext, claimList: Claim[]): Promise<void> => {
   await ctx.drizzle.delete(claims).where(eq(claims.case_id, ctx.caseId));
   const now = new Date().toISOString();
-  for (let i = 0; i < claimList.length; i += CLAIM_BATCH_SIZE) {
-    const batch = claimList.slice(i, i + CLAIM_BATCH_SIZE);
-    await ctx.drizzle.insert(claims).values(
-      batch.map((c) => ({
-        id: c.id,
-        case_id: ctx.caseId,
-        side: c.side,
-        claim_type: c.claim_type,
-        statement: c.statement,
-        assigned_section: c.assigned_section,
-        dispute_id: c.dispute_id,
-        responds_to: c.responds_to,
-        created_at: now,
-      })),
-    );
-  }
+  const rows = claimList.map((c) => ({
+    id: c.id,
+    case_id: ctx.caseId,
+    side: c.side,
+    claim_type: c.claim_type,
+    statement: c.statement,
+    assigned_section: c.assigned_section,
+    dispute_id: c.dispute_id,
+    responds_to: c.responds_to,
+    created_at: now,
+  }));
+  await batchInsert(ctx.drizzle, claims, rows, 10);
 
   await ctx.sendSSE({
     type: 'brief_update',
@@ -112,7 +107,7 @@ export const persistExhibits = async (
   // Batch insert new exhibit rows
   if (newExhibits.length > 0) {
     const rows = toExhibitRows(ctx.caseId, newExhibits);
-    await ctx.drizzle.insert(exhibits).values(rows);
+    await batchInsert(ctx.drizzle, exhibits, rows, 12);
   }
 
   // Only re-query if new exhibits were inserted; otherwise reuse existing rows

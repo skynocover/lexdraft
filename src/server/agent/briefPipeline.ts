@@ -6,6 +6,7 @@ import type { Paragraph } from '../../client/stores/useBriefStore';
 import type { PipelineStepChild } from '../../shared/types';
 import { writeSection, cleanupUncitedLaws, getSectionKey } from './pipeline/writerStep';
 import { fetchAndCacheUncitedMentions } from '../lib/lawRefService';
+import { upsertManyLawRefs, buildCitedLawRefs } from '../lib/lawRefsJson';
 import { runLawFetch, truncateLawContent } from './pipeline/lawFetchStep';
 import { renderTemplate } from './pipeline/templateRenderer';
 import { formatEvidenceSection } from './pipeline/evidenceFormatter';
@@ -426,13 +427,31 @@ export const runBriefPipeline = async (
 
     await progress.completeWriting(paragraphs.length);
 
-    // ═══ Batch: detect uncited law mentions across all paragraphs at once ═══
+    // ═══ Cache only actually-cited laws (not all fetched) + detect uncited mentions ═══
     if (paragraphs.length > 0) {
       const fullText = paragraphs.map((p) => p.content_md).join('\n');
       const citedLawLabels = new Set<string>();
       for (const p of paragraphs) {
         for (const c of p.citations) {
           if (c.type === 'law') citedLawLabels.add(c.label);
+        }
+        for (const seg of p.segments ?? []) {
+          for (const c of seg.citations) {
+            if (c.type === 'law') citedLawLabels.add(c.label);
+          }
+        }
+      }
+
+      // Write only cited laws to cases.law_refs (NOT all fetched — that was the c783ff0 pollution)
+      // Use store.foundLaws (Step 1 + Step 2 supplemented), not just fetchedLawsArray (Step 1 only)
+      if (citedLawLabels.size > 0) {
+        const lawsByLabel = new Map<string, (typeof store.foundLaws)[number]>();
+        for (const law of store.foundLaws) {
+          lawsByLabel.set(`${law.law_name} ${law.article_no}`, law);
+        }
+        const citedRefs = buildCitedLawRefs(citedLawLabels, lawsByLabel);
+        if (citedRefs.length > 0) {
+          await upsertManyLawRefs(ctx.drizzle, ctx.caseId, citedRefs);
         }
       }
 

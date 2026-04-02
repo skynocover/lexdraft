@@ -5,7 +5,7 @@ import { useTabStore } from '../../../stores/useTabStore';
 import { Loader2, ExternalLink, Plus, Sparkles } from 'lucide-react';
 import { NewTemplateDialog } from './NewTemplateDialog';
 import type { BriefModeValue } from '../../../../shared/caseConstants';
-import { COURTS, DIVISIONS } from '../../../lib/caseConstants';
+import { COURTS, DIVISIONS, SELECT_NONE } from '../../../lib/caseConstants';
 import {
   Select,
   SelectContent,
@@ -35,13 +35,12 @@ const DEFAULT_TEMPLATE_ID = 'auto';
 /** 表單值：不使用範本（DB 中為 null） */
 const NONE_TEMPLATE_ID = 'none';
 
-/** DB template_id → form value */
+/** DB template_id → form value（null/undefined = AI 自動選擇，'none' 才是不使用） */
 const toFormTemplateId = (dbValue: string | null | undefined): string =>
-  dbValue === null ? NONE_TEMPLATE_ID : dbValue || DEFAULT_TEMPLATE_ID;
+  dbValue === NONE_TEMPLATE_ID ? NONE_TEMPLATE_ID : dbValue || DEFAULT_TEMPLATE_ID;
 
-/** form value → DB template_id */
-const fromFormTemplateId = (formValue: string): string | null =>
-  formValue === NONE_TEMPLATE_ID ? null : formValue || null;
+/** form value → DB template_id（'none' 存為 'none'，null 保留給未設定狀態） */
+const fromFormTemplateId = (formValue: string): string | null => formValue || null;
 
 export const CaseInfoTab = () => {
   const currentCase = useCaseStore((s) => s.currentCase);
@@ -74,6 +73,7 @@ export const CaseInfoTab = () => {
     }
   }, [templates.length, loadTemplates]);
 
+  const caseId = currentCase?.id;
   useEffect(() => {
     if (currentCase) {
       setForm({
@@ -88,7 +88,9 @@ export const CaseInfoTab = () => {
         case_instructions: currentCase.case_instructions || '',
       });
     }
-  }, [currentCase]);
+    // Re-initialise form only on case switch, not on every field mutation from save
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseId]);
 
   const dirty = useMemo(() => {
     if (!currentCase) return false;
@@ -237,15 +239,15 @@ export const CaseInfoTab = () => {
             <div>
               <label className="mb-1 block text-[11px] text-t3">法院</label>
               <Select
-                value={form.court || '__none__'}
-                onValueChange={(v) => setForm((f) => ({ ...f, court: v === '__none__' ? '' : v }))}
+                value={form.court || SELECT_NONE}
+                onValueChange={(v) => setForm((f) => ({ ...f, court: v === SELECT_NONE ? '' : v }))}
                 disabled={isDemo}
               >
                 <SelectTrigger className={inputClass}>
                   <SelectValue placeholder="請選擇" />
                 </SelectTrigger>
                 <SelectContent position="popper" className="max-h-72">
-                  <SelectItem value="__none__" className="text-t3">
+                  <SelectItem value={SELECT_NONE} className="text-t3">
                     請選擇
                   </SelectItem>
                   <SelectSeparator />

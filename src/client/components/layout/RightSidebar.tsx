@@ -119,7 +119,6 @@ const CaseMaterialsContent = () => {
   const filesOpen = useUIStore((s) => s.caseMaterialSections.files);
   const setCaseMaterialSection = useUIStore((s) => s.setCaseMaterialSection);
   const briefs = useBriefStore((s) => s.briefs);
-  const hasLawRefs = useBriefStore((s) => s.lawRefs.length > 0);
   const files = useCaseStore((s) => s.files);
 
   const focusedPanel = panels.find((p) => p.id === focusedPanelId);
@@ -137,8 +136,8 @@ const CaseMaterialsContent = () => {
         <BriefsSection activeTabId={activeTabId} />
       </CollapsibleSection>
 
-      {/* 法條引用 — gate at parent to avoid mounting hooks when empty */}
-      {hasLawRefs && <LawRefsCollapsible />}
+      {/* 法條引用 */}
+      <LawRefsCollapsible />
 
       {/* 案件卷宗 */}
       <CollapsibleSection
@@ -154,12 +153,14 @@ const CaseMaterialsContent = () => {
   );
 };
 
-/* ===================== Law Refs Collapsible (only mounted when lawRefs exist) ===================== */
+/* ===================== Law Refs Collapsible ===================== */
 
 const LawRefsCollapsible = () => {
   const lawRefsOpen = useUIStore((s) => s.caseMaterialSections.lawRefs);
   const setCaseMaterialSection = useUIStore((s) => s.setCaseMaterialSection);
   const { citedLawRefs, availableLawRefs, citedCount } = useCitedLawRefs();
+
+  if (citedCount === 0 && availableLawRefs.length === 0) return null;
 
   return (
     <CollapsibleSection

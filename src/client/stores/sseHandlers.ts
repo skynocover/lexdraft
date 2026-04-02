@@ -6,6 +6,7 @@ import {
   type LawRef,
   type Exhibit,
 } from './useBriefStore';
+import { useUIStore } from './useUIStore';
 import {
   useAnalysisStore,
   type Dispute,
@@ -186,8 +187,11 @@ const handleBriefUpdate = (event: Extract<SSEEvent, { type: 'brief_update' }>) =
     case 'set_disputes': {
       const disputes = event.data as Dispute[];
       analysisStore.setDisputes(disputes);
-      if (disputes.length > 0)
+      if (disputes.length > 0) {
         toast.success('爭點分析完成', { description: `${disputes.length} 個爭點` });
+        const ui = useUIStore.getState();
+        if (ui.sidebarTab !== 'disputes') ui.setSidebarTab('disputes');
+      }
       break;
     }
     case 'set_damages': {
@@ -205,8 +209,11 @@ const handleBriefUpdate = (event: Extract<SSEEvent, { type: 'brief_update' }>) =
     case 'set_timeline': {
       const timeline = event.data as TimelineEvent[];
       analysisStore.setTimeline(timeline);
-      if (timeline.length > 0)
+      if (timeline.length > 0) {
         toast.success('時間軸已產生', { description: `${timeline.length} 個事件` });
+        const ui = useUIStore.getState();
+        if (ui.sidebarTab !== 'timeline') ui.setSidebarTab('timeline');
+      }
       break;
     }
     case 'set_undisputed_facts':

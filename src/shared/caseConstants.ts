@@ -45,6 +45,9 @@ export type ClientRole = (typeof CLIENT_ROLES)[number];
 
 export const DEFAULT_BRIEF_LABEL = '書狀';
 
+/** Shadcn Select cannot represent empty string — use this sentinel for "no selection" */
+export const SELECT_NONE = '__none__';
+
 /** 書狀論述模式選項（前端 Dialog / TemplateEditor 共用） */
 export const BRIEF_MODE_OPTIONS = [
   {

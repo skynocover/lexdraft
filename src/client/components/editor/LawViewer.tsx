@@ -1,4 +1,7 @@
-import { Scale, ExternalLink } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Scale, ExternalLink, Loader2 } from 'lucide-react';
+import { api } from '../../lib/api';
+import type { LawSearchResult } from '../../stores/useTabStore';
 
 interface LawViewerProps {
   lawRefId: string;
@@ -15,8 +18,49 @@ const extractPcode = (lawRefId: string): string | null => {
 };
 
 export const LawViewer = ({ lawRefId, lawName, article, fullText }: LawViewerProps) => {
-  const pcode = extractPcode(lawRefId);
-  const lawUrl = pcode ? `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${pcode}` : null;
+  const [fetchedText, setFetchedText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const displayText = fullText || fetchedText;
+
+  // Auto-fetch when no fullText provided; reset when law identity changes
+  useEffect(() => {
+    if (fullText) {
+      setFetchedText(null);
+      return;
+    }
+
+    setFetchedText(null);
+    let cancelled = false;
+    const fetchLaw = async () => {
+      setLoading(true);
+      try {
+        const data = await api.post<{ results: LawSearchResult[] }>('/law/search', {
+          query: `${lawName}${article}`,
+          limit: 5,
+        });
+        if (cancelled) return;
+        const match = data.results.find((r) => r.law_name === lawName && r.article_no === article);
+        if (match) {
+          setFetchedText(match.content);
+        }
+      } catch {
+        // Silent fail — just show "無法條內容"
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchLaw();
+    return () => {
+      cancelled = true;
+    };
+  }, [fullText, lawName, article]);
+
+  // Derive pcode from lawRefId or fetched result
+  const effectivePcode = extractPcode(lawRefId);
+  const lawUrl = effectivePcode
+    ? `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${effectivePcode}`
+    : null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg-0">
@@ -44,9 +88,14 @@ export const LawViewer = ({ lawRefId, lawName, article, fullText }: LawViewerPro
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-6">
-        {fullText ? (
+        {loading ? (
+          <div className="flex h-full items-center justify-center gap-2">
+            <Loader2 size={16} className="animate-spin text-t3" />
+            <p className="text-sm text-t3">載入法條內容...</p>
+          </div>
+        ) : displayText ? (
           <div className="mx-auto max-w-160">
-            <p className="text-sm leading-7 text-t1 whitespace-pre-wrap">{fullText}</p>
+            <p className="whitespace-pre-wrap text-sm leading-7 text-t1">{displayText}</p>
           </div>
         ) : (
           <div className="flex h-full items-center justify-center">

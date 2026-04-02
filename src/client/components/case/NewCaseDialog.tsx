@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '../../lib/api';
+import { COURTS, SELECT_NONE } from '../../lib/caseConstants';
 import type { Case } from '../../stores/useCaseStore';
 import {
   Dialog,
@@ -10,6 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 
@@ -18,10 +27,17 @@ interface NewCaseDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const inputClass =
+  'border-bd bg-bg-3 text-t1 placeholder:text-t3 focus-visible:border-ac focus-visible:ring-ac/50';
+
 export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [clientRole, setClientRole] = useState('');
+  const [plaintiff, setPlaintiff] = useState('');
+  const [defendant, setDefendant] = useState('');
+  const [caseNumber, setCaseNumber] = useState('');
+  const [court, setCourt] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -29,6 +45,10 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
     onOpenChange(false);
     setTitle('');
     setClientRole('');
+    setPlaintiff('');
+    setDefendant('');
+    setCaseNumber('');
+    setCourt('');
     setError('');
   };
 
@@ -50,6 +70,10 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
       const created = await api.post<Case>('/cases', {
         title: title.trim(),
         client_role: clientRole,
+        plaintiff: plaintiff.trim() || undefined,
+        defendant: defendant.trim() || undefined,
+        case_number: caseNumber.trim() || undefined,
+        court: court || undefined,
       });
       handleClose();
       navigate(`/cases/${created.id}`);
@@ -62,12 +86,12 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="bg-bg-1 border-bd sm:max-w-md">
+      <DialogContent className="border-bd bg-bg-1 sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle className="text-t1">新建案件</DialogTitle>
             <DialogDescription className="text-t3">
-              輸入案件名稱並選擇我方立場，其他資訊可稍後補填。
+              填寫基本資訊，其餘可稍後在案件資訊中補填。
             </DialogDescription>
           </DialogHeader>
 
@@ -79,15 +103,15 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="例：艾凡尼公司 v. 朱立家"
-                className="border-bd bg-bg-3 text-t1 placeholder:text-t3 focus-visible:border-ac focus-visible:ring-ac/50"
+                placeholder="例：王小明 v. 李大華 車禍損害賠償"
+                className={inputClass}
                 autoFocus
               />
             </div>
 
             <div>
               <label className="mb-1.5 block text-sm text-t2">
-                我方立場 <span className="text-rd">*</span>
+                當事人 <span className="text-rd">*</span>
               </label>
               <div className="flex gap-3">
                 {[
@@ -107,6 +131,54 @@ export const NewCaseDialog = ({ open, onOpenChange }: NewCaseDialogProps) => {
                     {opt.label}
                   </button>
                 ))}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Input
+                  value={plaintiff}
+                  onChange={(e) => setPlaintiff(e.target.value)}
+                  placeholder="原告名稱"
+                  className={inputClass}
+                />
+                <Input
+                  value={defendant}
+                  onChange={(e) => setDefendant(e.target.value)}
+                  placeholder="被告名稱"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-sm text-t2">案號</label>
+                <Input
+                  value={caseNumber}
+                  onChange={(e) => setCaseNumber(e.target.value)}
+                  placeholder="114年度雄簡字第○○號"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm text-t2">法院</label>
+                <Select
+                  value={court || SELECT_NONE}
+                  onValueChange={(v) => setCourt(v === SELECT_NONE ? '' : v)}
+                >
+                  <SelectTrigger className={inputClass}>
+                    <SelectValue placeholder="請選擇" />
+                  </SelectTrigger>
+                  <SelectContent className="border-bd bg-bg-2">
+                    <SelectItem value={SELECT_NONE} className="text-t3">
+                      請選擇
+                    </SelectItem>
+                    <SelectSeparator />
+                    {COURTS.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

@@ -5,6 +5,7 @@ import { callClaudeWithCitations, type ClaudeDocument } from '../claudeClient';
 import { toolError, toolSuccess, parseJsonField } from '../toolHelpers';
 import { batchLookupLawsByIds } from '../../lib/lawSearch';
 import { fetchAndCacheUncitedMentions } from '../../lib/lawRefService';
+import { upsertManyLawRefs, buildCitedLawRefs } from '../../lib/lawRefsJson';
 import type { Paragraph } from '../../../client/stores/useBriefStore';
 import type { ToolHandler } from './types';
 
@@ -75,11 +76,22 @@ export const handleWriteBriefSection: ToolHandler = async (args, caseId, _db, dr
   }));
 
   // 3. Load law refs specified by relevant_law_ids directly from MongoDB
+  const lawsByLabel = new Map<
+    string,
+    { id: string; law_name: string; article_no: string; content: string }
+  >();
   if (relevantLawIds.length && ctx.mongoUrl) {
     const lawResults = await batchLookupLawsByIds(ctx.mongoUrl, relevantLawIds);
     for (const r of lawResults) {
+      const label = `${r.law_name} ${r.article_no}`;
+      lawsByLabel.set(label, {
+        id: r._id,
+        law_name: r.law_name,
+        article_no: r.article_no,
+        content: r.content,
+      });
       documents.push({
-        title: `${r.law_name} ${r.article_no}`,
+        title: label,
         content: r.content,
         doc_type: 'law' as const,
       });
@@ -135,8 +147,18 @@ ${existingParagraph.content_md}
     claudeInstruction,
   );
 
-  // 6. Post-processing: detect uncited law mentions, fetch and cache
+  // 6. Post-processing: cache cited laws + detect uncited mentions
   const citedLawLabels = new Set(citations.filter((c) => c.type === 'law').map((c) => c.label));
+
+  // Cache actually-cited laws from Citations API to cases.law_refs
+  if (citedLawLabels.size > 0) {
+    const citedRefs = buildCitedLawRefs(citedLawLabels, lawsByLabel);
+    if (citedRefs.length > 0) {
+      await upsertManyLawRefs(drizzle, caseId, citedRefs);
+    }
+  }
+
+  // Then cache any text-mentioned but uncited laws
   const displayRefs = await fetchAndCacheUncitedMentions(
     drizzle,
     caseId,

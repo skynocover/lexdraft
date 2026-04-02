@@ -26,6 +26,7 @@ import type { LegalIssue, DamageItem as BaseDamageItem } from '../agent/pipeline
 import type { CaseMetadata } from '../agent/contextStore';
 import type { FileNote } from '../agent/prompts/orchestratorPrompt';
 import type { AnalysisType } from '../../shared/types';
+import { batchInsert } from '../lib/dbUtils';
 
 // ── Gemini Response Schemas ──
 
@@ -550,7 +551,6 @@ export const runDeepDisputeAnalysis = async (
       const damageItems = (damagesResult.data as DamageItem[]) ?? [];
       const deduped = deduplicateUndisputedFacts(orchestratorOutput.undisputedFacts, damageItems);
       if (deduped.length !== orchestratorOutput.undisputedFacts.length) {
-        const removed = orchestratorOutput.undisputedFacts.length - deduped.length;
         orchestratorOutput.undisputedFacts = deduped;
       }
     }
@@ -583,30 +583,23 @@ export const runDeepDisputeAnalysis = async (
 
 // ── Persist functions ──
 
-const DISPUTE_BATCH_SIZE = 10;
-
 /** Insert disputes into DB (deletes must be done by caller) */
 const insertDisputes = async (
   issues: LegalIssue[],
   caseId: string,
   drizzle: ReturnType<typeof getDB>,
 ): Promise<{ data: Record<string, unknown>[]; summary: string }> => {
-  // Batch insert for D1 param limit
-  for (let i = 0; i < issues.length; i += DISPUTE_BATCH_SIZE) {
-    const batch = issues.slice(i, i + DISPUTE_BATCH_SIZE);
-    await drizzle.insert(disputes).values(
-      batch.map((issue, batchIndex) => ({
-        id: issue.id,
-        case_id: caseId,
-        number: i + batchIndex + 1,
-        title: issue.title,
-        our_position: issue.our_position,
-        their_position: issue.their_position,
-        evidence: issue.key_evidence.length > 0 ? JSON.stringify(issue.key_evidence) : null,
-        law_refs: issue.mentioned_laws.length > 0 ? JSON.stringify(issue.mentioned_laws) : null,
-      })),
-    );
-  }
+  const rows = issues.map((issue, i) => ({
+    id: issue.id,
+    case_id: caseId,
+    number: i + 1,
+    title: issue.title,
+    our_position: issue.our_position,
+    their_position: issue.their_position,
+    evidence: issue.key_evidence.length > 0 ? JSON.stringify(issue.key_evidence) : null,
+    law_refs: issue.mentioned_laws.length > 0 ? JSON.stringify(issue.mentioned_laws) : null,
+  }));
+  await batchInsert(drizzle, disputes, rows, 10);
 
   // Return data with parsed JSON for frontend
   const data = issues.map((issue, i) => ({
@@ -647,9 +640,7 @@ const persistDamages = async (
     created_at: new Date().toISOString(),
   }));
 
-  if (records.length) {
-    await drizzle.insert(damages).values(records);
-  }
+  await batchInsert(drizzle, damages, records, 12);
 
   const totalAmount = records.reduce((sum, d) => sum + d.amount, 0);
   const summary = `已計算 ${records.length} 項金額，請求總額 NT$ ${totalAmount.toLocaleString()}`;

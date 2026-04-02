@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Upload, FileText, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCaseStore, type CaseFile } from '../../stores/useCaseStore';
+import { useUIStore } from '../../stores/useUIStore';
 import { api } from '../../lib/api';
 import {
   Dialog,
@@ -110,6 +111,11 @@ export const OnboardingUploadDialog = ({
     setDragOver(false);
   };
 
+  const handleCloseAndGoToMaterials = () => {
+    handleClose();
+    useUIStore.getState().setSidebarTab('case-materials');
+  };
+
   const doneCount = uploads.filter((u) => u.status === 'done').length;
   const hasDone = doneCount > 0;
   const allFinished = uploads.length > 0 && !uploading;
@@ -158,7 +164,7 @@ export const OnboardingUploadDialog = ({
             <DialogFooter>
               <Button
                 type="button"
-                onClick={handleClose}
+                onClick={handleCloseAndGoToMaterials}
                 className="bg-ac text-bg-0 hover:bg-ac/90"
               >
                 {hasErrors ? '完成' : '開始使用'}
