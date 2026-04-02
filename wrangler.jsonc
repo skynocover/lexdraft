@@ -16,7 +16,7 @@
     {
       "binding": "DB",
       "database_name": "lexdraft-db",
-      "database_id": "placeholder-replace-after-creation",
+      "database_id": "5b1e1f2f-ce8e-4428-894e-26415c15a3b7",
       "migrations_dir": "./drizzle",
     },
   ],
@@ -69,10 +69,5 @@
     "enabled": true,
     "logs": { "head_sampling_rate": 1 },
     "traces": { "enabled": true, "head_sampling_rate": 0.01 },
-  },
-
-  // 環境變數（dev 用，production 另外設定）
-  "vars": {
-    "AUTH_TOKEN": "dev-token-change-me",
   },
 }
