@@ -8,7 +8,7 @@ import {
   type ClaudeContentBlock,
   type ClaudeToolDefinition,
 } from '../claudeClient';
-import { callGeminiNative } from '../aiClient';
+import { callAI } from '../aiClient';
 import { createLawSearchSession, type LawSearchSession } from '../../lib/lawSearch';
 import {
   buildReasoningSystemPrompt,
@@ -60,107 +60,6 @@ ${getSectionRules(mode)}
 - 只輸出 JSON，不要加 markdown code block 或其他文字
 
 ${getJsonSchema(mode)}`;
-};
-
-// ── Gemini responseSchema (OpenAPI format, constrained decoding) ──
-// Mirrors Claim, StrategySection, ArgumentationFramework, FactUsage in ./types.ts.
-// Keep in sync when modifying the TypeScript interfaces.
-// Dynamic: dispute_id, relevant_file_ids, relevant_law_ids use enum to prevent hallucinated IDs.
-
-interface SchemaIds {
-  disputeIds: string[];
-  fileIds: string[];
-  lawIds: string[];
-}
-
-const buildStrategySchema = (ids: SchemaIds): Record<string, unknown> => {
-  const disputeIdField =
-    ids.disputeIds.length > 0
-      ? { type: 'STRING', nullable: true, enum: ids.disputeIds }
-      : { type: 'STRING', nullable: true };
-
-  const fileIdItems =
-    ids.fileIds.length > 0 ? { type: 'STRING', enum: ids.fileIds } : { type: 'STRING' };
-
-  const lawIdItems =
-    ids.lawIds.length > 0 ? { type: 'STRING', enum: ids.lawIds } : { type: 'STRING' };
-
-  return {
-    type: 'OBJECT',
-    properties: {
-      claims: {
-        type: 'ARRAY',
-        items: {
-          type: 'OBJECT',
-          properties: {
-            id: { type: 'STRING' },
-            side: { type: 'STRING', enum: ['ours', 'theirs'] },
-            claim_type: { type: 'STRING', enum: ['primary', 'rebuttal', 'supporting'] },
-            statement: { type: 'STRING' },
-            assigned_section: { type: 'STRING', nullable: true },
-            dispute_id: disputeIdField,
-            responds_to: { type: 'STRING', nullable: true },
-          },
-          required: [
-            'id',
-            'side',
-            'claim_type',
-            'statement',
-            'assigned_section',
-            'dispute_id',
-            'responds_to',
-          ],
-        },
-      },
-      sections: {
-        type: 'ARRAY',
-        items: {
-          type: 'OBJECT',
-          properties: {
-            id: { type: 'STRING' },
-            section: { type: 'STRING' },
-            subsection: { type: 'STRING', nullable: true },
-            dispute_id: disputeIdField,
-            argumentation: {
-              type: 'OBJECT',
-              properties: {
-                legal_basis: { type: 'ARRAY', items: lawIdItems },
-                fact_application: { type: 'STRING' },
-                conclusion: { type: 'STRING' },
-              },
-              required: ['legal_basis', 'fact_application', 'conclusion'],
-            },
-            claims: { type: 'ARRAY', items: { type: 'STRING' } },
-            relevant_file_ids: { type: 'ARRAY', items: fileIdItems },
-            relevant_law_ids: { type: 'ARRAY', items: lawIdItems },
-            facts_to_use: {
-              type: 'ARRAY',
-              nullable: true,
-              items: {
-                type: 'OBJECT',
-                properties: {
-                  fact_id: { type: 'STRING' },
-                  usage: { type: 'STRING' },
-                },
-                required: ['fact_id', 'usage'],
-              },
-            },
-            legal_reasoning: { type: 'STRING', nullable: true },
-          },
-          required: [
-            'id',
-            'section',
-            'subsection',
-            'argumentation',
-            'claims',
-            'relevant_file_ids',
-            'relevant_law_ids',
-          ],
-        },
-      },
-    },
-    required: ['claims', 'sections'],
-  };
 };
 
 /**
@@ -480,27 +379,18 @@ export const runReasoningStrategy = async (
     ? jsonOutputBase + templateToPrompt(templateContentMd!)
     : jsonOutputBase + `\n\n${FALLBACK_GUIDANCE}`;
 
-  // callJsonOutput is built lazily at structuring time (after reasoning)
-  // so that dynamic enum IDs (disputes, files, laws) are available.
-  let _schemaIds: SchemaIds | null = null;
-  const callJsonOutput = (msg: string) => {
-    if (!_schemaIds) {
-      // Collect valid IDs from store + input for constrained decoding
-      const allLawIds = new Set<string>();
-      for (const law of [...input.fetchedLaws, ...store.supplementedLaws]) {
-        allLawIds.add(law.id);
-      }
-      _schemaIds = {
-        disputeIds: store.legalIssues.map((i) => i.id),
-        fileIds: input.fileSummaries.map((f) => f.id),
-        lawIds: [...allLawIds],
-      };
-    }
-    return callGeminiNative(ctx.aiEnv, structuringSystemPrompt, msg, {
-      maxTokens: JSON_OUTPUT_MAX_TOKENS,
-      responseSchema: buildStrategySchema(_schemaIds),
-    });
-  };
+  const callJsonOutput = (msg: string) =>
+    callAI(
+      ctx.aiEnv,
+      [
+        { role: 'system', content: structuringSystemPrompt },
+        { role: 'user', content: msg },
+      ],
+      {
+        maxTokens: JSON_OUTPUT_MAX_TOKENS,
+        responseFormat: { type: 'json_object' },
+      },
+    );
 
   // Token accumulation helper
   const tokenTotals = { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
