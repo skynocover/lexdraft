@@ -61,6 +61,7 @@ export const DisputesTab = () => {
   const undisputedFacts = useAnalysisStore((s) => s.undisputedFacts);
   const informationGaps = useAnalysisStore((s) => s.informationGaps);
   const caseId = useCaseStore((s) => s.currentCase?.id);
+  const isDemo = useCaseStore((s) => s.isDemo);
   const files = useCaseStore((s) => s.files);
   const fileByName = useMemo(() => new Map(files.map((f) => [f.filename, f])), [files]);
   const newFileCount = useNewFileCount('disputes');
@@ -103,12 +104,28 @@ export const DisputesTab = () => {
     };
   }, [damages]);
 
+  const hasReadyFiles = files.some((f) => f.status === 'ready');
+
   if (disputes.length === 0 && undisputedFacts.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-4">
-        <Search className="h-8 w-8 text-t3" />
-        <p className="text-center text-xs text-t3">尚未分析爭點</p>
-        <EmptyAnalyzeButton type="disputes" />
+      <div className="flex h-full flex-col items-center justify-center gap-4 px-4">
+        <div className="space-y-2 text-center">
+          <p className="text-xs text-t2">AI 會從你的文件中自動歸納</p>
+          <ul className="space-y-1 text-xs text-t3">
+            <li>雙方爭執要點及各自主張</li>
+            <li>不爭執事項</li>
+            <li>對應證據與法條</li>
+          </ul>
+        </div>
+        <div className="w-full max-w-56 rounded-lg border border-bd bg-bg-2 px-3 py-2.5">
+          <p className="text-[11px] font-medium text-t2">爭點一：醫療費用是否合理</p>
+          <div className="mt-1.5 space-y-0.5 text-[11px] text-t3">
+            <p>我方：主張 NT$125,000</p>
+            <p>對方：僅認 NT$80,000</p>
+          </div>
+        </div>
+        {!isDemo && <EmptyAnalyzeButton type="disputes" />}
+        {!isDemo && !hasReadyFiles && <p className="text-[11px] text-t3">需先上傳案件文件</p>}
       </div>
     );
   }
@@ -119,7 +136,7 @@ export const DisputesTab = () => {
         <div className="flex items-center text-xs text-t3">
           <span>{disputes.length} 個爭點</span>
           <span className="flex-1" />
-          <ReanalyzeButton type="disputes" hasData={disputes.length > 0} />
+          {!isDemo && <ReanalyzeButton type="disputes" hasData={disputes.length > 0} />}
         </div>
 
         <StaleAnalysisBanner

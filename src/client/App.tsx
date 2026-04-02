@@ -35,6 +35,7 @@ export function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/demo" element={<CaseWorkspace />} />
       </Routes>
     </>
   );

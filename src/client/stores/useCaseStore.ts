@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import type { FileCategoryValue } from '../../shared/caseConstants';
 
 export interface Case {
   id: string;
@@ -27,7 +28,7 @@ export interface CaseFile {
   file_size: number | null;
   mime_type: string | null;
   status: 'pending' | 'processing' | 'ready' | 'error';
-  category: 'ours' | 'theirs' | 'court' | 'evidence' | 'other' | null;
+  category: FileCategoryValue | null;
   doc_date: string | null;
   summary: string | null;
   created_at: string;
@@ -37,9 +38,11 @@ interface CaseState {
   cases: Case[];
   currentCase: Case | null;
   files: CaseFile[];
+  isDemo: boolean;
   setCases: (cases: Case[]) => void;
   setCurrentCase: (c: Case | null) => void;
   setFiles: (files: CaseFile[]) => void;
+  setIsDemo: (val: boolean) => void;
   updateCase: (
     caseId: string,
     data: Partial<Omit<Case, 'id' | 'created_at' | 'updated_at'>>,
@@ -54,9 +57,11 @@ export const useCaseStore = create<CaseState>((set, get) => ({
   cases: [],
   currentCase: null,
   files: [],
+  isDemo: false,
   setCases: (cases) => set({ cases }),
   setCurrentCase: (currentCase) => set({ currentCase }),
   setFiles: (files) => set({ files }),
+  setIsDemo: (isDemo) => set({ isDemo }),
   updateCase: async (caseId, data) => {
     const res = await api.put<Case>(`/cases/${caseId}`, data);
     set((s) => ({

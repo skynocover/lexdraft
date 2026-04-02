@@ -19,6 +19,8 @@ export function TimelineTab() {
   const updateTimelineEvent = useAnalysisStore((s) => s.updateTimelineEvent);
   const removeTimelineEvent = useAnalysisStore((s) => s.removeTimelineEvent);
   const currentCase = useCaseStore((s) => s.currentCase);
+  const isDemo = useCaseStore((s) => s.isDemo);
+  const hasReadyFiles = useCaseStore((s) => s.files.some((f) => f.status === 'ready'));
   const newFileCount = useNewFileCount('timeline');
   const { isAnalyzing, execute: reanalyze } = useAnalysisAction('timeline');
 
@@ -75,16 +77,21 @@ export function TimelineTab() {
   return (
     <>
       {timeline.length === 0 ? (
-        <div className="flex h-full flex-col items-center justify-center gap-3 px-4">
-          <CalendarDays className="h-8 w-8 text-t3" />
-          <p className="text-center text-xs text-t3">尚未產生時間軸</p>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleAdd}>
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              手動新增
-            </Button>
-            <EmptyAnalyzeButton type="timeline" />
+        <div className="flex h-full flex-col items-center justify-center gap-4 px-4">
+          <div className="space-y-1.5 text-center">
+            <p className="text-xs text-t2">AI 會按時間排列案件事實</p>
+            <p className="text-[11px] text-t3">包含事故日期、就醫紀錄、調解過程等</p>
           </div>
+          {!isDemo && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleAdd}>
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                手動新增
+              </Button>
+              <EmptyAnalyzeButton type="timeline" />
+            </div>
+          )}
+          {!isDemo && !hasReadyFiles && <p className="text-[11px] text-t3">需先上傳案件文件</p>}
         </div>
       ) : (
         <div className="pb-4">
@@ -100,16 +107,18 @@ export function TimelineTab() {
                 一般事件
               </span>
             </div>
-            <div className="flex items-center gap-1">
-              <ReanalyzeButton type="timeline" hasData={timeline.length > 0} />
-              <button
-                onClick={handleAdd}
-                className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
-                title="新增事件"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
+            {!isDemo && (
+              <div className="flex items-center gap-1">
+                <ReanalyzeButton type="timeline" hasData={timeline.length > 0} />
+                <button
+                  onClick={handleAdd}
+                  className="rounded p-1 text-t3 transition hover:bg-bg-h hover:text-t1"
+                  title="新增事件"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           <StaleAnalysisBanner

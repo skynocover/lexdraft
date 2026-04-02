@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { FileText, Scale, ScrollText } from 'lucide-react';
 import { useBriefStore } from '../../stores/useBriefStore';
 import { useTabStore } from '../../stores/useTabStore';
 import { TabBar } from '../layout/TabBar';
@@ -106,8 +107,22 @@ export const EditorPanel = ({ panelId }: EditorPanelProps) => {
             autoSearch={activeTab.autoSearch}
           />
         ) : (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-t3">請從右側面板選擇書狀或檔案</p>
+          <div className="flex h-full flex-col items-center justify-center gap-4">
+            <p className="text-sm text-t2">從右側面板選擇內容</p>
+            <div className="space-y-2.5 text-xs text-t3">
+              <div className="flex items-center gap-2">
+                <ScrollText size={14} className="shrink-0 text-ac" />
+                <span>書狀草稿 — 在「卷宗」tab</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <FileText size={14} className="shrink-0 text-ac" />
+                <span>案件文件 — 在「卷宗」tab</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Scale size={14} className="shrink-0 text-ac" />
+                <span>法條全文 — 點擊書狀中的法條引用</span>
+              </div>
+            </div>
           </div>
         )}
       </div>

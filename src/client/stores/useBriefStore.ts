@@ -326,9 +326,9 @@ export const useBriefStore = create<BriefState>((set, get) => ({
   },
 
   loadBrief: async (briefId) => {
-    // Auto-save previous brief if switching to a different one
+    // Auto-save previous brief if switching to a different one (skip in demo)
     const { activeBriefId, briefCache } = get();
-    if (activeBriefId && activeBriefId !== briefId) {
+    if (activeBriefId && activeBriefId !== briefId && !useCaseStore.getState().isDemo) {
       const prevBs = briefCache[activeBriefId];
       if (prevBs?.dirty && !prevBs.saving) {
         get()
@@ -340,6 +340,13 @@ export const useBriefStore = create<BriefState>((set, get) => ({
     // Cache hit → just set active
     if (get().briefCache[briefId]) {
       set({ activeBriefId: briefId, ...aliasesFor(get().briefCache, briefId) });
+      return;
+    }
+    // Local briefs array hit → populate cache without API call
+    const localBrief = get().briefs.find((b) => b.id === briefId);
+    if (localBrief?.content_structured) {
+      const newCache = { ...get().briefCache, [briefId]: freshBriefState(localBrief) };
+      set({ activeBriefId: briefId, briefCache: newCache, ...aliasesFor(newCache, briefId) });
       return;
     }
     // Cache miss → fetch from API

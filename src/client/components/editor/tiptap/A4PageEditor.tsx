@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { useBriefStore } from '../../../stores/useBriefStore';
+import { useCaseStore } from '../../../stores/useCaseStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { forEachCitation } from '../../../lib/citationUtils';
 import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
@@ -32,6 +33,7 @@ export function A4PageEditor({ briefId }: A4PageEditorProps) {
   const dirty = briefState?.dirty ?? false;
   const saving = briefState?.saving ?? false;
   const setTitle = useBriefStore((s) => s.setTitle);
+  const isDemo = useCaseStore((s) => s.isDemo);
 
   const stats = useMemo(() => {
     if (!content?.paragraphs) return { confirmed: 0, pending: 0 };
@@ -62,6 +64,7 @@ export function A4PageEditor({ briefId }: A4PageEditorProps) {
   useAutoSave(briefId);
 
   const editor = useEditor({
+    editable: !isDemo,
     extensions: [
       StarterKit.configure({
         heading: false,

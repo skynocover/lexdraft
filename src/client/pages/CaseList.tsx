@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Trash2 } from 'lucide-react';
+import { Eye, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useCaseStore, type Case } from '../stores/useCaseStore';
@@ -69,15 +69,62 @@ export function CaseList() {
             </button>
           </div>
 
+          {/* Demo case — 固定在最上方 */}
+          <button
+            onClick={() => navigate('/demo')}
+            className="flex w-full items-center gap-3 rounded-lg border border-dashed border-ac/30 bg-ac/5 p-4 text-left transition hover:border-ac/50 hover:bg-ac/8"
+          >
+            <Eye size={16} className="shrink-0 text-ac" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-ac">範例案件：車禍損害賠償</p>
+              <p className="mt-0.5 text-xs text-t3">查看 AI 產出的書狀、爭點分析與時間軸</p>
+            </div>
+          </button>
+
           {loading ? (
-            <p className="text-sm text-t3">載入中...</p>
+            <p className="mt-4 text-sm text-t3">載入中...</p>
           ) : cases.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-bd p-12 text-center">
-              <p className="mb-2 text-sm text-t2">尚無案件</p>
-              <p className="text-xs text-t3">點擊「新建案件」開始使用</p>
+            <div className="mt-4 rounded-lg border border-dashed border-bd px-8 py-10">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ac/15 text-xs font-bold text-ac">
+                    1
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-t1">建立案件</p>
+                    <p className="text-xs text-t3">輸入案名和我方立場</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ac/15 text-xs font-bold text-ac">
+                    2
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-t1">上傳文件</p>
+                    <p className="text-xs text-t3">起訴狀、答辯狀、證據等 PDF</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ac/15 text-xs font-bold text-ac">
+                    3
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-t1">AI 生成</p>
+                    <p className="text-xs text-t3">自動分析爭點並撰寫書狀</p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6">
+                <button
+                  onClick={() => setShowNewCase(true)}
+                  className="rounded bg-ac px-4 py-2 text-sm font-medium text-bg-0 transition hover:opacity-90"
+                >
+                  新建案件
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="mt-2 space-y-2">
               {cases.map((c) => (
                 <div
                   key={c.id}
@@ -85,7 +132,7 @@ export function CaseList() {
                 >
                   <button
                     onClick={() => navigate(`/cases/${c.id}`)}
-                    className="flex-1 min-w-0 text-left"
+                    className="min-w-0 flex-1 text-left"
                   >
                     <p className="text-sm font-medium text-t1">{c.title}</p>
                     <div className="mt-1 flex items-center gap-3">

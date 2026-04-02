@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { PanelLeft, PanelRight } from 'lucide-react';
+import { ArrowRight, PanelLeft, PanelRight } from 'lucide-react';
 import {
   Group as PanelGroup,
   Panel as ResizablePanel,
@@ -25,8 +25,13 @@ import { OnboardingUploadDialog } from '../components/case/OnboardingUploadDialo
 
 export function CaseWorkspace() {
   const { caseId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isDemo = location.pathname === '/demo';
+  const effectiveCaseId = isDemo ? 'demo' : caseId;
   const setCurrentCase = useCaseStore((s) => s.setCurrentCase);
   const setFiles = useCaseStore((s) => s.setFiles);
+  const setIsDemo = useCaseStore((s) => s.setIsDemo);
   const files = useCaseStore((s) => s.files);
   const setCurrentBrief = useBriefStore((s) => s.setCurrentBrief);
   const loadBriefs = useBriefStore((s) => s.loadBriefs);
@@ -85,8 +90,65 @@ export function CaseWorkspace() {
     }
   };
 
+  // Demo mode: hydrate stores from fixture
   useEffect(() => {
-    if (!caseId) return;
+    if (!isDemo) return;
+
+    let hydrated = false;
+
+    const hydrate = async () => {
+      const { DEMO_FIXTURE } = await import('../data/demo-fixture');
+      setCurrentCase(DEMO_FIXTURE.case);
+      setFiles(DEMO_FIXTURE.files);
+
+      const { setBriefs, setLawRefs, setExhibits } = useBriefStore.getState();
+      setBriefs(DEMO_FIXTURE.briefs);
+      setLawRefs(DEMO_FIXTURE.lawRefs);
+      setExhibits(DEMO_FIXTURE.exhibits);
+
+      const { setDisputes, setDamages, setTimeline, setUndisputedFacts } =
+        useAnalysisStore.getState();
+      setDisputes(DEMO_FIXTURE.disputes);
+      setDamages(DEMO_FIXTURE.damages);
+      setTimeline(DEMO_FIXTURE.timeline);
+      setUndisputedFacts(DEMO_FIXTURE.undisputedFacts);
+
+      const demoBrief = DEMO_FIXTURE.briefs[0];
+      if (demoBrief) {
+        openBriefTab(demoBrief.id, demoBrief.title || DEFAULT_BRIEF_LABEL);
+      }
+      hydrated = true;
+    };
+
+    setIsDemo(true);
+    hydrate();
+
+    return () => {
+      setIsDemo(false);
+      if (!hydrated) return;
+      setCurrentCase(null);
+      setCurrentBrief(null);
+      setFiles([]);
+      clearTabs();
+      const { setBriefs, setLawRefs, setExhibits } = useBriefStore.getState();
+      setBriefs([]);
+      setLawRefs([]);
+      setExhibits([]);
+      const { setDisputes, setDamages, setTimeline, setUndisputedFacts, setParties, setClaims } =
+        useAnalysisStore.getState();
+      setDisputes([]);
+      setDamages([]);
+      setTimeline([]);
+      setUndisputedFacts([]);
+      setParties([]);
+      setClaims([]);
+      useChatStore.getState().clearMessages();
+    };
+  }, [isDemo]);
+
+  // Normal mode: load data from API
+  useEffect(() => {
+    if (!caseId || isDemo) return;
 
     let cancelled = false;
 
@@ -216,13 +278,13 @@ export function CaseWorkspace() {
       useChatStore.getState().clearMessages();
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [caseId]);
+  }, [caseId, isDemo]);
 
-  // Polling: 如果有 pending/processing 檔案，每 3 秒刷新
+  // Polling: 如果有 pending/processing 檔案，每 3 秒刷新（demo 模式不啟動）
   useEffect(() => {
     const hasPending = files.some((f) => f.status === 'pending' || f.status === 'processing');
 
-    if (hasPending && caseId) {
+    if (hasPending && caseId && !isDemo) {
       pollingRef.current = setInterval(() => {
         api.get<CaseFile[]>(`/cases/${caseId}/files`).then(setFiles).catch(console.error);
       }, 3000);
@@ -276,6 +338,20 @@ export function CaseWorkspace() {
 
   return (
     <div className="flex h-screen flex-col bg-bg-0">
+      {isDemo && (
+        <div className="flex shrink-0 items-center justify-between bg-ac px-4 py-2">
+          <span className="text-sm font-medium text-bg-0">
+            這是範例案件 — 查看 AI 產出的書狀、爭點分析與時間軸
+          </span>
+          <button
+            onClick={() => navigate('/login')}
+            className="flex items-center gap-1.5 rounded-md bg-bg-0/20 px-3 py-1 text-sm font-medium text-bg-0 transition hover:bg-bg-0/30"
+          >
+            建立我的案件
+            <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
       <Header />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -317,11 +393,13 @@ export function CaseWorkspace() {
         )}
       </div>
 
-      <OnboardingUploadDialog
-        open={showOnboarding}
-        onOpenChange={setShowOnboarding}
-        caseId={caseId!}
-      />
+      {!isDemo && (
+        <OnboardingUploadDialog
+          open={showOnboarding}
+          onOpenChange={setShowOnboarding}
+          caseId={effectiveCaseId!}
+        />
+      )}
     </div>
   );
 }

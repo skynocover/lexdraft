@@ -110,7 +110,10 @@ export const OnboardingUploadDialog = ({
     setDragOver(false);
   };
 
-  const hasDone = uploads.some((u) => u.status === 'done');
+  const doneCount = uploads.filter((u) => u.status === 'done').length;
+  const hasDone = doneCount > 0;
+  const allFinished = uploads.length > 0 && !uploading;
+  const hasErrors = uploads.some((u) => u.status === 'error');
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -119,83 +122,137 @@ export const OnboardingUploadDialog = ({
         onInteractOutside={(e) => e.preventDefault()}
         showCloseButton={false}
       >
-        <DialogHeader>
-          <DialogTitle className="text-t1">上傳案件文件</DialogTitle>
-          <DialogDescription className="text-t3">
-            上傳相關文件讓 AI 助理能更好地協助你撰寫書狀。
-          </DialogDescription>
-        </DialogHeader>
+        {hasDone && allFinished ? (
+          /* 階段二：上傳完成後的銜接 */
+          <>
+            <DialogHeader>
+              <DialogTitle className="text-t1">
+                <Check size={18} className="mr-1.5 inline text-gn" />
+                已上傳 {doneCount} 個檔案
+              </DialogTitle>
+              <DialogDescription className="text-t3">AI 正在處理文件中...</DialogDescription>
+            </DialogHeader>
 
-        {/* Drop zone */}
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition ${
-            dragOver ? 'border-ac bg-ac/5' : 'border-bd hover:border-t3 hover:bg-bg-2'
-          }`}
-        >
-          <Upload size={32} className={`mb-3 ${dragOver ? 'text-ac' : 'text-t3'}`} />
-          <p className="text-sm font-medium text-t1">拖拽或點擊上傳案件文件</p>
-          <p className="mt-1 text-xs text-t3">支援 PDF 格式，單檔最大 20MB</p>
-        </div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/pdf"
-          multiple
-          onChange={handleFileChange}
-          className="hidden"
-        />
-
-        {/* Uploaded file list */}
-        {uploads.length > 0 && (
-          <div className="max-h-40 space-y-1.5 overflow-y-auto">
-            {uploads.map((item) => (
-              <div key={item.id} className="flex items-center gap-2 rounded-md bg-bg-2 px-3 py-2">
-                <FileText size={14} className="shrink-0 text-t3" />
-                <span className="min-w-0 flex-1 truncate text-sm text-t1">{item.name}</span>
-                {item.status === 'uploading' && (
-                  <Loader2 size={14} className="shrink-0 animate-spin text-ac" />
-                )}
-                {item.status === 'done' && <Check size={14} className="shrink-0 text-gn" />}
-                {item.status === 'error' && <AlertCircle size={14} className="shrink-0 text-rd" />}
+            {/* 顯示 error 檔案 */}
+            {hasErrors && (
+              <div className="max-h-28 space-y-1.5 overflow-y-auto">
+                {uploads
+                  .filter((u) => u.status === 'error')
+                  .map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-2 rounded-md bg-bg-2 px-3 py-2"
+                    >
+                      <FileText size={14} className="shrink-0 text-t3" />
+                      <span className="min-w-0 flex-1 truncate text-sm text-t1">{item.name}</span>
+                      <AlertCircle size={14} className="shrink-0 text-rd" />
+                    </div>
+                  ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleClose}
-            disabled={uploading}
-            className="text-t2 hover:text-t1"
-          >
-            稍後再說
-          </Button>
-          {hasDone && !uploading ? (
-            <Button type="button" onClick={handleClose} className="bg-ac text-bg-0 hover:bg-ac/90">
-              完成
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
+            <p className="text-xs text-t3">
+              你可以在左側對話框選擇要撰寫的書狀類型，或等文件處理完再操作。
+            </p>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                onClick={handleClose}
+                className="bg-ac text-bg-0 hover:bg-ac/90"
+              >
+                {hasErrors ? '完成' : '開始使用'}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          /* 階段一：上傳中 */
+          <>
+            <DialogHeader>
+              <DialogTitle className="text-t1">上傳案件文件</DialogTitle>
+              <DialogDescription asChild>
+                <div className="text-t3">
+                  <p>上傳對方書狀、證據或判決等文件。AI 會自動：</p>
+                  <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-t3">
+                    <li>摘要每份文件重點</li>
+                    <li>歸納雙方爭點</li>
+                    <li>生成書狀時引用原文</li>
+                  </ul>
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Drop zone */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="border-bd text-t1 hover:bg-bg-2"
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition ${
+                dragOver ? 'border-ac bg-ac/5' : 'border-bd hover:border-t3 hover:bg-bg-2'
+              }`}
             >
-              選擇檔案
-            </Button>
-          )}
-        </DialogFooter>
+              <Upload size={32} className={`mb-3 ${dragOver ? 'text-ac' : 'text-t3'}`} />
+              <p className="text-sm font-medium text-t1">拖拽或點擊上傳案件文件</p>
+              <p className="mt-1 text-xs text-t3">支援 PDF 格式，單檔最大 20MB</p>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              multiple
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {/* Uploaded file list */}
+            {uploads.length > 0 && (
+              <div className="max-h-40 space-y-1.5 overflow-y-auto">
+                {uploads.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-2 rounded-md bg-bg-2 px-3 py-2"
+                  >
+                    <FileText size={14} className="shrink-0 text-t3" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-t1">{item.name}</span>
+                    {item.status === 'uploading' && (
+                      <Loader2 size={14} className="shrink-0 animate-spin text-ac" />
+                    )}
+                    {item.status === 'done' && <Check size={14} className="shrink-0 text-gn" />}
+                    {item.status === 'error' && (
+                      <AlertCircle size={14} className="shrink-0 text-rd" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleClose}
+                disabled={uploading}
+                className="text-t2 hover:text-t1"
+              >
+                稍後再說
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="border-bd text-t1 hover:bg-bg-2"
+              >
+                選擇檔案
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

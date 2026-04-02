@@ -45,6 +45,7 @@ const fromFormTemplateId = (formValue: string): string | null =>
 
 export const CaseInfoTab = () => {
   const currentCase = useCaseStore((s) => s.currentCase);
+  const isDemo = useCaseStore((s) => s.isDemo);
   const updateCase = useCaseStore((s) => s.updateCase);
   const templates = useTemplateStore((s) => s.templates);
   const loadTemplates = useTemplateStore((s) => s.loadTemplates);
@@ -214,6 +215,7 @@ export const CaseInfoTab = () => {
               value={form.title}
               onChange={set('title')}
               placeholder="案件名稱"
+              disabled={isDemo}
               className={inputClass}
             />
           </div>
@@ -225,6 +227,7 @@ export const CaseInfoTab = () => {
               value={form.case_number}
               onChange={set('case_number')}
               placeholder="114年度雄簡字第○○號"
+              disabled={isDemo}
               className={inputClass}
             />
           </div>
@@ -236,6 +239,7 @@ export const CaseInfoTab = () => {
               <Select
                 value={form.court || '__none__'}
                 onValueChange={(v) => setForm((f) => ({ ...f, court: v === '__none__' ? '' : v }))}
+                disabled={isDemo}
               >
                 <SelectTrigger className={inputClass}>
                   <SelectValue placeholder="請選擇" />
@@ -258,6 +262,7 @@ export const CaseInfoTab = () => {
               <Select
                 value={form.division}
                 onValueChange={(v) => setForm((f) => ({ ...f, division: v }))}
+                disabled={isDemo}
               >
                 <SelectTrigger className={inputClass}>
                   <SelectValue placeholder="民事庭" />
@@ -297,6 +302,7 @@ export const CaseInfoTab = () => {
                 <button
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, client_role: opt.value }))}
+                  disabled={isDemo}
                   className={`w-full rounded border px-2.5 py-1.5 text-xs font-medium transition ${
                     form.client_role === opt.value
                       ? 'border-ac bg-ac/15 text-ac'
@@ -309,6 +315,7 @@ export const CaseInfoTab = () => {
                   value={form[opt.field]}
                   onChange={set(opt.field)}
                   placeholder={opt.placeholder}
+                  disabled={isDemo}
                   className={inputClass}
                 />
               </div>
@@ -326,6 +333,7 @@ export const CaseInfoTab = () => {
             <Select
               value={form.template_id || DEFAULT_TEMPLATE_ID}
               onValueChange={handleTemplateChange}
+              disabled={isDemo}
             >
               <SelectTrigger className={inputClass}>
                 <SelectValue placeholder="AI 自動選擇" />
@@ -382,7 +390,8 @@ export const CaseInfoTab = () => {
             {/* 新增自訂範本 */}
             <button
               onClick={() => setNewTplOpen(true)}
-              className="mt-1.5 flex w-full items-center justify-center gap-1 rounded border border-dashed border-bd py-1.5 text-[11px] text-t3 transition hover:border-ac hover:text-ac"
+              disabled={isDemo}
+              className="mt-1.5 flex w-full items-center justify-center gap-1 rounded border border-dashed border-bd py-1.5 text-[11px] text-t3 transition hover:border-ac hover:text-ac disabled:opacity-40"
             >
               <Plus size={12} />
               <span>新增自訂範本</span>
@@ -401,6 +410,7 @@ export const CaseInfoTab = () => {
               value={form.case_instructions}
               onChange={set('case_instructions')}
               placeholder="例：本案重點在過失比例，請加強被告超速的論述..."
+              disabled={isDemo}
               className={`${inputClass} min-h-24 resize-y`}
             />
             <p className="mt-1 text-[10px] text-t3">AI 分析案件和撰寫書狀時會參考此指引</p>
@@ -414,7 +424,7 @@ export const CaseInfoTab = () => {
       <div className="mt-4">
         <button
           onClick={handleSave}
-          disabled={!dirty || saving}
+          disabled={!dirty || saving || isDemo}
           className="flex w-full items-center justify-center gap-1.5 rounded bg-ac px-3 py-1.5 text-xs font-medium text-bg-0 transition hover:opacity-90 disabled:opacity-40"
         >
           {saving && <Loader2 size={12} className="animate-spin" />}

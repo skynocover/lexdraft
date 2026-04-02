@@ -5,6 +5,7 @@ import { useBriefStore } from './useBriefStore';
 import { useTemplateStore } from './useTemplateStore';
 import type { Paragraph } from './useBriefStore';
 import { useAuthStore } from './useAuthStore';
+import { useCaseStore } from './useCaseStore';
 import { api } from '../lib/api';
 
 interface BriefTab {
@@ -253,6 +254,24 @@ export const useTabStore = create<TabState>((set, get) => ({
         p.id === focusedPanelId ? { ...p, tabIds: [...p.tabIds, tabId], activeTabId: tabId } : p,
       ),
     });
+
+    // Demo mode: use static PDF from /demo/
+    if (useCaseStore.getState().isDemo) {
+      const reg = get().tabRegistry;
+      if (reg[tabId]) {
+        set({
+          tabRegistry: {
+            ...reg,
+            [tabId]: {
+              ...reg[tabId],
+              pdfUrl: `/demo/${filename}`,
+              loading: false,
+            } as FileTab,
+          },
+        });
+      }
+      return;
+    }
 
     // Fetch PDF binary → blob URL
     const token = useAuthStore.getState().token;

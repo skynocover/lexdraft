@@ -196,7 +196,10 @@ const LawSearchButton = () => {
 /* ===================== File Upload Button ===================== */
 
 const FileUploadButton = () => {
+  const isDemo = useCaseStore((s) => s.isDemo);
   const { fileInputRef, uploading, handleUpload, triggerFileSelect } = useFileUpload();
+
+  if (isDemo) return null;
 
   return (
     <>

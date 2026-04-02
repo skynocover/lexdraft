@@ -214,27 +214,33 @@ export const FilesSection = () => {
 };
 
 const EmptyFilesState = () => {
+  const isDemo = useCaseStore((s) => s.isDemo);
   const { fileInputRef, uploading, handleUpload, triggerFileSelect } = useFileUpload();
 
   return (
     <div className="flex flex-col items-center gap-2 px-4 py-6">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="application/pdf"
-        multiple
-        onChange={handleUpload}
-        className="hidden"
-      />
       <Upload size={24} className="text-t3" />
-      <p className="text-xs text-t3">尚無檔案</p>
-      <button
-        onClick={triggerFileSelect}
-        disabled={uploading}
-        className="rounded-md bg-ac/10 px-3 py-1.5 text-xs font-medium text-ac transition hover:bg-ac/20 disabled:opacity-50"
-      >
-        {uploading ? '上傳中...' : '上傳 PDF'}
-      </button>
+      <p className="text-xs text-t2">上傳案件文件</p>
+      <p className="text-[11px] text-t3">起訴狀、答辯狀、證據等 PDF</p>
+      {!isDemo && (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            multiple
+            onChange={handleUpload}
+            className="hidden"
+          />
+          <button
+            onClick={triggerFileSelect}
+            disabled={uploading}
+            className="mt-1 rounded-md bg-ac/10 px-3 py-1.5 text-xs font-medium text-ac transition hover:bg-ac/20 disabled:opacity-50"
+          >
+            {uploading ? '上傳中...' : '上傳 PDF'}
+          </button>
+        </>
+      )}
     </div>
   );
 };

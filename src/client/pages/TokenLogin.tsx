@@ -1,38 +1,44 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router'
-import { useAuthStore } from '../stores/useAuthStore'
+import { useState } from 'react';
+import { Navigate, useNavigate } from 'react-router';
+import { useAuthStore } from '../stores/useAuthStore';
 
 export function TokenLogin() {
-  const [input, setInput] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const setToken = useAuthStore((s) => s.setToken)
-  const navigate = useNavigate()
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const token = useAuthStore((s) => s.token);
+  const setToken = useAuthStore((s) => s.setToken);
+  const navigate = useNavigate();
+
+  // 已登入 → 直接跳到案件列表
+  if (token) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim()) return
+    e.preventDefault();
+    if (!input.trim()) return;
 
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError('');
 
     try {
       const res = await fetch('/api/auth/verify', {
         headers: { Authorization: `Bearer ${input.trim()}` },
-      })
+      });
 
       if (res.ok) {
-        setToken(input.trim())
-        navigate('/', { replace: true })
+        setToken(input.trim());
+        navigate('/', { replace: true });
       } else {
-        setError('Token 無效，請重新輸入')
+        setError('Token 無效，請重新輸入');
       }
     } catch {
-      setError('無法連線到伺服器')
+      setError('無法連線到伺服器');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex h-screen items-center justify-center bg-bg-0">
@@ -51,9 +57,7 @@ export function TokenLogin() {
             autoFocus
           />
 
-          {error && (
-            <p className="mb-4 text-sm text-rd">{error}</p>
-          )}
+          {error && <p className="mb-4 text-sm text-rd">{error}</p>}
 
           <button
             type="submit"
@@ -65,5 +69,5 @@ export function TokenLogin() {
         </form>
       </div>
     </div>
-  )
+  );
 }

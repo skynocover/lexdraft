@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useBriefStore } from '../../../stores/useBriefStore';
+import { useCaseStore } from '../../../stores/useCaseStore';
 import { useTabStore } from '../../../stores/useTabStore';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { DEFAULT_BRIEF_LABEL } from '../../../lib/caseConstants';
@@ -24,6 +25,7 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
   );
   const activeBriefId = useBriefStore((s) => s.activeBriefId);
   const deleteBrief = useBriefStore((s) => s.deleteBrief);
+  const isDemo = useCaseStore((s) => s.isDemo);
   const openBriefTab = useTabStore((s) => s.openBriefTab);
   const closeTab = useTabStore((s) => s.closeTab);
 
@@ -66,6 +68,7 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
       {briefs.length === 0 ? (
         <div className="px-4 py-3">
           <p className="text-xs text-t3">尚無書狀</p>
+          <p className="mt-1 text-[11px] text-t3/60">透過左側 AI 助理對話來生成</p>
         </div>
       ) : (
         <div className="space-y-1 px-3 py-2">
@@ -103,13 +106,15 @@ export const BriefsSection = ({ activeTabId }: { activeTabId: string | null }) =
                   <p className="text-left text-xs text-t3">{formatDate(b.updated_at)}</p>
                 </button>
 
-                <button
-                  onClick={() => setConfirmDelete({ id: b.id, title })}
-                  className="shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
-                  title="刪除書狀"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {!isDemo && (
+                  <button
+                    onClick={() => setConfirmDelete({ id: b.id, title })}
+                    className="shrink-0 rounded p-1 text-t3 opacity-0 transition hover:text-rd group-hover:opacity-100"
+                    title="刪除書狀"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             );
           })}

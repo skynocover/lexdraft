@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { useParams } from 'react-router';
 import { ChevronsLeft, FileText, Search, type LucideIcon } from 'lucide-react';
 import { useChatStore } from '../../stores/useChatStore';
+import { useCaseStore } from '../../stores/useCaseStore';
 import { useUIStore } from '../../stores/useUIStore';
 
 const QUICK_ACTIONS: { icon: LucideIcon; label: string; message: string }[] = [
@@ -26,6 +27,7 @@ export function ChatPanel() {
 
   const prefillInput = useChatStore((s) => s.prefillInput);
   const setPrefillInput = useChatStore((s) => s.setPrefillInput);
+  const isDemo = useCaseStore((s) => s.isDemo);
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -120,7 +122,7 @@ export function ChatPanel() {
                   <button
                     key={action.message}
                     onClick={() => caseId && sendMessage(caseId, action.message)}
-                    disabled={!caseId || isStreaming}
+                    disabled={!caseId || isStreaming || isDemo}
                     className="flex items-center gap-2 rounded-lg border border-bd bg-bg-2 px-4 py-2.5 text-xs text-t2 transition hover:bg-bg-3 hover:text-t1 disabled:opacity-50"
                   >
                     <Icon size={14} className="shrink-0 text-ac" />
@@ -173,7 +175,7 @@ export function ChatPanel() {
             placeholder="輸入指令..."
             rows={1}
             className="flex-1 resize-none rounded border border-bd bg-bg-3 px-3 py-2 text-sm text-t1 outline-none placeholder:text-t3 focus:border-ac"
-            disabled={isStreaming}
+            disabled={isStreaming || isDemo}
           />
           {isStreaming ? (
             <button
@@ -185,7 +187,7 @@ export function ChatPanel() {
           ) : (
             <button
               onClick={handleSend}
-              disabled={!input.trim()}
+              disabled={!input.trim() || isDemo}
               className="shrink-0 rounded bg-ac px-3 py-2 text-sm font-medium text-bg-0 hover:bg-ac/80 disabled:opacity-50"
             >
               送出
