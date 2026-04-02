@@ -1,1 +1,0 @@
-ALTER TABLE `cases` DROP COLUMN `case_type`;

@@ -1,1 +1,0 @@
-ALTER TABLE `law_refs` ADD `source` text DEFAULT 'search';

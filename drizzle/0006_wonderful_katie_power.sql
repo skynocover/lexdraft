@@ -1,1 +1,0 @@
-ALTER TABLE `law_refs` ADD `is_manual` integer DEFAULT false;

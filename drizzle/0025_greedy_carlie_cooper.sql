@@ -1,1 +1,0 @@
-ALTER TABLE `cases` ADD `case_summary` text;

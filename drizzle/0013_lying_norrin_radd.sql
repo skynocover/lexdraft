@@ -1,1 +1,0 @@
-ALTER TABLE `files` DROP COLUMN `doc_type`;

@@ -1,1 +1,0 @@
-ALTER TABLE `cases` ADD `division` text;
