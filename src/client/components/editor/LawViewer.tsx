@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Scale, ExternalLink, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { extractPcode, buildLawUrl } from '../../../shared/lawUrl';
 import type { LawSearchResult } from '../../stores/useTabStore';
 
 interface LawViewerProps {
@@ -9,13 +10,6 @@ interface LawViewerProps {
   article: string;
   fullText: string | null;
 }
-
-/** Extract pcode from MongoDB _id format: "{pcode}-{條號}" */
-const extractPcode = (lawRefId: string): string | null => {
-  const dashIdx = lawRefId.indexOf('-');
-  if (dashIdx <= 0) return null;
-  return lawRefId.slice(0, dashIdx);
-};
 
 export const LawViewer = ({ lawRefId, lawName, article, fullText }: LawViewerProps) => {
   const [fetchedText, setFetchedText] = useState<string | null>(null);
@@ -56,11 +50,7 @@ export const LawViewer = ({ lawRefId, lawName, article, fullText }: LawViewerPro
     };
   }, [fullText, lawName, article]);
 
-  // Derive pcode from lawRefId or fetched result
-  const effectivePcode = extractPcode(lawRefId);
-  const lawUrl = effectivePcode
-    ? `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${effectivePcode}`
-    : null;
+  const lawUrl = buildLawUrl(extractPcode(lawRefId) ?? '', article);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg-0">

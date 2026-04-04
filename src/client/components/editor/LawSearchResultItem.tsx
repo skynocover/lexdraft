@@ -1,5 +1,6 @@
 import { Check, ExternalLink } from 'lucide-react';
 import { AccordionItem, AccordionTrigger, AccordionContent } from '../ui/accordion';
+import { buildLawUrl } from '../../../shared/lawUrl';
 import type { LawSearchResult } from '../../stores/useTabStore';
 
 interface LawSearchResultItemProps {
@@ -9,20 +10,13 @@ interface LawSearchResultItemProps {
   onToggle: (id: string) => void;
 }
 
-const extractPcode = (id: string): string | null => {
-  const dashIdx = id.indexOf('-');
-  if (dashIdx <= 0) return null;
-  return id.slice(0, dashIdx);
-};
-
 export const LawSearchResultItem = ({
   result,
   isSelected,
   alreadyAdded,
   onToggle,
 }: LawSearchResultItemProps) => {
-  const pcode = extractPcode(result._id);
-  const lawUrl = pcode ? `https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=${pcode}` : null;
+  const lawUrl = buildLawUrl(result.pcode, result.article_no);
 
   return (
     <AccordionItem value={result._id} className="border-bd">
